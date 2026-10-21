@@ -57,6 +57,27 @@ enum Windows {
         present(meetings[id]!)
     }
 
+    private static var others: [String: NSWindow] = [:]
+
+    /// Before a meeting: its brief in a small window (from the notification).
+    static func showBrief(_ event: CalendarEvent, model: AppModel) {
+        let key = "brief-\(event.id ?? event.title)"
+        if others[key] == nil {
+            others[key] = make(title: event.title, size: NSSize(width: 420, height: 520),
+                               view: BriefWindow(event: event).environmentObject(model), autosave: nil)
+        }
+        present(others[key]!)
+    }
+
+    /// The menu bar content in a normal window (testing / screenshots: `--preview`).
+    static func showPreview(_ model: AppModel) {
+        if others["preview"] == nil {
+            others["preview"] = make(title: "MeetScribe", size: NSSize(width: 380, height: 580),
+                                     view: RootView().environmentObject(model), autosave: nil)
+        }
+        present(others["preview"]!)
+    }
+
     private static func make<V: View>(title: String, size: NSSize, view: V, autosave: String?) -> NSWindow {
         let w = NSWindow(contentRect: NSRect(origin: .zero, size: size),
                          styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
@@ -87,6 +108,21 @@ struct MeetingWindow: View {
             }
         }
         .frame(minWidth: 460, minHeight: 480)
+    }
+}
+
+struct BriefWindow: View {
+    var event: CalendarEvent
+    @State private var route: Route = .home
+
+    var body: some View {
+        Group {
+            switch route {
+            case .meeting(let id): MeetingView(id: id, route: $route)
+            default: BriefView(event: event, route: $route)
+            }
+        }
+        .frame(minWidth: 380, minHeight: 440)
     }
 }
 
@@ -214,8 +250,9 @@ struct ModelsPane: View {
         Section("Speech model") {
             ForEach(model.catalog.speech) { m in modelRow(m, speech: true) }
         }
+        let listed = Set((model.catalog.notes + model.catalog.speech).map(\.repo))
         let unused = model.installedModels.filter { repo, _ in
-            repo != model.notesModel && repo != model.speechModel && repo.hasPrefix("mlx-community/")
+            repo != model.notesModel && repo != model.speechModel && repo.hasPrefix("mlx-community/") && !listed.contains(repo)
         }
         if !unused.isEmpty {
             Section("Downloaded, not in use") {
@@ -244,8 +281,15 @@ struct ModelsPane: View {
             }
             Spacer()
             if !inUse {
-                Button(model.installedModels[m.repo] != nil ? "Use" : "Download and use") { model.useModel(m, speech: speech) }
-                    .disabled(model.modelDownload != nil || !fits)
+                let installed = model.installedModels[m.repo] != nil
+                VStack(alignment: .trailing, spacing: 4) {
+                    Button(installed ? "Use" : "Download and use") { model.useModel(m, speech: speech) }
+                        .disabled(model.modelDownload != nil || !fits)
+                    if installed {
+                        Button("Delete") { model.deleteModel(m.repo) }
+                            .buttonStyle(.borderless).font(.caption).foregroundColor(.secondary)
+                    }
+                }
             }
         }
     }

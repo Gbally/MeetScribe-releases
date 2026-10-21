@@ -23,6 +23,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().delegate = self
     }
 
+    /// `open -a MeetScribe --args --settings models` opens Settings on that tab (for testing).
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--settings") {
+            let tab = i + 1 < args.count ? SettingsTab(rawValue: args[i + 1]) : nil
+            Windows.showSettings(model, tab: tab)
+        }
+        if args.contains("--preview") { Windows.showPreview(model) }
+    }
+
     // Show our banners even while the app is active.
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                             withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {

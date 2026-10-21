@@ -122,6 +122,12 @@ final class AppModel: ObservableObject {
         } else {
             settings = AppSettings()
         }
+        // Installs from before the catalog used Qwen3 8B + Whisper turbo: keep them (the catalog
+        // may recommend something else, but never switches models by itself).
+        if settings.llmModel == nil && FileManager.default.fileExists(atPath: Engine.python.path) {
+            settings.llmModel = "mlx-community/Qwen3-8B-4bit"
+            settings.whisperModel = settings.whisperModel ?? "mlx-community/whisper-large-v3-turbo"
+        }
         reload()
         if phase == .needsSetup && FileManager.default.fileExists(atPath: Engine.python.path) {
             runSetup() // app was updated: refresh the engine quietly (models are already downloaded)
@@ -815,15 +821,10 @@ final class AppModel: ObservableObject {
         case "DISCARD": stopRecording(discard: true)
         default:
             if let meeting, meeting.hasPrefix("brief:") {
-                let eventID = String(meeting.dropFirst(6))
-                if let e = briefEvents[eventID] { pendingRoute = .brief(e) }
+                if let e = briefEvents[String(meeting.dropFirst(6))] { Windows.showBrief(e, model: self) }
             } else if let meeting {
                 Windows.showMeeting(meeting, model: self)
-                return
-            } else {
-                return
             }
-            openMenuBarWindow()
         }
     }
 
@@ -858,19 +859,6 @@ final class AppModel: ObservableObject {
         let left = elapsed * (1 - p) / p
         if left < 50 { return "less than a minute left" }
         return "about \(Int((left / 60).rounded(.up))) min left"
-    }
-
-    /// Opens the menu bar window programmatically (clicks our status item).
-    func openMenuBarWindow() {
-        func button(in view: NSView?) -> NSButton? {
-            guard let view else { return nil }
-            if let b = view as? NSButton, String(describing: type(of: b)).contains("StatusBar") { return b }
-            for sub in view.subviews { if let b = button(in: sub) { return b } }
-            return nil
-        }
-        for window in NSApp.windows where String(describing: type(of: window)).contains("StatusBar") {
-            if let b = button(in: window.contentView) { b.performClick(nil); return }
-        }
     }
 
     // MARK: - To-dos

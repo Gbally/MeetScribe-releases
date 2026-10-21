@@ -1,8 +1,8 @@
 Installing MeetScribe
 =====================
 
-Requires a Mac with Apple Silicon (M1 or newer), macOS 13 or later, 16 GB RAM
-recommended, and ~8 GB free disk space.
+Requires a Mac with Apple Silicon (M1 or newer), macOS 13 or later, 8 GB memory or more,
+and ~8 GB free disk space. MeetScribe picks AI models that fit your Mac (Settings → AI models).
 
 1. Drag MeetScribe into the Applications folder.
 2. Open MeetScribe from Applications.
@@ -10,7 +10,7 @@ recommended, and ~8 GB free disk space.
      System Settings → Privacy & Security → scroll down → "Open Anyway" next to MeetScribe.
    (Only needed once.)
 3. A waveform icon appears in the menu bar (top right). Click it → "Download & set up"
-   (about 6 GB, 10–20 minutes, once).
+   (4–6 GB depending on your Mac, 10–20 minutes, once).
 4. Allow the two permissions when asked:
      • Microphone — your voice
      • Screen & System Audio Recording — the other participants' voices
@@ -24,3 +24,5 @@ Notes, to-dos and transcripts appear in the same window a few minutes later, and
 Documents/MeetingNotes.
 
 Everything runs on your Mac. Always tell participants that you are recording.
+
+Updates: MeetScribe checks once a day and offers new versions in its window (Update).

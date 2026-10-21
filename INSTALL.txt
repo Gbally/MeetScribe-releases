@@ -9,15 +9,12 @@ and ~8 GB free disk space. MeetScribe picks AI models that fit your Mac (Setting
    If macOS says it "can't be opened" / "cannot verify the developer":
      System Settings → Privacy & Security → scroll down → "Open Anyway" next to MeetScribe.
    (Only needed once.)
-3. A waveform icon appears in the menu bar (top right). Click it → "Download & set up"
-   (4–6 GB depending on your Mac, 10–20 minutes, once).
-4. Allow the two permissions when asked:
-     • Microphone — your voice
-     • Screen & System Audio Recording — the other participants' voices
-   Then quit and reopen MeetScribe (menu ⋯ → Quit).
-5. Optional: allow Calendar access so meetings are named from Outlook. Your work calendar must be
-   in the macOS Calendar app (System Settings → Internet Accounts → Microsoft Exchange).
-6. Open ⋯ → Settings: set your name and the languages your meetings use.
+3. A welcome window guides you through the rest: your name and languages, the permissions
+   (Microphone, Screen & System Audio Recording, and optionally Calendar and Notifications),
+   and the AI models download (4–6 GB depending on your Mac, 10–20 minutes, once).
+   After allowing Screen & System Audio Recording, restart MeetScribe when it offers to.
+   For Outlook meeting names, your work calendar must be in the macOS Calendar app
+   (System Settings → Internet Accounts → Microsoft Exchange).
 
 Using it: click the icon → Start recording. Click again → Stop & create notes.
 Notes, to-dos and transcripts appear in the same window a few minutes later, and are saved in
@@ -28,3 +25,5 @@ its content) are sent; turn them off in Settings → Privacy and storage. Always
 
 MeetScribe opens at login (turn it off in Settings → General).
 Updates: MeetScribe checks once a day and offers new versions in its window (Update).
+Uninstall: Settings → Privacy and storage → Remove MeetScribe. It deletes the engine and AI
+models (several GB outside the app) too — dragging the app to the Trash would leave them behind.

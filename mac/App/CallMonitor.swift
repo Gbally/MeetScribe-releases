@@ -1,88 +1,124 @@
-// Notices when a call starts — a meeting app is running and some app opened a microphone —
-// so MeetScribe can offer to record. Uses CoreAudio's "device is running somewhere" flag,
-// which needs no permission and never touches the audio itself.
+// Notices when a call starts and ends: another app (Teams, Zoom, a browser…) opens or releases
+// the microphone. Uses CoreAudio's per-process audio objects (macOS 14+), which say which
+// process is using an input — so MeetScribe's own recording doesn't count. Needs no permission
+// and never touches the audio. On older macOS, falls back to "some app is using a mic".
 
 import AppKit
 import CoreAudio
 import Foundation
 
 final class CallMonitor {
-    /// Teams (new + classic), Zoom, Webex, Slack, FaceTime, and browsers (Teams/Meet on the web).
-    static let meetingApps: Set<String> = [
-        "com.microsoft.teams2", "com.microsoft.teams", "us.zoom.xos", "com.cisco.webexmeetingsapp",
-        "com.webex.meetingmanager", "com.tinyspeck.slackmacgap", "com.apple.FaceTime",
-        "com.google.Chrome", "com.microsoft.edgemac", "com.apple.Safari", "org.mozilla.firefox",
-        "company.thebrowser.Browser",
+    /// Bundle-ID prefixes of apps whose microphone use means "a call" (helpers included).
+    static let meetingApps = [
+        "com.microsoft.teams", "us.zoom", "com.cisco.webex", "com.webex", "com.tinyspeck.slackmacgap",
+        "com.apple.FaceTime", "com.google.Chrome", "com.microsoft.edgemac", "com.apple.Safari",
+        "com.apple.WebKit", "org.mozilla.firefox", "company.thebrowser",
     ]
-    static let callApps: Set<String> = ["com.microsoft.teams2", "com.microsoft.teams", "us.zoom.xos",
-                                        "com.cisco.webexmeetingsapp", "com.webex.meetingmanager"]
 
-    /// Called on the main thread when a call seems to have started (mic busy for a few seconds).
     var onCallStarted: ((_ appName: String) -> Void)?
-    var isPaused: () -> Bool = { false }
+    var onCallEnded: (() -> Void)?
 
     private var timer: Timer?
     private var busySince: Date?
-    private var notifiedThisCall = false
+    private var idleSince: Date?
+    private var inCall = false
 
     func start() {
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.tick() }
     }
 
-    func stop() {
-        timer?.invalidate()
-        timer = nil
-    }
-
     private func tick() {
-        // While we record, our own capture keeps the mic busy — nothing to detect.
-        if isPaused() { busySince = nil; notifiedThisCall = true; return }
-        let busy = Self.micInUse()
-        if !busy {
+        let users = Self.otherMicUsers()
+        let callApp = users?.first { id in Self.meetingApps.contains { id.hasPrefix($0) } }
+        let busy = users == nil ? Self.micInUse() && Self.meetingAppRunning() != nil : callApp != nil
+
+        if busy {
+            idleSince = nil
+            if busySince == nil { busySince = Date() }
+            if !inCall, let since = busySince, Date().timeIntervalSince(since) >= 4 {
+                inCall = true
+                onCallStarted?(callApp.flatMap(Self.appName) ?? Self.meetingAppRunning() ?? "A meeting app")
+            }
+        } else {
             busySince = nil
-            notifiedThisCall = false
-            return
-        }
-        if busySince == nil { busySince = Date() }
-        guard !notifiedThisCall, let since = busySince, Date().timeIntervalSince(since) >= 4 else { return }
-        let running = NSWorkspace.shared.runningApplications
-        // Prefer naming a dedicated call app; fall back to a browser.
-        let app = running.first { Self.callApps.contains($0.bundleIdentifier ?? "") }
-            ?? running.first { Self.meetingApps.contains($0.bundleIdentifier ?? "") }
-        guard let app else { return }
-        notifiedThisCall = true
-        onCallStarted?(app.localizedName ?? "A meeting app")
-    }
-
-    /// True if any input device (mic) is currently being used by some process.
-    static func micInUse() -> Bool {
-        var addr = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDevices,
-                                              mScope: kAudioObjectPropertyScopeGlobal,
-                                              mElement: kAudioObjectPropertyElementMain)
-        var size: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size) == noErr else { return false }
-        var devices = [AudioDeviceID](repeating: 0, count: Int(size) / MemoryLayout<AudioDeviceID>.size)
-        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &devices) == noErr else { return false }
-
-        for device in devices where hasInput(device) {
-            var running: UInt32 = 0
-            var rsize = UInt32(MemoryLayout<UInt32>.size)
-            var raddr = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyDeviceIsRunningSomewhere,
-                                                   mScope: kAudioObjectPropertyScopeGlobal,
-                                                   mElement: kAudioObjectPropertyElementMain)
-            if AudioObjectGetPropertyData(device, &raddr, 0, nil, &rsize, &running) == noErr, running != 0 {
-                return true
+            guard inCall else { return }
+            if idleSince == nil { idleSince = Date() }
+            // Only per-process detection can tell that the call ended while we record.
+            if users != nil, let since = idleSince, Date().timeIntervalSince(since) >= 45 {
+                inCall = false
+                onCallEnded?()
+            } else if users == nil {
+                inCall = false
             }
         }
-        return false
     }
 
-    private static func hasInput(_ device: AudioDeviceID) -> Bool {
-        var addr = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreams,
-                                              mScope: kAudioDevicePropertyScopeInput,
-                                              mElement: kAudioObjectPropertyElementMain)
+    // MARK: - CoreAudio
+
+    private static func fourcc(_ s: String) -> AudioObjectPropertySelector {
+        s.utf8.reduce(0) { ($0 << 8) | UInt32($1) }
+    }
+
+    private static func address(_ sel: AudioObjectPropertySelector, _ scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal) -> AudioObjectPropertyAddress {
+        AudioObjectPropertyAddress(mSelector: sel, mScope: scope, mElement: kAudioObjectPropertyElementMain)
+    }
+
+    /// Bundle IDs of other processes currently recording from an input; nil if this macOS
+    /// can't tell (before 14.0).
+    static func otherMicUsers() -> [String]? {
+        var addr = address(fourcc("prs#")) // kAudioHardwarePropertyProcessObjectList
         var size: UInt32 = 0
-        return AudioObjectGetPropertyDataSize(device, &addr, 0, nil, &size) == noErr && size > 0
+        let system = AudioObjectID(kAudioObjectSystemObject)
+        guard AudioObjectGetPropertyDataSize(system, &addr, 0, nil, &size) == noErr else { return nil }
+        var ids = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+        guard AudioObjectGetPropertyData(system, &addr, 0, nil, &size, &ids) == noErr else { return nil }
+        let me = ProcessInfo.processInfo.processIdentifier
+        var users: [String] = []
+        for id in ids {
+            var running: UInt32 = 0, pid: Int32 = 0
+            var s4 = UInt32(MemoryLayout<UInt32>.size), sp = UInt32(MemoryLayout<Int32>.size)
+            var a1 = address(fourcc("piri")), a2 = address(fourcc("ppid")) // IsRunningInput, PID
+            guard AudioObjectGetPropertyData(id, &a1, 0, nil, &s4, &running) == noErr, running != 0,
+                  AudioObjectGetPropertyData(id, &a2, 0, nil, &sp, &pid) == noErr, pid != me else { continue }
+            var bundle: Unmanaged<CFString>?
+            var sb = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+            var a3 = address(fourcc("pbid")) // BundleID
+            let fromAudio = AudioObjectGetPropertyData(id, &a3, 0, nil, &sb, &bundle) == noErr
+                ? bundle?.takeRetainedValue() as String? : nil
+            users.append(fromAudio ?? NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? "pid:\(pid)")
+        }
+        return users
+    }
+
+    private static func appName(_ bundleID: String) -> String? {
+        let main = meetingApps.first { bundleID.hasPrefix($0) } ?? bundleID
+        return NSWorkspace.shared.runningApplications.first { ($0.bundleIdentifier ?? "").hasPrefix(main) }?.localizedName
+    }
+
+    private static func meetingAppRunning() -> String? {
+        NSWorkspace.shared.runningApplications.first { app in
+            meetingApps.contains { (app.bundleIdentifier ?? "").hasPrefix($0) }
+        }?.localizedName
+    }
+
+    /// Fallback: any input device is in use by some process.
+    static func micInUse() -> Bool {
+        var addr = address(kAudioHardwarePropertyDevices)
+        var size: UInt32 = 0
+        let system = AudioObjectID(kAudioObjectSystemObject)
+        guard AudioObjectGetPropertyDataSize(system, &addr, 0, nil, &size) == noErr else { return false }
+        var devices = [AudioDeviceID](repeating: 0, count: Int(size) / MemoryLayout<AudioDeviceID>.size)
+        guard AudioObjectGetPropertyData(system, &addr, 0, nil, &size, &devices) == noErr else { return false }
+        for device in devices {
+            var saddr = address(kAudioDevicePropertyStreams, kAudioDevicePropertyScopeInput)
+            var ssize: UInt32 = 0
+            guard AudioObjectGetPropertyDataSize(device, &saddr, 0, nil, &ssize) == noErr, ssize > 0 else { continue }
+            var running: UInt32 = 0
+            var rsize = UInt32(MemoryLayout<UInt32>.size)
+            var raddr = address(kAudioDevicePropertyDeviceIsRunningSomewhere)
+            if AudioObjectGetPropertyData(device, &raddr, 0, nil, &rsize, &running) == noErr, running != 0 { return true }
+        }
+        return false
     }
 }

@@ -283,6 +283,7 @@ def save_notes(session: Path, notes: dict) -> None:
     from .notes import render_markdown
     from .transcript import fmt_time, load_json
 
+    notes["version"] = 2  # has due dates; the app upgrades older notes once via `render`
     meeting_day = datetime.fromisoformat(notes["date"]).date()
     for a in notes.get("actions", []):
         d = parse_due(a.get("due", ""), meeting_day)

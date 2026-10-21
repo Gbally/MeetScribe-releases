@@ -9,13 +9,34 @@ enum Job: Equatable {
     case processFile(URL)
     case rename(Meeting.ID, [String: String])
     case resummarize(Meeting.ID)
+    case ask(String)
 
     var meetingID: Meeting.ID? {
         switch self {
         case .process(let id), .rename(let id, _), .resummarize(let id): return id
-        case .processFile: return nil
+        case .processFile, .ask: return nil
         }
     }
+}
+
+struct AskResult: Decodable, Equatable {
+    struct Source: Decodable, Equatable, Hashable {
+        var n: Int
+        var folder: String
+        var title: String
+        var date: String
+        var time: Double?
+    }
+    var answer: String
+    var sources: [Source]
+}
+
+/// What to remember before a calendar meeting: last time's notes and still-open to-dos.
+struct Brief {
+    var event: CalendarEvent
+    var last: Meeting?
+    var openTodos: [AppModel.TodoRef]
+    var isEmpty: Bool { last == nil && openTodos.isEmpty }
 }
 
 @MainActor
@@ -23,7 +44,12 @@ final class AppModel: ObservableObject {
     enum Phase: Equatable { case needsSetup, settingUp, ready }
 
     @Published var phase: Phase = Engine.isInstalled ? .ready : .needsSetup
-    @Published var settings: AppSettings { didSet { saveSettings() } }
+    @Published var settings: AppSettings {
+        didSet {
+            saveSettings()
+            if settings.hotkey != oldValue.hotkey { HotkeyCenter.shared.register(settings.hotkey) }
+        }
+    }
     @Published var meetings: [Meeting] = []
 
     // Setup
@@ -57,7 +83,16 @@ final class AppModel: ObservableObject {
     @Published var recordingEvent: CalendarEvent?
     @Published var voices: [(name: String, samples: Int)] = []
     @Published var toast: String?
+    @Published var nextEvent: CalendarEvent?     // happening now or within 30 min (for the brief card)
+    @Published var askQuestion = ""
+    @Published var askResult: AskResult?
+    @Published var askError: String?
     private var endReminderSent = false
+    private var autoStarted = false
+    private var briefed = Set<String>()
+    private var briefTimer: Timer?
+    private var lastCleanup = Date.distantPast
+    private var reminderSignature = ""
     let callMonitor = CallMonitor()
 
     // Permissions
@@ -89,6 +124,10 @@ final class AppModel: ObservableObject {
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
         center.setNotificationCategories([
+            UNNotificationCategory(identifier: "AUTO", actions: [
+                UNNotificationAction(identifier: "STOP", title: "Stop & create notes", options: []),
+                UNNotificationAction(identifier: "DISCARD", title: "Discard", options: [.destructive]),
+            ], intentIdentifiers: []),
             UNNotificationCategory(identifier: "CALL", actions: [
                 UNNotificationAction(identifier: "RECORD", title: "Record", options: []),
             ], intentIdentifiers: []),
@@ -96,11 +135,25 @@ final class AppModel: ObservableObject {
                 UNNotificationAction(identifier: "STOP", title: "Stop & create notes", options: []),
             ], intentIdentifiers: []),
         ])
-        callMonitor.isPaused = { activeRecorder != nil }
         callMonitor.onCallStarted = { [weak self] app in
-            Task { @MainActor in self?.offerToRecord(app: app) }
+            Task { @MainActor in self?.callStarted(app: app) }
+        }
+        callMonitor.onCallEnded = { [weak self] in
+            Task { @MainActor in self?.callEnded() }
         }
         callMonitor.start()
+        HotkeyCenter.shared.action = { [weak self] in
+            Task { @MainActor in self?.toggleRecording() }
+        }
+        HotkeyCenter.shared.register(settings.hotkey)
+        briefTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            guard let model = self else { return }
+            Task { @MainActor in
+                model.refreshCalendar()
+                model.checkBriefs()
+                model.cleanUpOldAudio()
+            }
+        }
         refreshCalendar()
         if phase == .ready { askForScreenAudioIfNeeded() }
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
@@ -137,6 +190,9 @@ final class AppModel: ObservableObject {
         guard generation == reloadGeneration else { return }
         meetings = all
         resumeUnprocessed()
+        upgradeOldNotes()
+        scheduleDueReminders()
+        cleanUpOldAudio()
     }
 
     /// Finish meetings that were recorded but never processed (app quit or crashed meanwhile).
@@ -224,8 +280,14 @@ final class AppModel: ObservableObject {
 
     var isRecording: Bool { recorder != nil }
 
-    func startRecording(title: String) {
+    func toggleRecording() {
+        guard phase == .ready else { return }
+        if isRecording { stopRecording() } else { startRecording(title: "") }
+    }
+
+    func startRecording(title: String, template: String? = nil, auto: Bool = false) {
         guard recorder == nil, !isStarting else { return }
+        autoStarted = auto
         isStarting = true
         startError = nil
         notices = []
@@ -243,7 +305,11 @@ final class AppModel: ObservableObject {
             do {
                 try await rec.start(appName: settings.teamsOnly ? "Microsoft Teams" : nil)
                 writeInfo(folder, MeetingInfo(title: name, started: ISO8601DateFormatter.local.string(from: Date()),
-                                              duration: nil, calendar: event))
+                                              duration: nil, calendar: event, template: template ?? settings.defaultTemplate))
+                if auto {
+                    notify(title: "Recording “\(name.isEmpty ? "this call" : name)”",
+                           body: "Started automatically — it stops by itself when the call ends.", category: "AUTO")
+                }
                 recordingEvent = event
                 endReminderSent = false
                 recorder = rec
@@ -254,6 +320,7 @@ final class AppModel: ObservableObject {
             } catch {
                 startError = error.localizedDescription
                 try? FileManager.default.removeItem(at: folder)
+                if auto { notify(title: "Couldn't start recording", body: error.localizedDescription) }
             }
             isStarting = false
             refreshPermissions()
@@ -267,6 +334,7 @@ final class AppModel: ObservableObject {
         meterTimer?.invalidate()
         let id = rec.folder.lastPathComponent
         let duration = rec.elapsed
+        autoStarted = false
         Task {
             await rec.stop()
             recordingID = nil
@@ -347,8 +415,11 @@ final class AppModel: ObservableObject {
 
         runner = Task {
             let (args, folder) = arguments(for: job)
+            if case .ask = job { askResult = nil; askError = nil }
             let result = await Engine.meetscribe(args) { [weak self] line in
-                if line.hasPrefix("→ ") {
+                if line.hasPrefix("@@result "), let data = line.dropFirst(9).data(using: .utf8) {
+                    self?.askResult = try? JSONDecoder().decode(AskResult.self, from: data)
+                } else if line.hasPrefix("→ ") {
                     self?.jobStatus = String(line.dropFirst(2))
                 } else if line.hasPrefix("@@progress "), let v = Double(line.dropFirst(11)) {
                     self?.jobProgress = max(self?.jobProgress ?? 0, v)
@@ -359,9 +430,7 @@ final class AppModel: ObservableObject {
                 if result.ok {
                     try? FileManager.default.removeItem(at: folder.appendingPathComponent("error.txt"))
                     if case .process = job {
-                        if !settings.keepAudio {
-                            for f in ["mic.caf", "system.caf"] { try? FileManager.default.removeItem(at: folder.appendingPathComponent(f)) }
-                        }
+                        if settings.audioRetentionDays == 0 { Self.deleteAudio(in: folder) }
                         finalFolder = await moveToNotesFolder(folder)
                     }
                 } else if !Task.isCancelled {
@@ -370,7 +439,11 @@ final class AppModel: ObservableObject {
                 }
             }
             reload()
-            notify(job: job, ok: result.ok, folder: finalFolder)
+            if case .ask = job {
+                if !result.ok { askError = result.errorTail.isEmpty ? "Something went wrong." : result.errorTail }
+            } else {
+                notify(job: job, ok: result.ok, folder: finalFolder)
+            }
             currentJob = nil
             jobStatus = ""
             jobProgress = nil
@@ -395,6 +468,8 @@ final class AppModel: ObservableObject {
             return (["rename", folder(id).path] + mapping.map { "\($0.key)=\($0.value)" }, folder(id))
         case .resummarize(let id):
             return (["summarize", folder(id).path], folder(id))
+        case .ask(let question):
+            return (["ask", "--json", question], nil)
         }
     }
 
@@ -467,6 +542,150 @@ final class AppModel: ObservableObject {
 
     func refreshCalendar() {
         currentEvent = settings.useCalendar ? CalendarService.shared.currentMeeting() : nil
+        nextEvent = settings.useCalendar
+            ? (currentEvent ?? CalendarService.shared.upcomingMeetings(within: 30).first) : nil
+    }
+
+    // MARK: - Briefs
+
+    private var briefEvents: [String: CalendarEvent] = [:]
+
+    /// Earlier meetings that were the same meeting: same recurring series, same title, or
+    /// mostly the same people.
+    func previousMeetings(for event: CalendarEvent) -> [Meeting] {
+        func norm(_ s: String) -> String { s.lowercased().trimmingCharacters(in: .whitespaces) }
+        let emails = Set(event.attendees.map { $0.email.lowercased() }.filter { !$0.isEmpty })
+        let generic: Set<String> = ["meeting", "call", "sync", "teams meeting", "réunion"]
+        return meetings.filter { m in
+            guard m.notes != nil, m.date < event.start.addingTimeInterval(-600) else { return false }
+            guard let cal = m.info?.calendar else { return false }
+            if let a = cal.seriesKey, let b = event.seriesKey, a == b { return true }
+            if norm(cal.title) == norm(event.title), !generic.contains(norm(event.title)), event.title.count > 3 { return true }
+            let theirs = Set(cal.attendees.map { $0.email.lowercased() }.filter { !$0.isEmpty })
+            let shared = emails.intersection(theirs).count
+            return shared >= 2 && Double(shared) >= 0.5 * Double(min(emails.count, theirs.count))
+        }
+    }
+
+    func brief(for event: CalendarEvent) -> Brief {
+        let previous = previousMeetings(for: event)
+        let ids = Set(previous.map(\.id))
+        let open = todos(mineOnly: false).filter { ids.contains($0.meeting.id) && !$0.done }
+        return Brief(event: event, last: previous.first, openTodos: open)
+    }
+
+    /// ~5 minutes before a meeting that happened before: a notification with what's still open.
+    private func checkBriefs() {
+        guard settings.briefs, settings.useCalendar, phase == .ready else { return }
+        for event in CalendarService.shared.upcomingMeetings(within: 6) {
+            let key = event.id ?? "\(event.title)\(event.start)"
+            guard !briefed.contains(key) else { continue }
+            briefed.insert(key)
+            let b = brief(for: event)
+            guard !b.isEmpty else { continue }
+            briefEvents[key] = event
+            let minutes = max(1, Int(event.start.timeIntervalSinceNow / 60))
+            var body = b.openTodos.isEmpty ? "No open to-dos from last time"
+                : "\(b.openTodos.count) open to-do\(b.openTodos.count == 1 ? "" : "s") from last time"
+            if let last = b.last { body += " (\(last.date.formatted(date: .abbreviated, time: .omitted)))" }
+            let content = UNMutableNotificationContent()
+            content.title = "In \(minutes) min: \(event.title)"
+            content.body = body + ". Click to review."
+            content.sound = .default
+            content.userInfo = ["meeting": "brief:\(key)"]
+            UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "brief-\(key)", content: content, trigger: nil))
+        }
+    }
+
+    private var upgrading = false
+
+    /// Notes made before due dates existed get them once (quick: no AI involved).
+    private func upgradeOldNotes() {
+        guard phase == .ready, !upgrading else { return }
+        let old = meetings.filter { $0.notes != nil && ($0.notes?.version ?? 0) < 2 && !isBusy($0.id) }.map(\.folder)
+        guard !old.isEmpty else { return }
+        upgrading = true
+        Task {
+            for f in old { _ = await Engine.meetscribe(["render", f.path]) { _ in } }
+            upgrading = false
+            reload()
+        }
+    }
+
+    // MARK: - Due-date reminders
+
+    /// One notification per open to-do of mine: 9:00 the day before it's due (or 9:00 on the day).
+    private func scheduleDueReminders() {
+        let mine = settings.dueReminders ? todos(mineOnly: true).filter { !$0.done && $0.item.dueDay != nil } : []
+        let cal = Calendar.current
+        var planned: [(id: String, date: Date, title: String, body: String, meeting: String)] = []
+        for ref in mine {
+            guard let due = ref.item.dueDay else { continue }
+            let dayBefore = cal.date(bySettingHour: 9, minute: 0, second: 0, of: cal.date(byAdding: .day, value: -1, to: due)!)!
+            let onTheDay = cal.date(bySettingHour: 9, minute: 0, second: 0, of: due)!
+            let (when, label) = dayBefore > Date() ? (dayBefore, "Due tomorrow") : (onTheDay, "Due today")
+            guard when > Date() else { continue }
+            planned.append(("due-\(ref.id)", when, label, "\(ref.item.task) — from “\(ref.meeting.title)”", ref.meeting.id))
+        }
+        planned = Array(planned.sorted { $0.date < $1.date }.prefix(40))
+        let signature = planned.map { "\($0.id)\($0.date)\($0.body)" }.joined()
+        guard signature != reminderSignature else { return }
+        reminderSignature = signature
+        let center = UNUserNotificationCenter.current()
+        center.getPendingNotificationRequests { pending in
+            center.removePendingNotificationRequests(withIdentifiers: pending.map(\.identifier).filter { $0.hasPrefix("due-") })
+            for p in planned {
+                let content = UNMutableNotificationContent()
+                content.title = p.title
+                content.body = p.body
+                content.sound = .default
+                content.userInfo = ["meeting": p.meeting]
+                let comps = cal.dateComponents([.year, .month, .day, .hour, .minute], from: p.date)
+                center.add(UNNotificationRequest(identifier: p.id, content: content,
+                                                 trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)))
+            }
+        }
+    }
+
+    // MARK: - Audio retention
+
+    nonisolated static func deleteAudio(in folder: URL) {
+        let fm = FileManager.default
+        for f in ["mic.caf", "system.caf", "clips", "clips.json"] { try? fm.removeItem(at: folder.appendingPathComponent(f)) }
+    }
+
+    /// Deletes recordings (and voice samples) of processed meetings older than the retention.
+    private func cleanUpOldAudio() {
+        let days = settings.audioRetentionDays
+        guard days > 0, Date().timeIntervalSince(lastCleanup) > 3600 else { return }
+        lastCleanup = Date()
+        let limit = Date().addingTimeInterval(-Double(days) * 86400)
+        let old = meetings.filter { $0.notes != nil && $0.date < limit && !isBusy($0.id) }.map(\.folder)
+        Task.detached(priority: .background) {
+            let fm = FileManager.default
+            var cleaned = 0
+            for f in old where ["mic.caf", "system.caf", "clips"].contains(where: { fm.fileExists(atPath: f.appendingPathComponent($0).path) }) {
+                AppModel.deleteAudio(in: f)
+                cleaned += 1
+            }
+            if cleaned > 0 { Engine.log("retention: deleted audio of \(cleaned) meeting(s) older than \(days) days") }
+        }
+    }
+
+    // MARK: - Ask
+
+    func ask(_ question: String) {
+        let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty, phase == .ready else { return }
+        askQuestion = q
+        askResult = nil
+        askError = nil
+        enqueue(.ask(q))
+    }
+
+    var isAsking: Bool {
+        if case .ask = currentJob { return true }
+        return queue.contains { if case .ask = $0 { return true } else { return false } }
     }
 
     func allowCalendar() {
@@ -481,8 +700,23 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func callStarted(app: String) {
+        guard phase == .ready, recorder == nil else { return }
+        if settings.autoRecord {
+            startRecording(title: "", auto: true)
+        } else {
+            offerToRecord(app: app)
+        }
+    }
+
+    /// The call app released the microphone for 45 s: an automatic recording stops by itself.
+    private func callEnded() {
+        guard isRecording, autoStarted else { return }
+        stopRecording()
+    }
+
     private func offerToRecord(app: String) {
-        guard settings.callReminders, phase == .ready, recorder == nil else { return }
+        guard settings.callReminders else { return }
         let event = settings.useCalendar ? CalendarService.shared.currentMeeting() : nil
         notify(title: event.map { "Record “\($0.title)”?" } ?? "Record this call?",
                body: "\(app) is using the microphone. Click Record to take notes with MeetScribe.", category: "CALL")
@@ -501,9 +735,16 @@ final class AppModel: ObservableObject {
         switch id {
         case "RECORD": startRecording(title: "")
         case "STOP": stopRecording()
+        case "DISCARD": stopRecording(discard: true)
         default:
-            guard let meeting else { return }
-            pendingRoute = .meeting(meeting)
+            if let meeting, meeting.hasPrefix("brief:") {
+                let eventID = String(meeting.dropFirst(6))
+                if let e = briefEvents[eventID] { pendingRoute = .brief(e) }
+            } else if let meeting {
+                pendingRoute = .meeting(meeting)
+            } else {
+                return
+            }
             openMenuBarWindow()
         }
     }
@@ -680,20 +921,98 @@ final class AppModel: ObservableObject {
 
     /// Removes one action item (e.g. a wrong one) from a meeting's to-do list.
     func deleteTodo(_ id: Meeting.ID, _ index: Int) {
-        guard let i = meetings.firstIndex(where: { $0.id == id }) else { return }
-        let m = meetings[i]
-        guard let data = try? Data(contentsOf: m.url("notes.json")),
-              var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              var actions = json["actions"] as? [Any], index < actions.count else { return }
-        actions.remove(at: index)
-        json["actions"] = actions
-        guard let out = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted]) else { return }
-        try? out.write(to: m.url("notes.json"), options: .atomic)
+        guard let m = meeting(id) else { return }
+        editNotes(id) { json in
+            guard var actions = json["actions"] as? [Any], index < actions.count else { return }
+            actions.remove(at: index)
+            json["actions"] = actions
+        }
         // Done flags after the removed item shift down by one.
         let done = Set(m.done.compactMap { $0 == index ? nil : ($0 > index ? $0 - 1 : $0) })
         try? JSONEncoder().encode(Array(done).sorted()).write(to: m.url("todo.json"))
-        if var notes = m.notes { notes.actions.remove(at: index); meetings[i].notes = notes }
-        meetings[i].done = done
+    }
+
+    // MARK: - Editing notes
+
+    /// Changes notes.json, then lets the engine rebuild notes.md and the due dates.
+    func editNotes(_ id: Meeting.ID, _ change: (inout [String: Any]) -> Void) {
+        guard let m = meeting(id), let data = try? Data(contentsOf: m.url("notes.json")),
+              var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+        change(&json)
+        guard let out = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted]) else { return }
+        try? out.write(to: m.url("notes.json"), options: .atomic)
+        let folder = m.folder
+        reload()
+        Task {
+            _ = await Engine.meetscribe(["render", folder.path]) { _ in }
+            reload()
+        }
+    }
+
+    func updateTodo(_ id: Meeting.ID, _ index: Int, task: String, owner: String, due: String) {
+        editNotes(id) { json in
+            guard var actions = json["actions"] as? [[String: Any]], index < actions.count else { return }
+            actions[index]["task"] = task
+            actions[index]["owner"] = owner
+            actions[index]["due"] = due
+            json["actions"] = actions
+        }
+    }
+
+    func addTodo(_ id: Meeting.ID, task: String, owner: String, due: String) {
+        editNotes(id) { json in
+            var actions = json["actions"] as? [[String: Any]] ?? []
+            actions.append(["task": task, "owner": owner, "due": due])
+            json["actions"] = actions
+        }
+    }
+
+    func renameMeeting(_ id: Meeting.ID, to title: String) {
+        let t = title.trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty, let m = meeting(id) else { return }
+        // Also in meeting.json, so regenerating the notes keeps the name.
+        var info = readInfo(m.folder) ?? MeetingInfo(title: t, started: m.notes?.date ?? ISO8601DateFormatter.local.string(from: m.date))
+        info.title = t
+        writeInfo(m.folder, info)
+        editNotes(id) { $0["title"] = t }
+    }
+
+    struct TodoDraft: Identifiable, Equatable {
+        let id = UUID()
+        var originalIndex: Int?   // nil = added by hand
+        var task: String
+        var owner: String
+        var due: String
+        var done: Bool
+    }
+
+    /// Saves the edit mode of a meeting at once: title + the whole to-do list.
+    func saveEdits(_ id: Meeting.ID, title: String, todos: [TodoDraft]) {
+        guard let m = meeting(id) else { return }
+        let t = title.trimmingCharacters(in: .whitespaces)
+        if !t.isEmpty, t != m.title {
+            var info = readInfo(m.folder) ?? MeetingInfo(title: t, started: m.notes?.date ?? ISO8601DateFormatter.local.string(from: m.date))
+            info.title = t
+            writeInfo(m.folder, info)
+        }
+        let kept = todos.filter { !$0.task.trimmingCharacters(in: .whitespaces).isEmpty }
+        editNotes(id) { json in
+            if !t.isEmpty { json["title"] = t }
+            json["actions"] = kept.map { ["task": $0.task.trimmingCharacters(in: .whitespaces),
+                                          "owner": $0.owner.trimmingCharacters(in: .whitespaces),
+                                          "due": $0.due.trimmingCharacters(in: .whitespaces)] }
+        }
+        let done = kept.enumerated().filter { $0.element.done }.map(\.offset)
+        try? JSONEncoder().encode(done).write(to: m.url("todo.json"))
+    }
+
+    /// Rewrite the notes as another meeting type (1:1, stand-up…).
+    func regenerate(_ id: Meeting.ID, template: String) {
+        guard let m = meeting(id) else { return }
+        var info = readInfo(m.folder) ?? MeetingInfo(title: "", started: m.notes?.date ?? ISO8601DateFormatter.local.string(from: m.date))
+        info.template = template
+        writeInfo(m.folder, info)
+        enqueue(.resummarize(id))
     }
 
     func delete(_ id: Meeting.ID) {

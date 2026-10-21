@@ -42,6 +42,19 @@ and vocabulary in Settings.
 - **Languages:** tick the languages your meetings use (e.g. English + French) and switches are
   detected every few seconds; notes are written in the meeting's main language (or a fixed one).
 - **Reminders:** send your to-dos to Apple Reminders.
+- **Briefs:** 5 min before a calendar meeting that happened before (same series, title or
+  people), a notification shows what's still open from last time.
+- **Due dates:** "Friday", "next week", "30 Oct", "fin du mois"… become real dates; "My to-dos" is
+  sorted by them and you get a reminder the day before.
+- **Ask your meetings:** search box on the main window; ↩ asks the local AI, which answers from
+  your notes/transcripts with sources.
+- **Automatic mode** (optional): starts recording when a call app opens the mic, stops when it
+  releases it (per-process CoreAudio, macOS 14+).
+- **Meeting types:** General, 1:1, Stand-up, Client call, Interview, Workshop — each with its
+  own sections; "Regenerate as…" to switch.
+- **Shortcut:** start/stop from anywhere (default ⌃⌥R, changeable in Settings).
+- **Edit:** rename a meeting, fix/add/delete to-dos (notes.md is rebuilt with `meetscribe render`).
+- **Privacy:** audio (and voice samples) deleted after 7 days by default; notes are kept.
 
 On first launch it installs its engine into `~/Library/Application Support/MeetScribe`
 (Python via the bundled `uv`) and downloads the models (~6 GB) — see `mac/INSTALL.txt`, which
@@ -112,4 +125,4 @@ Each meeting gets a folder in `~/Documents/MeetingNotes/` with `notes.md`,
 
 - Live transcript while the meeting runs
 - Microsoft To Do / Planner export (needs a Microsoft Graph app registration)
-- Ask questions across all meetings
+- Automatic updates for colleagues

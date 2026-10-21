@@ -14,6 +14,21 @@ struct ActionItem: Codable, Hashable {
     var owner: String
     var task: String
     var due: String
+    var dueDate: String?  // yyyy-MM-dd, worked out by the engine from `due`
+
+    enum CodingKeys: String, CodingKey { case owner, task, due, dueDate = "due_date" }
+
+    var dueDay: Date? {
+        guard let dueDate else { return nil }
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f.date(from: dueDate)
+    }
+}
+
+struct NoteSection: Codable, Hashable {
+    var title: String
+    var items: [String]
 }
 
 struct MeetingNotes: Codable {
@@ -26,6 +41,9 @@ struct MeetingNotes: Codable {
     var actions: [ActionItem]
     var questions: [String]
     var tracks: [String]?
+    var template: String?
+    var sections: [NoteSection]?
+    var version: Int?
 
     /// Recorded by the app, but only the microphone had sound: the other participants were
     /// only captured through the speakers (usually: Screen & System Audio permission missing).
@@ -37,6 +55,7 @@ struct MeetingInfo: Codable {
     var started: String
     var duration: Double?
     var calendar: CalendarEvent?
+    var template: String?
 }
 
 extension JSONDecoder {
@@ -61,6 +80,8 @@ struct Meeting: Identifiable, Equatable {
     var hasAudio: Bool
     var hasTranscript: Bool
     var done: Set<Int>
+    /// Lowercased title + notes + transcript, for the search box.
+    var searchText = ""
 
     static func == (a: Meeting, b: Meeting) -> Bool {
         a.id == b.id && a.notes?.title == b.notes?.title && a.error == b.error
@@ -132,8 +153,14 @@ struct Meeting: Identifiable, Equatable {
         guard info != nil || notes != nil || hasAudio || hasTranscript else { return nil }
         let error = try? String(contentsOf: folder.appendingPathComponent("error.txt"))
         let done = Set(read("todo.json", [Int].self) ?? [])
-        return Meeting(folder: folder, info: info, notes: notes, error: error, hasAudio: hasAudio,
-                       hasTranscript: hasTranscript, done: done)
+        var m = Meeting(folder: folder, info: info, notes: notes, error: error, hasAudio: hasAudio,
+                        hasTranscript: hasTranscript, done: done)
+        var text = [m.title] + (notes?.participants ?? []) + (notes?.summary ?? []) + (notes?.decisions ?? [])
+        text += (notes?.actions ?? []).map { "\($0.owner) \($0.task)" } + (notes?.questions ?? [])
+        text += (notes?.sections ?? []).flatMap(\.items)
+        if let t = try? String(contentsOf: folder.appendingPathComponent("transcript.md")) { text.append(t) }
+        m.searchText = text.joined(separator: "\n").lowercased()
+        return m
     }
 
     static func loadAll(in root: URL) -> [Meeting] {

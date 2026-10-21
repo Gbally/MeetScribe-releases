@@ -3,9 +3,10 @@ import AVFoundation
 import SwiftUI
 
 enum Route: Equatable {
-    case home, settings, todos
+    case home, settings, todos, ask
     case meeting(Meeting.ID)
     case speakers(Meeting.ID)
+    case brief(CalendarEvent)
 }
 
 struct RootView: View {
@@ -20,6 +21,8 @@ struct RootView: View {
             case .meeting(let id): MeetingView(id: id, route: $route)
             case .speakers(let id): SpeakersView(id: id, route: $route)
             case .todos: TodosView(route: $route)
+            case .ask: AskView(route: $route)
+            case .brief(let e): BriefView(event: e, route: $route)
             }
         }
         .frame(width: 400, height: 580)
@@ -145,6 +148,8 @@ struct HomeView: View {
     @State private var title = ""
     @State private var confirmDiscard = false
     @State private var deleting: Meeting?
+    @State private var template: String?
+    @State private var search = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -172,6 +177,7 @@ struct HomeView: View {
                     case .ready:
                         recordCard
                         PermissionsCard()
+                        briefCard
                         todosButton
                     }
                     if let job = model.currentJob { jobCard(job) }
@@ -221,12 +227,21 @@ struct HomeView: View {
                     } icon: { Image(systemName: "calendar") }
                     .font(.caption).foregroundColor(.secondary)
                 }
-                TextField(model.currentEvent.map { "Meeting name (default: \($0.title))" } ?? "Meeting name (optional — AI names it otherwise)",
-                          text: $title)
-                    .textFieldStyle(.roundedBorder)
+                HStack {
+                    TextField(model.currentEvent.map { "Name (default: \($0.title))" } ?? "Meeting name (optional)",
+                              text: $title)
+                        .textFieldStyle(.roundedBorder)
+                    Picker("", selection: Binding(get: { template ?? model.settings.defaultTemplate }, set: { template = $0 })) {
+                        ForEach(meetingTemplates, id: \.id) { Text($0.name).tag($0.id) }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                    .help("Meeting type — shapes the notes")
+                }
                 Button {
-                    model.startRecording(title: title)
+                    model.startRecording(title: title, template: template)
                     title = ""
+                    template = nil
                 } label: {
                     Label(model.isStarting ? "Starting…" : "Start recording", systemImage: "record.circle")
                         .frame(maxWidth: .infinity)
@@ -264,6 +279,12 @@ struct HomeView: View {
         }
     }
 
+    func askAI() {
+        guard !search.trimmingCharacters(in: .whitespaces).isEmpty, model.phase == .ready else { return }
+        model.ask(search)
+        route = .ask
+    }
+
     func jobCard(_ job: Job) -> some View {
         Card {
             HStack {
@@ -282,14 +303,63 @@ struct HomeView: View {
         case .process(let id): return "Processing “\(model.meeting(id)?.title ?? "meeting")”"
         case .processFile(let url): return "Processing \(url.lastPathComponent)"
         case .rename(let id, _), .resummarize(let id): return "Updating “\(model.meeting(id)?.title ?? "meeting")”"
+        case .ask(let q): return "Answering “\(q)”"
+        }
+    }
+
+    @ViewBuilder var briefCard: some View {
+        if let e = model.nextEvent, model.settings.briefs {
+            let b = model.brief(for: e)
+            if !b.isEmpty {
+                Button { route = .brief(e) } label: {
+                    HStack {
+                        Image(systemName: "calendar.badge.clock").foregroundColor(.accentColor)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(e.title).font(.callout.weight(.medium)).lineLimit(1)
+                            Text(e.start > Date() ? "Starts \(e.start.formatted(date: .omitted, time: .shortened))" : "Now")
+                                .font(.caption).foregroundColor(.secondary)
+                            + Text(b.openTodos.isEmpty ? " · notes from last time" : " · \(b.openTodos.count) open to-do\(b.openTodos.count == 1 ? "" : "s") from last time")
+                                .font(.caption).foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
+                    }
+                    .padding(10)
+                    .contentShape(Rectangle())
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.accentColor.opacity(0.08)))
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 
     @ViewBuilder var history: some View {
-        let past = model.meetings.filter { $0.id != model.recordingID }
+        let words = search.lowercased().split(separator: " ").map(String.init)
+        let past = model.meetings.filter { m in
+            m.id != model.recordingID && words.allSatisfy { m.searchText.contains($0) }
+        }
         SectionTitle(text: "Meetings")
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+            TextField("Search, or ask a question…", text: $search)
+                .textFieldStyle(.plain)
+                .onSubmit { askAI() }
+            if !search.isEmpty {
+                Button { search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.secondary) }
+                    .buttonStyle(.borderless)
+            }
+        }
+        .padding(7)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)))
+        if !search.isEmpty && model.phase == .ready {
+            Button { askAI() } label: {
+                Label("Ask your meetings: “\(search)”", systemImage: "sparkles").font(.callout).lineLimit(1)
+            }
+            .buttonStyle(.borderless)
+        }
         if past.isEmpty {
-            Text("Your meetings will appear here.").font(.callout).foregroundColor(.secondary)
+            Text(search.isEmpty ? "Your meetings will appear here." : "No meeting mentions that — try asking the question (↩).")
+                .font(.callout).foregroundColor(.secondary)
         }
         ForEach(past) { m in
             Button { route = .meeting(m.id) } label: { MeetingRow(meeting: m) }
@@ -450,11 +520,19 @@ struct MeetingView: View {
     @Binding var route: Route
     @State private var confirmDelete = false
     @State private var copied = false
+    @State private var editing = false
+    @State private var draftTitle = ""
+    @State private var drafts: [AppModel.TodoDraft] = []
 
     var body: some View {
         VStack(spacing: 0) {
             if let m = model.meeting(id) {
-                Header(title: m.title, back: { route = .home }) {
+                Header(title: editing ? "Edit" : m.title, back: { editing = false; route = .home }) {
+                    if m.notes != nil && !model.isBusy(id) {
+                        Button(editing ? "Done" : "Edit") { editing ? save() : startEditing(m) }
+                            .controlSize(.small)
+                            .keyboardShortcut(editing ? KeyboardShortcut.defaultAction : nil)
+                    }
                     Menu {
                         Group {
                             Button("Open notes") { openFile(m.url("notes.md")) }.disabled(m.notes == nil)
@@ -471,6 +549,14 @@ struct MeetingView: View {
                         Divider()
                         Group {
                             Button("Regenerate notes") { model.enqueue(.resummarize(id)) }.disabled(!m.hasTranscript)
+                            Menu("Regenerate as…") {
+                                ForEach(meetingTemplates, id: \.id) { t in
+                                    Button(t.name + (t.id == (m.notes?.template ?? "general") ? " ✓" : "")) {
+                                        model.regenerate(id, template: t.id)
+                                    }
+                                }
+                            }
+                            .disabled(!m.hasTranscript)
                             Button("Transcribe again") { model.enqueue(.process(id)) }.disabled(!m.hasAudio)
                         }
                         Divider()
@@ -482,7 +568,9 @@ struct MeetingView: View {
                     Button("Move to Trash", role: .destructive) { model.delete(id); route = .home }
                 }
                 Divider()
-                ScrollView { content(m).padding(14) }
+                ScrollView {
+                    if editing { editor.padding(14) } else { content(m).padding(14) }
+                }
                 if m.notes != nil {
                     Divider()
                     HStack {
@@ -567,6 +655,7 @@ struct MeetingView: View {
                     }
                 }
                 bullets("Summary", n.summary)
+                ForEach(n.sections ?? [], id: \.self) { sec in bullets(sec.title, sec.items) }
                 bullets("Decisions", n.decisions)
                 bullets("Open questions", n.questions)
             }
@@ -588,12 +677,62 @@ struct MeetingView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(a.task).font(.callout).strikethrough(done).foregroundColor(done ? .secondary : .primary)
                     .fixedSize(horizontal: false, vertical: true)
-                let extra = [a.owner, a.due].filter { !$0.isEmpty }
-                if !extra.isEmpty { Text(extra.joined(separator: " · ")).font(.caption).foregroundColor(.secondary) }
+                HStack(spacing: 6) {
+                    if !a.owner.isEmpty { Text(a.owner).font(.caption).foregroundColor(.secondary) }
+                    DueBadge(item: a, done: done)
+                }
             }
             Spacer(minLength: 0)
         }
         .contentShape(Rectangle())
+    }
+
+    func startEditing(_ m: Meeting) {
+        draftTitle = m.title
+        drafts = (m.notes?.actions ?? []).enumerated().map { i, a in
+            AppModel.TodoDraft(originalIndex: i, task: a.task, owner: a.owner, due: a.due, done: m.done.contains(i))
+        }
+        editing = true
+    }
+
+    func save() {
+        model.saveEdits(id, title: draftTitle, todos: drafts)
+        editing = false
+    }
+
+    @ViewBuilder var editor: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionTitle(text: "Meeting name")
+            TextField("Meeting name", text: $draftTitle).textFieldStyle(.roundedBorder)
+            SectionTitle(text: "To-dos")
+            ForEach($drafts) { $d in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        TextField("Task", text: $d.task).textFieldStyle(.roundedBorder)
+                        Button { drafts.removeAll { $0.id == d.id } } label: { Image(systemName: "trash") }
+                            .buttonStyle(.borderless).help("Delete this to-do")
+                    }
+                    HStack {
+                        TextField("Owner", text: $d.owner).textFieldStyle(.roundedBorder)
+                        TextField("Due (e.g. Friday, 30 Oct)", text: $d.due).textFieldStyle(.roundedBorder)
+                    }
+                    .font(.caption)
+                }
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.04)))
+            }
+            Button {
+                drafts.append(.init(originalIndex: nil, task: "", owner: model.settings.myName, due: "", done: false))
+            } label: { Label("Add a to-do", systemImage: "plus.circle") }
+            .buttonStyle(.borderless)
+            Text("Due dates are understood in plain words (“Friday”, “next week”, “30 Oct”).")
+                .font(.caption2).foregroundColor(.secondary)
+            HStack {
+                Button("Cancel") { editing = false }
+                Spacer()
+                Button("Save") { save() }.buttonStyle(.borderedProminent)
+            }
+        }
     }
 
     @ViewBuilder func bullets(_ title: String, _ items: [String]) -> some View {
@@ -781,7 +920,14 @@ struct SettingsView: View {
                             Text("All Mac audio (recommended)").tag(false)
                             Text("Microsoft Teams only").tag(true)
                         }
-                        Toggle("Keep audio files after creating notes", isOn: $model.settings.keepAudio)
+                        Toggle("Record calls automatically", isOn: $model.settings.autoRecord)
+                        Text("Starts when Teams, Zoom or a browser call uses the microphone, and stops by itself when the call ends.")
+                            .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                        HStack {
+                            Text("Start / stop shortcut")
+                            Spacer()
+                            HotkeyField(hotkey: $model.settings.hotkey)
+                        }
                         Toggle("Open MeetScribe at login", isOn: $model.launchAtLogin)
                         CalendarRow()
 
@@ -789,6 +935,7 @@ struct SettingsView: View {
                     NotificationsSection()
                     EmailSection()
                     StorageSection()
+                    RetentionSection()
                     VoicesSection()
                     Group {
                         SectionTitle(text: "Engine")
@@ -816,6 +963,9 @@ struct SummarySection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             SectionTitle(text: "Notes")
+            Picker("Usual meeting type", selection: $model.settings.defaultTemplate) {
+                ForEach(meetingTemplates, id: \.id) { Text($0.name).tag($0.id) }
+            }
             Picker("Detail", selection: $model.settings.summaryStyle) {
                 ForEach(SummaryStyle.allCases, id: \.self) { Text($0.label).tag($0) }
             }
@@ -858,7 +1008,7 @@ struct StorageSection: View {
             }
 
             Text(description).font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
-            if model.settings.storage != .local && model.settings.keepAudio {
+            if model.settings.storage != .local && model.settings.audioRetentionDays != 0 {
                 Label("Audio files (~230 MB per hour) are synced too — turn off “Keep audio files” to sync only the notes.",
                       systemImage: "info.circle")
                     .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -1038,9 +1188,16 @@ struct TodosView: View {
     @State private var showDone = false
 
     var body: some View {
-        let items = model.todos(mineOnly: mineOnly).filter { showDone || !$0.done }
-        let grouped = Dictionary(grouping: items, by: \.meeting.id)
-        let order = model.meetings.map(\.id).filter { grouped[$0] != nil }
+        // Open first, then by due date (no date last), then newest meeting first.
+        let items = model.todos(mineOnly: mineOnly).filter { showDone || !$0.done }.sorted { a, b in
+            if a.done != b.done { return !a.done }
+            switch (a.item.dueDay, b.item.dueDay) {
+            case let (x?, y?) where x != y: return x < y
+            case (_?, nil): return true
+            case (nil, _?): return false
+            default: return a.meeting.date > b.meeting.date
+            }
+        }
         VStack(spacing: 0) {
             Header(title: "To-dos", back: { route = .home }) {
                 Toggle("Done", isOn: $showDone).toggleStyle(.checkbox).font(.caption)
@@ -1052,7 +1209,7 @@ struct TodosView: View {
             .pickerStyle(.segmented).labelsHidden().padding(.horizontal, 14).padding(.bottom, 8)
             Divider()
             ScrollView {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 10) {
                     if items.isEmpty {
                         Text(mineOnly ? "Nothing assigned to you\(showDone ? "" : " is open"). 🎉" : "No to-dos.")
                             .font(.callout).foregroundColor(.secondary).padding(.top, 20)
@@ -1061,50 +1218,188 @@ struct TodosView: View {
                                 .font(.caption).foregroundColor(.secondary)
                         }
                     }
-                    ForEach(order, id: \.self) { id in
-                        if let refs = grouped[id], let m = refs.first?.meeting {
-                            Button { route = .meeting(id) } label: {
-                                HStack {
-                                    Text(m.title).font(.caption.weight(.semibold)).lineLimit(1)
-                                    Text("· \(m.date.formatted(date: .abbreviated, time: .omitted))").font(.caption).foregroundColor(.secondary)
-                                    Spacer()
-                                    Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary)
-                                }
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.top, 6)
-                            ForEach(refs) { ref in
-                                Button { model.toggleDone(id, ref.index) } label: {
-                                    HStack(alignment: .top, spacing: 8) {
-                                        Image(systemName: ref.done ? "checkmark.circle.fill" : "circle")
-                                            .foregroundColor(ref.done ? .green : .secondary)
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(ref.item.task).font(.callout).strikethrough(ref.done)
-                                                .foregroundColor(ref.done ? .secondary : .primary)
-                                                .fixedSize(horizontal: false, vertical: true)
-                                            let extra = [mineOnly ? "" : ref.item.owner, ref.item.due].filter { !$0.isEmpty }
-                                            if !extra.isEmpty {
-                                                Text(extra.joined(separator: " · ")).font(.caption).foregroundColor(.secondary)
-                                            }
+                    ForEach(items) { ref in
+                        let id = ref.meeting.id
+                        Button { model.toggleDone(id, ref.index) } label: {
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: ref.done ? "checkmark.circle.fill" : "circle")
+                                    .foregroundColor(ref.done ? .green : .secondary)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(ref.item.task).font(.callout).strikethrough(ref.done)
+                                        .foregroundColor(ref.done ? .secondary : .primary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    HStack(spacing: 6) {
+                                        DueBadge(item: ref.item, done: ref.done)
+                                        if !mineOnly && !ref.item.owner.isEmpty {
+                                            Text(ref.item.owner).font(.caption).foregroundColor(.secondary)
                                         }
-                                        Spacer(minLength: 0)
+                                        Text(ref.meeting.title).font(.caption2).foregroundColor(.secondary).lineLimit(1)
                                     }
-                                    .contentShape(Rectangle())
                                 }
-                                .buttonStyle(.plain)
-                                .contextMenu {
-                                    Button(ref.done ? "Mark as not done" : "Mark as done") { model.toggleDone(id, ref.index) }
-                                    Button("Open the meeting") { route = .meeting(id) }
-                                    Button("Delete this to-do", role: .destructive) { model.deleteTodo(id, ref.index) }
-                                }
+                                Spacer(minLength: 0)
                             }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(ref.done ? "Mark as not done" : "Mark as done") { model.toggleDone(id, ref.index) }
+                            Button("Open the meeting") { route = .meeting(id) }
+                            Button("Delete this to-do", role: .destructive) { model.deleteTodo(id, ref.index) }
                         }
                     }
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+        }
+    }
+}
+
+/// "Overdue · 23 Oct", "Today", "Tomorrow", "Fri 30 Oct", or the due text when no date.
+struct DueBadge: View {
+    var item: ActionItem
+    var done: Bool
+
+    var body: some View {
+        if let day = item.dueDay {
+            let cal = Calendar.current
+            let today = cal.startOfDay(for: Date())
+            let days = cal.dateComponents([.day], from: today, to: cal.startOfDay(for: day)).day ?? 0
+            let (text, color): (String, Color) =
+                days < 0 ? ("Overdue · \(day.formatted(.dateTime.day().month(.abbreviated)))", .red)
+                : days == 0 ? ("Due today", .orange)
+                : days == 1 ? ("Due tomorrow", .orange)
+                : days < 7 ? ("Due \(day.formatted(.dateTime.weekday(.wide)))", .accentColor)
+                : ("Due \(day.formatted(.dateTime.day().month(.abbreviated)))", .secondary)
+            Text(text).font(.caption2.weight(.semibold))
+                .foregroundColor(done ? .secondary : color)
+                .padding(.horizontal, 5).padding(.vertical, 1)
+                .background(Capsule().fill((done ? Color.secondary : color).opacity(0.12)))
+        } else if !item.due.isEmpty && item.due != "—" {
+            Text(item.due).font(.caption).foregroundColor(.secondary)
+        }
+    }
+}
+
+/// Before a meeting: last time's notes and the to-dos still open from that series.
+struct BriefView: View {
+    @EnvironmentObject var model: AppModel
+    var event: CalendarEvent
+    @Binding var route: Route
+
+    var body: some View {
+        let b = model.brief(for: event)
+        VStack(spacing: 0) {
+            Header(title: event.title, back: { route = .home }) { EmptyView() }
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("\(event.start.formatted(date: .abbreviated, time: .shortened)) – \(event.end.formatted(date: .omitted, time: .shortened))"
+                         + (event.attendees.isEmpty ? "" : " · \(event.attendees.count + 1) people"))
+                        .font(.caption).foregroundColor(.secondary)
+                    if !model.isRecording {
+                        Button {
+                            model.startRecording(title: event.title)
+                            route = .home
+                        } label: {
+                            Label("Start recording", systemImage: "record.circle").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent).tint(.red)
+                    }
+                    if !b.openTodos.isEmpty {
+                        SectionTitle(text: "Still open")
+                        ForEach(b.openTodos) { ref in
+                            Button { model.toggleDone(ref.meeting.id, ref.index) } label: {
+                                HStack(alignment: .top, spacing: 8) {
+                                    Image(systemName: ref.done ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(ref.done ? .green : .secondary)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(ref.item.task).font(.callout).fixedSize(horizontal: false, vertical: true)
+                                        HStack(spacing: 6) {
+                                            if !ref.item.owner.isEmpty { Text(ref.item.owner).font(.caption).foregroundColor(.secondary) }
+                                            DueBadge(item: ref.item, done: ref.done)
+                                        }
+                                    }
+                                    Spacer(minLength: 0)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    if let last = b.last, let n = last.notes {
+                        SectionTitle(text: "Last time · \(last.date.formatted(date: .abbreviated, time: .omitted))")
+                        ForEach((n.decisions.isEmpty ? n.summary : n.decisions).prefix(5), id: \.self) { item in
+                            HStack(alignment: .top, spacing: 6) {
+                                Text("•").foregroundColor(.secondary)
+                                Text(item).font(.callout).fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        Button("Open those notes") { route = .meeting(last.id) }.buttonStyle(.borderless).font(.caption)
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+}
+
+/// The answer to a question asked across all meetings, with its sources.
+struct AskView: View {
+    @EnvironmentObject var model: AppModel
+    @Binding var route: Route
+    @State private var question = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Header(title: "Ask your meetings", back: { route = .home }) { EmptyView() }
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        TextField("Ask a question…", text: $question).textFieldStyle(.roundedBorder)
+                            .onSubmit { model.ask(question) }
+                        Button("Ask") { model.ask(question) }.disabled(model.isAsking)
+                    }
+                    if model.isAsking {
+                        if case .ask = model.currentJob {
+                            JobProgress()
+                        } else {
+                            HStack { ProgressView().controlSize(.small); Text("Waiting for the meeting being processed…").font(.caption) }
+                        }
+                    } else if let err = model.askError {
+                        Text(err).font(.caption).foregroundColor(.red).textSelection(.enabled)
+                    } else if let r = model.askResult {
+                        Text(r.answer).font(.callout).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                        if !r.sources.isEmpty {
+                            SectionTitle(text: "Sources")
+                            ForEach(r.sources, id: \.self) { src in
+                                let id = URL(fileURLWithPath: src.folder).lastPathComponent
+                                Button { route = .meeting(id) } label: {
+                                    HStack {
+                                        Text("[\(src.n)]").font(.caption.monospacedDigit()).foregroundColor(.secondary)
+                                        Text(src.title).font(.callout).lineLimit(1)
+                                        Spacer()
+                                        Text(src.date + (src.time.map { " · \(formatDuration($0))" } ?? ""))
+                                            .font(.caption).foregroundColor(.secondary)
+                                    }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    Text("Answers come from your notes and transcripts, by the AI on this Mac. Check the sources for anything important.")
+                        .font(.caption2).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .onAppear {
+            question = model.askQuestion
+            NSApp.activate(ignoringOtherApps: true)
         }
     }
 }
@@ -1118,6 +1413,8 @@ struct NotificationsSection: View {
             Toggle("When notes are ready", isOn: $model.settings.notifyWhenReady)
             Toggle("When a call starts (“Record this call?”)", isOn: $model.settings.callReminders)
             Toggle("When the calendar meeting is over (“Stop recording?”)", isOn: $model.settings.endReminders)
+            Toggle("5 min before a meeting: what's still open from last time", isOn: $model.settings.briefs)
+            Toggle("The day before my to-dos are due", isOn: $model.settings.dueReminders)
             if let problem = model.notificationProblem {
                 HStack(alignment: .top, spacing: 6) {
                     Image(systemName: "bell.slash.fill").foregroundColor(.orange)
@@ -1154,6 +1451,21 @@ struct EmailSection: View {
                 Text("The draft opens in your browser, so the notes are sent to that website to create it.")
                     .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+}
+
+struct RetentionSection: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SectionTitle(text: "Privacy")
+            Picker("Delete audio recordings", selection: $model.settings.audioRetentionDays) {
+                ForEach(retentionChoices, id: \.days) { Text($0.label).tag($0.days) }
+            }
+            Text("Notes and transcripts are kept. The audio — including the short voice samples used to name speakers — is deleted.")
+                .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
         }
     }
 }

@@ -50,7 +50,6 @@ struct AppSettings: Codable, Equatable {
     var vocabulary = ""
     var summaryStyle = SummaryStyle.standard
     var teamsOnly = false        // false = all Mac audio
-    var keepAudio = true
     var storage = Storage.local
     var oneDrivePath = ""        // root of the chosen OneDrive account
     var customFolderPath = ""
@@ -60,6 +59,12 @@ struct AppSettings: Codable, Equatable {
     var notifyWhenReady = true   // "Notes ready" notification
     var emailApp = EmailApp.systemDefault
     var gmailAccount = ""        // which Google account opens (several signed in)
+    var briefs = true            // "In 5 min: …" with last time's open to-dos
+    var dueReminders = true      // notification the day before a to-do of mine is due
+    var autoRecord = false       // start when a call starts, stop when it ends
+    var defaultTemplate = "general"
+    var hotkey: Hotkey? = .defaultShortcut
+    var audioRetentionDays = 7   // 0 = delete right after the notes, -1 = keep forever
 
     var notesFolder: URL {
         switch storage {
@@ -93,10 +98,19 @@ struct AppSettings: Codable, Equatable {
         notifyWhenReady = try c.decodeIfPresent(Bool.self, forKey: .notifyWhenReady) ?? d.notifyWhenReady
         emailApp = (try? c.decodeIfPresent(EmailApp.self, forKey: .emailApp)) ?? d.emailApp
         gmailAccount = try c.decodeIfPresent(String.self, forKey: .gmailAccount) ?? ""
+        briefs = try c.decodeIfPresent(Bool.self, forKey: .briefs) ?? d.briefs
+        dueReminders = try c.decodeIfPresent(Bool.self, forKey: .dueReminders) ?? d.dueReminders
+        autoRecord = try c.decodeIfPresent(Bool.self, forKey: .autoRecord) ?? d.autoRecord
+        defaultTemplate = try c.decodeIfPresent(String.self, forKey: .defaultTemplate) ?? d.defaultTemplate
+        hotkey = c.contains(.hotkey) ? try c.decodeIfPresent(Hotkey.self, forKey: .hotkey) : d.hotkey
+        if let days = try c.decodeIfPresent(Int.self, forKey: .audioRetentionDays) {
+            audioRetentionDays = days
+        } else if (try c.decodeIfPresent(Bool.self, forKey: .keepAudio)) == false {
+            audioRetentionDays = 0 // v0.1 "keep audio" switched off
+        }
         vocabulary = try c.decodeIfPresent(String.self, forKey: .vocabulary) ?? d.vocabulary
         summaryStyle = (try? c.decodeIfPresent(SummaryStyle.self, forKey: .summaryStyle)) ?? d.summaryStyle
         teamsOnly = try c.decodeIfPresent(Bool.self, forKey: .teamsOnly) ?? d.teamsOnly
-        keepAudio = try c.decodeIfPresent(Bool.self, forKey: .keepAudio) ?? d.keepAudio
         oneDrivePath = try c.decodeIfPresent(String.self, forKey: .oneDrivePath) ?? ""
         customFolderPath = try c.decodeIfPresent(String.self, forKey: .customFolderPath) ?? ""
         if let s = try? c.decodeIfPresent(Storage.self, forKey: .storage) {
@@ -110,7 +124,8 @@ struct AppSettings: Codable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case myName, language, languages, notesLanguage, useCalendar, callReminders, endReminders, notifyWhenReady,
-             emailApp, gmailAccount, vocabulary, summaryStyle, teamsOnly, keepAudio, storage, oneDrivePath,
+             emailApp, gmailAccount, briefs, dueReminders, autoRecord, defaultTemplate, hotkey, audioRetentionDays,
+             vocabulary, summaryStyle, teamsOnly, keepAudio, storage, oneDrivePath,
              customFolderPath, notesFolderPath
     }
 
@@ -125,10 +140,15 @@ struct AppSettings: Codable, Equatable {
         try c.encode(notifyWhenReady, forKey: .notifyWhenReady)
         try c.encode(emailApp, forKey: .emailApp)
         try c.encode(gmailAccount, forKey: .gmailAccount)
+        try c.encode(briefs, forKey: .briefs)
+        try c.encode(dueReminders, forKey: .dueReminders)
+        try c.encode(autoRecord, forKey: .autoRecord)
+        try c.encode(defaultTemplate, forKey: .defaultTemplate)
+        try c.encode(hotkey, forKey: .hotkey)
+        try c.encode(audioRetentionDays, forKey: .audioRetentionDays)
         try c.encode(vocabulary, forKey: .vocabulary)
         try c.encode(summaryStyle, forKey: .summaryStyle)
         try c.encode(teamsOnly, forKey: .teamsOnly)
-        try c.encode(keepAudio, forKey: .keepAudio)
         try c.encode(storage, forKey: .storage)
         try c.encode(oneDrivePath, forKey: .oneDrivePath)
         try c.encode(customFolderPath, forKey: .customFolderPath)
@@ -199,4 +219,17 @@ enum CloudFolders {
 let meetingLanguages: [(code: String, name: String)] = [
     ("en", "English"), ("fr", "French"), ("de", "German"), ("es", "Spanish"), ("it", "Italian"),
     ("pt", "Portuguese"), ("nl", "Dutch"), ("ja", "Japanese"), ("zh", "Chinese"),
+]
+
+/// Meeting types (must match TEMPLATES in the engine's summarize.py).
+let meetingTemplates: [(id: String, name: String)] = [
+    ("general", "General"), ("one_on_one", "1:1"), ("standup", "Stand-up"), ("client", "Client call"),
+    ("interview", "Interview"), ("workshop", "Workshop / brainstorm"),
+]
+
+func templateName(_ id: String) -> String { meetingTemplates.first { $0.id == id }?.name ?? "General" }
+
+let retentionChoices: [(days: Int, label: String)] = [
+    (0, "Right after the notes are made"), (1, "After 1 day"), (3, "After 3 days"), (7, "After 7 days"),
+    (14, "After 14 days"), (30, "After 30 days"), (-1, "Never"),
 ]

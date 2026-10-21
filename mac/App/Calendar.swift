@@ -17,6 +17,8 @@ struct CalendarEvent: Codable, Equatable {
     var organizer: String
     var attendees: [Attendee]
     var isOnlineMeeting: Bool
+    var id: String?          // this occurrence
+    var seriesKey: String?   // shared by all occurrences of a recurring meeting
 
     var timeRange: String {
         "\(start.formatted(date: .omitted, time: .shortened))–\(end.formatted(date: .omitted, time: .shortened))"
@@ -54,6 +56,17 @@ final class CalendarService {
         return best.map(Self.convert)
     }
 
+    /// Real meetings (with other people or a call link) starting within the next `minutes`.
+    func upcomingMeetings(within minutes: Double, from now: Date = Date()) -> [CalendarEvent] {
+        guard eventsAllowed else { return [] }
+        let predicate = store.predicateForEvents(withStart: now, end: now.addingTimeInterval(minutes * 60), calendars: nil)
+        return store.events(matching: predicate)
+            .filter { !$0.isAllDay && $0.startDate >= now && $0.status != .canceled
+                && (Self.isOnline($0) || ($0.attendees?.count ?? 0) > 1) }
+            .sorted { $0.startDate < $1.startDate }
+            .map(Self.convert)
+    }
+
     private func score(_ e: EKEvent, _ now: Date) -> Double {
         var s = 0.0
         if Self.isOnline(e) { s += 3 }
@@ -78,7 +91,8 @@ final class CalendarService {
         }
         return CalendarEvent(title: e.title ?? "Meeting", start: e.startDate, end: e.endDate,
                              organizer: e.organizer?.name ?? "", attendees: people.map(attendee),
-                             isOnlineMeeting: isOnline(e))
+                             isOnlineMeeting: isOnline(e), id: e.calendarItemIdentifier,
+                             seriesKey: e.calendarItemExternalIdentifier)
     }
 
     /// Adds to-dos to the default Reminders list. Returns how many were added.

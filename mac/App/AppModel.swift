@@ -64,6 +64,9 @@ final class AppModel: ObservableObject {
         }
         try? FileManager.default.createDirectory(at: settings.notesFolder, withIntermediateDirectories: true)
         reload()
+        if phase == .needsSetup && FileManager.default.fileExists(atPath: Engine.python.path) {
+            runSetup() // app was updated: refresh the engine quietly (models are already downloaded)
+        }
         if phase == .ready {
             // Finish meetings that were recorded but not processed (app quit / crashed meanwhile).
             for m in meetings where m.needsProcessing { enqueue(.process(m.id)) }
@@ -121,6 +124,7 @@ final class AppModel: ObservableObject {
             Engine.markInstalled()
             phase = .ready
             setupStatus = ""
+            for m in meetings where m.needsProcessing { enqueue(.process(m.id)) }
             if micPermission == .notDetermined {
                 _ = await MicCapture.requestPermission()
                 refreshPermissions()

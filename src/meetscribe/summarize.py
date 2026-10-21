@@ -24,7 +24,8 @@ STYLES = {
 - Decisions, action items and questions: a few words each.""",
 }
 
-NOTES_PROMPT = """Write the meeting notes in {language}, in Markdown.
+NOTES_PROMPT = """Write the meeting notes in {language}, in Markdown (even if parts of the meeting were in
+another language — translate those; lines tagged e.g. "(FR)" were spoken in that language).
 
 Level of detail — {style}
 
@@ -107,9 +108,13 @@ class LLM:
         return re.sub(r"<think>.*?</think>", "", out, flags=re.S).strip()
 
 
-def summarize(transcript: str, cfg: Config) -> str:
+def summarize(transcript: str, cfg: Config, language: str = "", context: str = "") -> str:
     llm = LLM(cfg)
-    lang = cfg.summary_language
+    lang = language or cfg.summary_language
+    if context:
+        # Calendar details help with names and the topic — but labels stay as they are.
+        transcript = (f"{context}\n(Speaker labels in the transcript are not necessarily these people; "
+                      f"keep the labels unless the transcript makes a name obvious.)\n\n{transcript}")
     if cfg.summary_style not in STYLES:
         raise SystemExit(f"summary_style must be one of: {', '.join(STYLES)}")
     style = STYLES[cfg.summary_style]

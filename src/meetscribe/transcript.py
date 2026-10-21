@@ -17,6 +17,7 @@ class Utterance:
     end: float
     speaker: str
     text: str
+    lang: str = ""
 
 
 def speaker_for(word: Word, turns: list[Turn]) -> int:
@@ -38,11 +39,11 @@ def group_words(words: list[Word], label_of) -> list[Utterance]:
     for w in words:
         label = label_of(w)
         last = out[-1] if out else None
-        if last and last.speaker == label and w.start - last.end < PAUSE_SPLIT:
+        if last and last.speaker == label and w.start - last.end < PAUSE_SPLIT and last.lang == w.lang:
             last.text += w.text
             last.end = w.end
         else:
-            out.append(Utterance(w.start, w.end, label, w.text))
+            out.append(Utterance(w.start, w.end, label, w.text, w.lang))
     for u in out:
         u.text = u.text.strip()
     return [u for u in out if u.text]
@@ -84,17 +85,32 @@ def fmt_time(seconds: float) -> str:
     return f"{s // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}"
 
 
+def main_language(utterances: list[Utterance]) -> str:
+    counts: dict[str, int] = {}
+    for u in utterances:
+        if u.lang:
+            counts[u.lang] = counts.get(u.lang, 0) + len(u.text.split())
+    return max(counts, key=counts.get) if counts else ""
+
+
+def _lang_tag(u: Utterance, main: str) -> str:
+    """Marks passages in another language than the meeting's main one, e.g. ' (FR)'."""
+    return f" ({u.lang.upper()})" if u.lang and main and u.lang != main else ""
+
+
 def to_markdown(utterances: list[Utterance], title: str) -> str:
+    main = main_language(utterances)
     lines = [f"# Transcript — {title}", ""]
     for u in utterances:
-        lines.append(f"**[{fmt_time(u.start)}] {u.speaker}:** {u.text}")
+        lines.append(f"**[{fmt_time(u.start)}] {u.speaker}{_lang_tag(u, main)}:** {u.text}")
         lines.append("")
     return "\n".join(lines)
 
 
 def to_plain(utterances: list[Utterance]) -> str:
     """Compact form fed to the LLM."""
-    return "\n".join(f"[{fmt_time(u.start)}] {u.speaker}: {u.text}" for u in utterances)
+    main = main_language(utterances)
+    return "\n".join(f"[{fmt_time(u.start)}] {u.speaker}{_lang_tag(u, main)}: {u.text}" for u in utterances)
 
 
 def save_json(utterances: list[Utterance], path: Path, meta: dict) -> None:

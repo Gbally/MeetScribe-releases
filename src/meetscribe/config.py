@@ -24,7 +24,8 @@ class Config:
 
     # Speech-to-text (any MLX Whisper repo on Hugging Face).
     whisper_model: str = "mlx-community/whisper-large-v3-turbo"
-    # "en", "fr", … or "" to auto-detect per track.
+    # "" = auto-detect (one language per track); "en" = English only; "en,fr" = the meeting
+    # may switch between these languages (detected every few seconds).
     language: str = ""
     # Names / jargon that Whisper should spell correctly, e.g. "FlagQuest, Supabase, Kubernetes".
     vocabulary: str = ""
@@ -37,7 +38,8 @@ class Config:
     llm_model: str = "mlx-community/Qwen3-8B-4bit"
     # For llm_backend = "openai": Ollama = http://localhost:11434/v1, LM Studio = http://localhost:1234/v1
     llm_url: str = "http://localhost:11434/v1"
-    summary_language: str = "English"
+    # Language of the notes: "auto" = the meeting's main language, or e.g. "English".
+    summary_language: str = "auto"
     # How much detail: "detailed" (long, full context), "standard", or "brief" (bullets only).
     summary_style: str = "standard"
     # Transcripts longer than this (in tokens) are summarized in chunks first.

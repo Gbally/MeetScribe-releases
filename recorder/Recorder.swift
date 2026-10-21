@@ -94,8 +94,8 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         if let appName {
             let apps = content.applications.filter { $0.applicationName.localizedCaseInsensitiveContains(appName) }
             if apps.isEmpty {
-                let running = Set(content.applications.map(\.applicationName)).sorted().joined(separator: ", ")
-                throw NSError(domain: "rec", code: 2, userInfo: [NSLocalizedDescriptionKey: "No running app matches \"\(appName)\". Running: \(running)"])
+                let running = Set(content.applications.map(\.applicationName)).filter { !$0.isEmpty }.sorted().joined(separator: ", ")
+                throw NSError(domain: "rec", code: 2, userInfo: [NSLocalizedDescriptionKey: "No running app matches \"\(appName)\" — start it first (Teams in a browser? use the browser's name, e.g. --app \"Google Chrome\").\n   Running: \(running)"])
             }
             log("Capturing audio from: \(apps.map(\.applicationName).joined(separator: ", "))")
             filter = SCContentFilter(display: display, including: apps, exceptingWindows: [])
@@ -200,7 +200,9 @@ struct Recorder {
                 system = cap
             } catch {
                 log("❌ System audio capture failed: \(error.localizedDescription)")
-                log("   Allow your terminal in System Settings → Privacy & Security → Screen & System Audio Recording, then restart it.")
+                if (error as NSError).domain != "rec" {
+                    log("   Allow your terminal in System Settings → Privacy & Security → Screen & System Audio Recording, then restart it.")
+                }
                 exit(1)
             }
         }

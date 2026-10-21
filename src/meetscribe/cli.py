@@ -51,6 +51,9 @@ def cmd_record(args, cfg: Config):
     except KeyboardInterrupt:  # Ctrl+C also reaches the recorder, which saves and exits
         proc.wait()
     if proc.returncode != 0 or not any(session.glob("*.caf")):
+        if not any(session.iterdir()):
+            session.rmdir()
+            sys.exit("Recording failed.")
         sys.exit(f"Recording failed (folder kept: {session})")
     if args.no_process:
         print(f"Saved to {session}. Process later with: meetscribe process \"{session}\"")

@@ -86,4 +86,8 @@ DMG="dist/MeetScribe-$VERSION.dmg"
 rm -f "$DMG"
 hdiutil create -quiet -volname MeetScribe -srcfolder "$STAGE" -ov -format UDZO "$DMG"
 [ -n "$SIGN_ID" ] && codesign --sign "$SIGN_ID" "$DMG"
+# Don't let macOS launch the build copies instead of the installed app.
+LSR=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+"$LSR" -u "$APP" 2>/dev/null || true
+"$LSR" -u "$STAGE/MeetScribe.app" 2>/dev/null || true
 echo "✅ $ROOT/$DMG ($(du -h "$DMG" | cut -f1))"

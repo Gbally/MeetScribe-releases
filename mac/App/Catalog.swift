@@ -112,6 +112,9 @@ struct CustomModelCheck: Equatable {
     var isMLX = false
     var pipeline = ""
     var error: String?
+    /// The engine's verdict (reads the model's config): true / false / nil = couldn't tell.
+    var compatible: Bool?
+    var compatibilityReason = ""
 
     /// "https://huggingface.co/org/name/tree/main" or "org/name" → "org/name".
     static func repoID(from input: String) -> String? {
@@ -146,19 +149,34 @@ struct CustomModelCheck: Equatable {
 
     /// Plain-language risks of using this model.
     func warnings(speech: Bool, hw: Hardware) -> [String] {
-        var w = ["Not tested with MeetScribe: notes may come out in the wrong format, slowly, or not at all."]
-        if !isMLX { w.append("It isn't in MLX format (made for Apple silicon) — it may not load. Look for a version from “mlx-community”.") }
-        if speech && pipeline != "automatic-speech-recognition" {
-            w.append("It doesn't look like a speech-to-text model.")
-        }
-        if !speech && !["text-generation", "image-text-to-text", ""].contains(pipeline) {
-            w.append("It doesn't look like a text model (it's “\(pipeline)”).")
+        var w = [speech ? "Not tested with MeetScribe: transcripts may be less accurate or slower."
+                        : "Not tested with MeetScribe: notes may come out in the wrong format, slowly, or not at all."]
+        if compatible == nil {
+            if !isMLX { w.append("It isn't in MLX format (made for Apple silicon) — it may not load. Look for a version from “mlx-community”.") }
+            if speech && pipeline != "automatic-speech-recognition" { w.append("It doesn't look like a speech-to-text model.") }
+            if !speech && !["text-generation", "image-text-to-text", ""].contains(pipeline) {
+                w.append("It doesn't look like a text model (it's “\(pipeline)”).")
+            }
+        } else if !speech && !isMLX {
+            w.append("It isn't converted for Apple silicon (MLX): it will be larger and slower than an mlx-community version.")
         }
         if sizeGB > Double(hw.memoryGB) * 0.6 {
             w.append(String(format: "It's %.1f GB and this Mac has %d GB of memory — it will probably run out of memory.", sizeGB, hw.memoryGB))
         }
         if sizeGB > Double(hw.freeDiskGB) - 5 { w.append("There isn't enough free disk space for it.") }
         return w
+    }
+
+    /// Asks the engine whether it can run this model as a notes or speech model.
+    mutating func checkCompatibility(speech: Bool) async {
+        var verdict: [String: Any]?
+        _ = await Engine.meetscribe(["models", "check", repo, "--kind", speech ? "speech" : "notes"]) { line in
+            if line.hasPrefix("@@result "), let data = line.dropFirst(9).data(using: .utf8) {
+                verdict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            }
+        }
+        compatible = verdict?["compatible"] as? Bool
+        compatibilityReason = verdict?["reason"] as? String ?? ""
     }
 
     func asCatalogModel() -> CatalogModel {

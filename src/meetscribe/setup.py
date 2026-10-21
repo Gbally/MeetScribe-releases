@@ -131,3 +131,44 @@ def installed_models() -> dict[str, float]:
     from huggingface_hub import scan_cache_dir
 
     return {r.repo_id: round(r.size_on_disk / 1e9, 2) for r in scan_cache_dir().repos}
+
+
+def check_model(repo: str, kind: str) -> dict:
+    """Can the engine run this Hugging Face model as a `notes` or `speech` model? Reads only its
+    config and file list (a few KB). → {"compatible": True/False, "reason": str, "architecture": str}"""
+    import importlib.util
+    import json as _json
+
+    from huggingface_hub import HfApi, hf_hub_download
+
+    try:
+        files = {s.rfilename for s in HfApi().model_info(repo, files_metadata=False).siblings}
+        cfg = _json.loads(Path(hf_hub_download(repo, "config.json")).read_text())
+    except Exception as e:
+        return {"compatible": False, "architecture": "",
+                "reason": f"Couldn't read the model's configuration ({e.__class__.__name__})."}
+
+    arch = cfg.get("model_type") or (cfg.get("text_config") or {}).get("model_type") or ""
+    if kind == "speech":
+        if "n_mels" in cfg and ({"weights.safetensors", "weights.npz"} & files):
+            return {"compatible": True, "architecture": "whisper (MLX)", "reason": "A Whisper model in MLX format."}
+        if arch == "whisper":
+            return {"compatible": False, "architecture": "whisper",
+                    "reason": "This Whisper model isn't in MLX format. Use a version from mlx-community instead."}
+        return {"compatible": False, "architecture": arch,
+                "reason": "MeetScribe's speech engine only runs Whisper models in MLX format."}
+
+    # Notes: an architecture mlx-lm knows, plus a tokenizer.
+    if arch in ("whisper", "wav2vec2", "hubert") or "n_mels" in cfg:
+        return {"compatible": False, "architecture": arch, "reason": "This is a speech model, not a text model."}
+    from mlx_lm.utils import MODEL_REMAPPING
+
+    module = MODEL_REMAPPING.get(arch, arch).replace("-", "_")
+    if not module or importlib.util.find_spec(f"mlx_lm.models.{module}") is None:
+        return {"compatible": False, "architecture": arch,
+                "reason": f"MeetScribe's notes engine can't run the “{arch or 'unknown'}” architecture."}
+    if not ({"tokenizer.json", "tokenizer.model", "tokenizer_config.json"} & files):
+        return {"compatible": False, "architecture": arch, "reason": "The model has no tokenizer files."}
+    if not any(f.endswith(".safetensors") for f in files):
+        return {"compatible": False, "architecture": arch, "reason": "The model has no .safetensors weights."}
+    return {"compatible": True, "architecture": arch, "reason": f"Supported architecture ({arch})."}

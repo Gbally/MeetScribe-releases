@@ -403,65 +403,81 @@ enum AppModelHolder {
 struct CustomModelSection: View {
     @EnvironmentObject var model: AppModel
     @State private var speech = false
-    @State private var link = ""
+    @State private var links = [false: "", true: ""]            // one link per kind
+    @State private var checks: [Bool: CustomModelCheck] = [:]
     @State private var checking = false
-    @State private var check: CustomModelCheck?
     @State private var confirm = false
     private let hw = Hardware.current
 
+    private var link: Binding<String> {
+        Binding(get: { links[speech] ?? "" }, set: { links[speech] = $0; checks[speech] = nil })
+    }
+
     var body: some View {
+        let check = checks[speech]
         Section {
             Picker("Replace the", selection: $speech) {
                 Text("Notes model").tag(false)
                 Text("Speech model").tag(true)
             }
             .pickerStyle(.segmented)
-            .onChange(of: speech) { _ in check = nil }
             HStack {
-                TextField("Hugging Face link", text: $link, prompt: Text("huggingface.co/mlx-community/…"))
+                TextField("Hugging Face link", text: link,
+                          prompt: Text(speech ? "huggingface.co/mlx-community/whisper-…" : "huggingface.co/mlx-community/…"))
                     .onSubmit { inspect() }
-                    .onChange(of: link) { _ in check = nil }
                 Button(checking ? "Checking…" : "Check") { inspect() }
-                    .disabled(link.trimmingCharacters(in: .whitespaces).isEmpty || checking)
+                    .disabled(link.wrappedValue.trimmingCharacters(in: .whitespaces).isEmpty || checking)
             }
             if let c = check {
                 if let err = c.error {
                     Text(err).font(.caption).foregroundColor(.red)
                 } else {
                     LabeledContent(c.repo, value: String(format: "%.1f GB", c.sizeGB))
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(c.warnings(speech: speech, hw: hw), id: \.self) { w in
-                            Label(w, systemImage: "exclamationmark.triangle.fill")
-                                .font(.caption).foregroundColor(.orange)
-                                .fixedSize(horizontal: false, vertical: true)
+                    if c.compatible == false {
+                        Label("MeetScribe can't run it: \(c.compatibilityReason)", systemImage: "xmark.octagon.fill")
+                            .font(.caption).foregroundColor(.red).fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        if c.compatible == true {
+                            Label("Compatible: \(c.compatibilityReason)", systemImage: "checkmark.circle.fill")
+                                .font(.caption).foregroundColor(.green)
                         }
-                    }
-                    HStack {
-                        Spacer()
-                        Button("Download and use anyway") { confirm = true }
-                            .disabled(model.modelDownload != nil)
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(c.warnings(speech: speech, hw: hw), id: \.self) { w in
+                                Label(w, systemImage: "exclamationmark.triangle.fill")
+                                    .font(.caption).foregroundColor(.orange)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        HStack {
+                            Spacer()
+                            Button("Download and use anyway") { confirm = true }
+                                .disabled(model.modelDownload != nil)
+                        }
                     }
                 }
             }
         } header: {
             Text("Custom model")
         } footer: {
-            Caption("For experiments: any model from Hugging Face. You can go back to the recommended model at any time.")
+            Caption("For experiments: any model from Hugging Face. MeetScribe checks it can run it; you can go back to the recommended model at any time.")
         }
         .confirmationDialog("Use \(check?.repo ?? "this model")?", isPresented: $confirm) {
             Button("Download and use") {
-                if let c = check { model.useModel(c.asCatalogModel(), speech: speech) }
+                if let c = checks[speech] { model.useModel(c.asCatalogModel(), speech: speech) }
             }
         } message: {
-            Text("It isn't tested with MeetScribe. If your notes look wrong or processing fails, switch back to the recommended model here.")
+            Text("It isn't tested with MeetScribe. If results look wrong or processing fails, switch back to the recommended model here.")
         }
     }
 
     private func inspect() {
         checking = true
-        let input = link
+        let input = links[speech] ?? ""
+        let kind = speech
         Task {
-            check = await CustomModelCheck.inspect(input)
+            var c = await CustomModelCheck.inspect(input)
+            if c.error == nil && model.phase == .ready { await c.checkCompatibility(speech: kind) }
+            checks[kind] = c
             checking = false
         }
     }

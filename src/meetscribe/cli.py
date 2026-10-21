@@ -426,9 +426,11 @@ def cmd_ask(args, cfg: Config):
 
 
 def cmd_models(args, cfg: Config):
-    from .setup import delete_model, download_model, installed_models
+    from .setup import check_model, delete_model, download_model, installed_models
 
-    if args.action == "download":
+    if args.action == "check":
+        print("@@result " + json.dumps(check_model(args.repo, args.kind)), flush=True)
+    elif args.action == "download":
         download_model(args.repo)
     elif args.action == "delete":
         print(f"Freed {delete_model(args.repo):.1f} GB")
@@ -495,8 +497,9 @@ def main():
     cl.set_defaults(func=cmd_clips)
 
     md = sub.add_parser("models", help="list / download / delete AI models")
-    md.add_argument("action", choices=["list", "download", "delete"])
+    md.add_argument("action", choices=["list", "download", "delete", "check"])
     md.add_argument("repo", nargs="?")
+    md.add_argument("--kind", choices=["notes", "speech"], default="notes")
     md.set_defaults(func=cmd_models)
 
     st = sub.add_parser("setup", help="download the speaker, speech and summary models")

@@ -18,3 +18,4 @@ config.toml
 build-cache/
 dist/
 signing/
+zenhook_token.txt

@@ -24,6 +24,32 @@ STYLES = {
 - Decisions, action items and questions: a few words each.""",
 }
 
+# Meeting types: extra sections (title, instructions) inserted after the Summary.
+TEMPLATES = {
+    "general": ("General", []),
+    "one_on_one": ("1:1", [
+        ("Feedback", "Feedback given or received, in either direction, as bullets."),
+        ("Growth & wellbeing", "Career goals, workload, morale or support discussed (only if discussed)."),
+    ]),
+    "standup": ("Stand-up", [
+        ("Updates", "One bullet per person: \"Name — done / doing next\"."),
+        ("Blockers", "What is blocking someone, and who can help."),
+    ]),
+    "client": ("Client call", [
+        ("Client requests", "What the client asked for or expects."),
+        ("Our commitments", "What we promised the client, with dates if stated."),
+        ("Risks & concerns", "Concerns, objections or risks raised."),
+    ]),
+    "interview": ("Interview", [
+        ("Candidate background", "Experience and skills the candidate described."),
+        ("Strengths", "Strengths shown, with evidence from the conversation."),
+        ("Concerns", "Gaps or concerns, with evidence. No judgements beyond what was said."),
+    ]),
+    "workshop": ("Workshop / brainstorm", [
+        ("Ideas", "Every idea raised, grouped by theme, with who proposed it if clear."),
+    ]),
+}
+
 NOTES_PROMPT = """Write the meeting notes in {language}, in Markdown (even if parts of the meeting were in
 another language — translate those; lines tagged e.g. "(FR)" were spoken in that language).
 
@@ -38,7 +64,7 @@ these sections:
 
 ## Summary
 The main topics and outcomes, as bullet points.
-
+{extra_sections}
 ## Decisions
 Only things the group agreed or decided (not tasks). Write "None recorded." if none.
 
@@ -112,9 +138,11 @@ class LLM:
         return re.sub(r"<think>.*?</think>", "", out, flags=re.S).strip()
 
 
-def summarize(transcript: str, cfg: Config, language: str = "", context: str = "") -> str:
+def summarize(transcript: str, cfg: Config, language: str = "", context: str = "", template: str = "general") -> str:
     llm = LLM(cfg)
     lang = language or cfg.summary_language
+    extra = "".join(f"\n## {title}\n{how} Write \"None.\" if nothing applies.\n"
+                    for title, how in TEMPLATES.get(template, TEMPLATES["general"])[1])
     if context:
         # Calendar details help with names and the topic — but labels stay as they are.
         transcript = (f"{context}\n(Speaker labels in the transcript are not necessarily these people; "
@@ -127,7 +155,7 @@ def summarize(transcript: str, cfg: Config, language: str = "", context: str = "
 
     expected = {"brief": 220, "standard": 380, "detailed": 800}.get(cfg.summary_style, 380)  # measured
     if llm.count_tokens(transcript) <= cfg.max_context_tokens:
-        return llm.chat(NOTES_PROMPT.format(language=lang, style=style, transcript=transcript), max_tokens=max_tokens,
+        return llm.chat(NOTES_PROMPT.format(language=lang, style=style, extra_sections=extra, transcript=transcript), max_tokens=max_tokens,
                         on_token=lambda n: progress.update(0.15 + 0.85 * min(n / expected, 0.97)))
 
     # Long meeting: summarize chunks, then write the final notes from the chunk notes.
@@ -149,6 +177,6 @@ def summarize(transcript: str, cfg: Config, language: str = "", context: str = "
         partial.append(f"### Part {i}\n" + llm.chat(
             CHUNK_PROMPT.format(part=i, total=len(chunks), language=lang, transcript=chunk), max_tokens=1500,
             on_token=lambda n, i=i: progress.update((i - 1 + min(n / 600, 0.97)) / (len(chunks) + 1))))
-    return llm.chat(NOTES_PROMPT.format(language=lang, style=style, transcript="\n\n".join(partial)),
+    return llm.chat(NOTES_PROMPT.format(language=lang, style=style, extra_sections=extra, transcript="\n\n".join(partial)),
                     max_tokens=max_tokens,
                     on_token=lambda n: progress.update((len(chunks) + min(n / expected, 0.97)) / (len(chunks) + 1)))

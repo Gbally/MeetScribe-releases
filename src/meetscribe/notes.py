@@ -67,9 +67,50 @@ def parse_notes(md: str) -> dict:
                 return lines
         return []
 
+    base = ("summary", "decision", "action", "to-do", "todo", "question")
+    extra = [{"title": title_case(k), "items": _bullets(v)} for k, v in sections.items()
+             if not any(n in k for n in base)]
     return {
         "summary": _bullets(get("summary")),
         "decisions": _bullets(get("decision")),
         "actions": _actions(get("action", "to-do", "todo")),
         "questions": _bullets(get("question")),
+        "sections": [x for x in extra if x["items"]],
     }
+
+
+def title_case(heading: str) -> str:
+    return heading[:1].upper() + heading[1:]
+
+
+def render_markdown(notes: dict, duration_text: str) -> str:
+    """notes.md from notes.json — the single format, also after edits made in the app."""
+    from datetime import datetime
+
+    created = datetime.fromisoformat(notes["date"])
+    out = [f"# {notes['title']}", "",
+           f"- **Date:** {created:%Y-%m-%d %H:%M}",
+           f"- **Duration:** {duration_text}",
+           f"- **Participants:** {', '.join(notes.get('participants', []))}",
+           "- **Full transcript:** [transcript.md](transcript.md)", ""]
+
+    def bullets(title, items, empty="None recorded."):
+        out.extend([f"## {title}", ""] + ([f"- {i}" for i in items] or [empty]) + [""])
+
+    bullets("Summary", notes.get("summary", []))
+    for sec in notes.get("sections", []):
+        bullets(sec["title"], sec["items"], "None.")
+    bullets("Decisions", notes.get("decisions", []))
+    out += ["## Action items", ""]
+    if notes.get("actions"):
+        out += ["| Owner | Task | Due |", "|---|---|---|"]
+        for a in notes["actions"]:
+            due = a.get("due") or "—"
+            if a.get("due_date") and a["due_date"] not in due:
+                due += f" ({a['due_date']})"
+            out.append(f"| {a.get('owner') or '—'} | {a['task']} | {due} |")
+    else:
+        out.append("None recorded.")
+    out.append("")
+    bullets("Open questions", notes.get("questions", []), "None.")
+    return "\n".join(out)

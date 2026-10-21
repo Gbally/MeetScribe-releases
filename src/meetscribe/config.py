@@ -42,6 +42,8 @@ class Config:
     summary_language: str = "auto"
     # How much detail: "detailed" (long, full context), "standard", or "brief" (bullets only).
     summary_style: str = "standard"
+    # Default meeting type: general, one_on_one, standup, client, interview, workshop.
+    template: str = "general"
     # Transcripts longer than this (in tokens) are summarized in chunks first.
     max_context_tokens: int = 20000
 

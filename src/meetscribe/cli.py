@@ -246,37 +246,58 @@ def write_transcript(session: Path, utterances, title: str):
 
 def write_notes(session: Path, cfg: Config):
     from .notes import parse_notes, split_title
-    from .summarize import summarize
-    from .transcript import fmt_time, load_json, main_language, to_plain
+    from .summarize import TEMPLATES, summarize
+    from .transcript import load_json, main_language, to_plain
 
     utterances, meta = load_json(session / "transcript.json")
     language = notes_language(cfg, main_language(utterances) or (meta.get("languages") or [""])[0])
     context = calendar_context(session)
+    template = meeting_info(session).get("template") or cfg.template
+    if template not in TEMPLATES:
+        template = "general"
     step(f"Writing the summary and to-do list ({language})")
     from . import progress
 
     progress.ensure("notes")
     t0 = time.time()
-    ai_title, body = split_title(summarize(to_plain(utterances), cfg, language, context))
-    speakers = list(dict.fromkeys(u.speaker for u in utterances))
+    ai_title, body = split_title(summarize(to_plain(utterances), cfg, language, context, template))
     created = datetime.fromisoformat(meta["created"]) if "created" in meta else datetime.now()
     title = meta.get("title") or ai_title or f"Meeting {created:%Y-%m-%d %H:%M}"
-    header = [
-        f"# {title}",
-        "",
-        f"- **Date:** {created:%Y-%m-%d %H:%M}",
-        f"- **Duration:** {fmt_time(meta['duration'])}",
-        f"- **Participants:** {', '.join(speakers)}",
-        "- **Full transcript:** [transcript.md](transcript.md)",
-        "",
-        "",
-    ]
-    (session / "notes.md").write_text("\n".join(header) + body + "\n")
-    write_transcript(session, utterances, title)
     notes = {"title": title, "date": created.isoformat(timespec="seconds"), "duration": meta["duration"],
-             "participants": speakers, "tracks": meta.get("tracks", []), **parse_notes(body)}
-    (session / "notes.json").write_text(json.dumps(notes, indent=1, ensure_ascii=False))
+             "participants": list(dict.fromkeys(u.speaker for u in utterances)), "tracks": meta.get("tracks", []),
+             "template": template, **parse_notes(body)}
+    save_notes(session, notes)
     print(f"   notes ready in {time.time() - t0:.0f}s")
+
+
+def meeting_info(session: Path) -> dict:
+    try:
+        return json.loads((session / "meeting.json").read_text())
+    except Exception:
+        return {}
+
+
+def save_notes(session: Path, notes: dict) -> None:
+    """Writes notes.json (with due dates worked out) and notes.md, and titles the transcript."""
+    from .dates import parse_due
+    from .notes import render_markdown
+    from .transcript import fmt_time, load_json
+
+    meeting_day = datetime.fromisoformat(notes["date"]).date()
+    for a in notes.get("actions", []):
+        d = parse_due(a.get("due", ""), meeting_day)
+        a["due_date"] = d.isoformat() if d else None
+    (session / "notes.json").write_text(json.dumps(notes, indent=1, ensure_ascii=False))
+    (session / "notes.md").write_text(render_markdown(notes, fmt_time(notes.get("duration", 0))) + "\n")
+    if (session / "transcript.json").exists():
+        utterances, _ = load_json(session / "transcript.json")
+        write_transcript(session, utterances, notes["title"])
+
+
+def cmd_render(args, cfg: Config):
+    """Re-derive notes.md, due dates and the transcript title after notes.json was edited."""
+    session = Path(args.folder).expanduser().resolve()
+    save_notes(session, json.loads((session / "notes.json").read_text()))
 
 
 def notes_language(cfg: Config, spoken: str) -> str:
@@ -391,6 +412,18 @@ def cmd_clips(args, cfg: Config):
     print("Voice samples ready.")
 
 
+def cmd_ask(args, cfg: Config):
+    from .ask import ask
+
+    result = ask(" ".join(args.question), cfg)
+    if args.json:
+        print("@@result " + json.dumps(result, ensure_ascii=False), flush=True)
+    else:
+        print("\n" + result["answer"] + "\n")
+        for s in result["sources"]:
+            print(f"[{s['n']}] {s['title']} — {s['date']}" + (f" at {s['time'] // 60:.0f} min" if s["time"] else ""))
+
+
 def cmd_setup(args, cfg: Config):
     from .setup import run_setup
 
@@ -412,6 +445,7 @@ def main():
         sp.add_argument("--speakers", type=int, default=0,
                         help="number of (remote) speakers if known — improves speaker separation")
         sp.add_argument("--no-summary", action="store_true", help="transcript only, skip the AI notes")
+        sp.add_argument("--template", help="meeting type: general, one_on_one, standup, client, interview, workshop")
 
     r = sub.add_parser("record", help="record a meeting (Ctrl+C to stop), then process it")
     common(r)
@@ -432,7 +466,17 @@ def main():
 
     sm = sub.add_parser("summarize", help="(re)write notes.md from transcript.json")
     sm.add_argument("folder")
+    sm.add_argument("--template", help="meeting type (see process --help)")
     sm.set_defaults(func=cmd_summarize)
+
+    ak = sub.add_parser("ask", help="ask a question across all your meetings")
+    ak.add_argument("question", nargs="+")
+    ak.add_argument("--json", action="store_true", help="machine-readable result (for the app)")
+    ak.set_defaults(func=cmd_ask)
+
+    rd = sub.add_parser("render", help="rebuild notes.md after editing notes.json")
+    rd.add_argument("folder")
+    rd.set_defaults(func=cmd_render)
 
     cl = sub.add_parser("clips", help="make voice samples of each speaker for an older meeting")
     cl.add_argument("folder")
@@ -442,7 +486,10 @@ def main():
     st.set_defaults(func=cmd_setup)
 
     args = p.parse_args()
-    args.func(args, load_config())
+    cfg = load_config()
+    if getattr(args, "template", None):
+        cfg.template = args.template
+    args.func(args, cfg)
 
 
 if __name__ == "__main__":

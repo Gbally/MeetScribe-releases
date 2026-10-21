@@ -90,6 +90,9 @@ enum Windows {
     }
 
     private static func present(_ w: NSWindow) {
+        // Opened from the menu bar window? Close it, so it doesn't linger behind the new window.
+        let managed = [settings].compactMap { $0 } + Array(meetings.values) + Array(others.values)
+        if let key = NSApp.keyWindow, !managed.contains(where: { $0 === key }) { key.close() }
         NSApp.activate(ignoringOtherApps: true)
         w.makeKeyAndOrderFront(nil)
     }

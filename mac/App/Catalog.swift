@@ -104,3 +104,66 @@ enum Releases {
 
     static var pageURL: URL? { repo.isEmpty ? nil : URL(string: "https://github.com/\(repo)/releases") }
 }
+
+/// What we can tell about a model the user pasted (any Hugging Face repo), before using it.
+struct CustomModelCheck: Equatable {
+    var repo: String
+    var sizeGB: Double = 0
+    var isMLX = false
+    var pipeline = ""
+    var error: String?
+
+    /// "https://huggingface.co/org/name/tree/main" or "org/name" → "org/name".
+    static func repoID(from input: String) -> String? {
+        var s = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let r = s.range(of: "huggingface.co/") { s = String(s[r.upperBound...]) }
+        let parts = s.split(separator: "/").map(String.init).filter { !$0.isEmpty }
+        guard parts.count >= 2, parts[0] != "api", parts[0] != "spaces", parts[0] != "datasets" else { return nil }
+        let ok = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_."))
+        guard parts[0].unicodeScalars.allSatisfy(ok.contains), parts[1].unicodeScalars.allSatisfy(ok.contains) else { return nil }
+        return "\(parts[0])/\(parts[1])"
+    }
+
+    static func inspect(_ input: String) async -> CustomModelCheck {
+        guard let repo = repoID(from: input),
+              let url = URL(string: "https://huggingface.co/api/models/\(repo)?blobs=true") else {
+            return CustomModelCheck(repo: input, error: "That doesn't look like a Hugging Face model link (huggingface.co/organisation/model).")
+        }
+        guard let (data, resp) = try? await URLSession.shared.data(from: url) else {
+            return CustomModelCheck(repo: repo, error: "Couldn't reach Hugging Face. Check your internet connection.")
+        }
+        guard (resp as? HTTPURLResponse)?.statusCode == 200,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return CustomModelCheck(repo: repo, error: "No public model called “\(repo)” on Hugging Face.")
+        }
+        let siblings = json["siblings"] as? [[String: Any]] ?? []
+        let bytes = siblings.compactMap { $0["size"] as? Double }.reduce(0, +)
+        let tags = (json["tags"] as? [String] ?? []).map { $0.lowercased() }
+        return CustomModelCheck(repo: repo, sizeGB: bytes / 1e9,
+                                isMLX: tags.contains("mlx") || (json["library_name"] as? String) == "mlx",
+                                pipeline: json["pipeline_tag"] as? String ?? "")
+    }
+
+    /// Plain-language risks of using this model.
+    func warnings(speech: Bool, hw: Hardware) -> [String] {
+        var w = ["Not tested with MeetScribe: notes may come out in the wrong format, slowly, or not at all."]
+        if !isMLX { w.append("It isn't in MLX format (made for Apple silicon) — it may not load. Look for a version from “mlx-community”.") }
+        if speech && pipeline != "automatic-speech-recognition" {
+            w.append("It doesn't look like a speech-to-text model.")
+        }
+        if !speech && !["text-generation", "image-text-to-text", ""].contains(pipeline) {
+            w.append("It doesn't look like a text model (it's “\(pipeline)”).")
+        }
+        if sizeGB > Double(hw.memoryGB) * 0.6 {
+            w.append(String(format: "It's %.1f GB and this Mac has %d GB of memory — it will probably run out of memory.", sizeGB, hw.memoryGB))
+        }
+        if sizeGB > Double(hw.freeDiskGB) - 5 { w.append("There isn't enough free disk space for it.") }
+        return w
+    }
+
+    func asCatalogModel() -> CatalogModel {
+        CatalogModel(id: "custom", repo: repo, name: repo.components(separatedBy: "/").last ?? repo, sizeGB: sizeGB,
+                     minRamGB: 0, recommendedRamGB: 0, quality: 0, speed: 0, license: "", tested: nil,
+                     description: "Custom model")
+    }
+}

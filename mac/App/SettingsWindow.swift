@@ -249,10 +249,13 @@ struct ModelsPane: View {
         }
         Section("Notes model") {
             ForEach(model.catalog.notes) { m in modelRow(m, speech: false) }
+            customInUse(speech: false)
         }
         Section("Speech model") {
             ForEach(model.catalog.speech) { m in modelRow(m, speech: true) }
+            customInUse(speech: true)
         }
+        CustomModelSection()
         let listed = Set((model.catalog.notes + model.catalog.speech).map(\.repo))
         let unused = model.installedModels.filter { repo, _ in
             repo != model.notesModel && repo != model.speechModel && repo.hasPrefix("mlx-community/") && !listed.contains(repo)
@@ -263,6 +266,29 @@ struct ModelsPane: View {
                     LabeledContent(repo.components(separatedBy: "/").last ?? repo) {
                         Button("Delete (\(String(format: "%.1f", gb)) GB)") { model.deleteModel(repo) }
                     }
+                }
+            }
+        }
+    }
+
+    /// The model in use when it isn't one of the tested ones.
+    @ViewBuilder func customInUse(speech: Bool) -> some View {
+        let repo = speech ? model.speechModel : model.notesModel
+        let list = speech ? model.catalog.speech : model.catalog.notes
+        if !repo.isEmpty && !list.contains(where: { $0.repo == repo }) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(repo.components(separatedBy: "/").last ?? repo)
+                        Tag(text: "Custom", color: .orange)
+                        Tag(text: "In use", color: .green)
+                    }
+                    Caption(repo + " · not tested with MeetScribe")
+                }
+                Spacer()
+                if let rec = ModelCatalog.recommended(list, for: hw) {
+                    Button("Back to \(rec.name)") { model.useModel(rec, speech: speech) }
+                        .disabled(model.modelDownload != nil)
                 }
             }
         }
@@ -371,4 +397,72 @@ struct AboutPane: View {
 @MainActor
 enum AppModelHolder {
     static var updater = Updater()
+}
+
+/// Any model from Hugging Face, at the user's own risk.
+struct CustomModelSection: View {
+    @EnvironmentObject var model: AppModel
+    @State private var speech = false
+    @State private var link = ""
+    @State private var checking = false
+    @State private var check: CustomModelCheck?
+    @State private var confirm = false
+    private let hw = Hardware.current
+
+    var body: some View {
+        Section {
+            Picker("Replace the", selection: $speech) {
+                Text("Notes model").tag(false)
+                Text("Speech model").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: speech) { _ in check = nil }
+            HStack {
+                TextField("Hugging Face link", text: $link, prompt: Text("huggingface.co/mlx-community/…"))
+                    .onSubmit { inspect() }
+                    .onChange(of: link) { _ in check = nil }
+                Button(checking ? "Checking…" : "Check") { inspect() }
+                    .disabled(link.trimmingCharacters(in: .whitespaces).isEmpty || checking)
+            }
+            if let c = check {
+                if let err = c.error {
+                    Text(err).font(.caption).foregroundColor(.red)
+                } else {
+                    LabeledContent(c.repo, value: String(format: "%.1f GB", c.sizeGB))
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(c.warnings(speech: speech, hw: hw), id: \.self) { w in
+                            Label(w, systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption).foregroundColor(.orange)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    HStack {
+                        Spacer()
+                        Button("Download and use anyway") { confirm = true }
+                            .disabled(model.modelDownload != nil)
+                    }
+                }
+            }
+        } header: {
+            Text("Custom model")
+        } footer: {
+            Caption("For experiments: any model from Hugging Face. You can go back to the recommended model at any time.")
+        }
+        .confirmationDialog("Use \(check?.repo ?? "this model")?", isPresented: $confirm) {
+            Button("Download and use") {
+                if let c = check { model.useModel(c.asCatalogModel(), speech: speech) }
+            }
+        } message: {
+            Text("It isn't tested with MeetScribe. If your notes look wrong or processing fails, switch back to the recommended model here.")
+        }
+    }
+
+    private func inspect() {
+        checking = true
+        let input = link
+        Task {
+            check = await CustomModelCheck.inspect(input)
+            checking = false
+        }
+    }
 }

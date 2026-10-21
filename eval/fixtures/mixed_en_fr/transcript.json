@@ -1,0 +1,31 @@
+{
+ "title": "",
+ "languages": [
+  "en"
+ ],
+ "duration": 25.24,
+ "created": "2026-10-21T14:30:00",
+ "utterances": [
+  {
+   "start": 0.0,
+   "end": 6.82,
+   "speaker": "Daniel",
+   "text": "Okay, so the budget for next quarter is approved. Before we move on, let me quickly check something with Thomas.",
+   "lang": "en"
+  },
+  {
+   "start": 7.780000000000001,
+   "end": 17.84,
+   "speaker": "Speaker 2",
+   "text": "Thomas, tu peux m'envoyer le rapport de vente avant jeudi, il me faut aussi les chiffres de septembre. Oui, pas de problème, je te l'envoie demain matin.",
+   "lang": "fr"
+  },
+  {
+   "start": 18.639999999999997,
+   "end": 25.24,
+   "speaker": "Daniel",
+   "text": "Great, thanks. Back to English. The next topic is hiring. We need two engineers by December.",
+   "lang": "en"
+  }
+ ]
+}

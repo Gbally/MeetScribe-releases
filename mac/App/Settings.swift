@@ -65,6 +65,8 @@ struct AppSettings: Codable, Equatable {
     var defaultTemplate = "general"
     var hotkey: Hotkey? = .defaultShortcut
     var audioRetentionDays = 7   // 0 = delete right after the notes, -1 = keep forever
+    var llmModel: String?        // nil = the catalog's recommendation for this Mac
+    var whisperModel: String?
 
     var notesFolder: URL {
         switch storage {
@@ -103,6 +105,8 @@ struct AppSettings: Codable, Equatable {
         autoRecord = try c.decodeIfPresent(Bool.self, forKey: .autoRecord) ?? d.autoRecord
         defaultTemplate = try c.decodeIfPresent(String.self, forKey: .defaultTemplate) ?? d.defaultTemplate
         hotkey = c.contains(.hotkey) ? try c.decodeIfPresent(Hotkey.self, forKey: .hotkey) : d.hotkey
+        llmModel = try c.decodeIfPresent(String.self, forKey: .llmModel)
+        whisperModel = try c.decodeIfPresent(String.self, forKey: .whisperModel)
         if let days = try c.decodeIfPresent(Int.self, forKey: .audioRetentionDays) {
             audioRetentionDays = days
         } else if (try c.decodeIfPresent(Bool.self, forKey: .keepAudio)) == false {
@@ -124,7 +128,7 @@ struct AppSettings: Codable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case myName, language, languages, notesLanguage, useCalendar, callReminders, endReminders, notifyWhenReady,
-             emailApp, gmailAccount, briefs, dueReminders, autoRecord, defaultTemplate, hotkey, audioRetentionDays,
+             emailApp, gmailAccount, briefs, dueReminders, autoRecord, defaultTemplate, hotkey, audioRetentionDays, llmModel, whisperModel,
              vocabulary, summaryStyle, teamsOnly, keepAudio, storage, oneDrivePath,
              customFolderPath, notesFolderPath
     }
@@ -146,6 +150,8 @@ struct AppSettings: Codable, Equatable {
         try c.encode(defaultTemplate, forKey: .defaultTemplate)
         try c.encode(hotkey, forKey: .hotkey)
         try c.encode(audioRetentionDays, forKey: .audioRetentionDays)
+        try c.encodeIfPresent(llmModel, forKey: .llmModel)
+        try c.encodeIfPresent(whisperModel, forKey: .whisperModel)
         try c.encode(vocabulary, forKey: .vocabulary)
         try c.encode(summaryStyle, forKey: .summaryStyle)
         try c.encode(teamsOnly, forKey: .teamsOnly)

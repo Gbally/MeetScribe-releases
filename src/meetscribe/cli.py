@@ -425,6 +425,17 @@ def cmd_ask(args, cfg: Config):
             print(f"[{s['n']}] {s['title']} — {s['date']}" + (f" at {s['time'] // 60:.0f} min" if s["time"] else ""))
 
 
+def cmd_models(args, cfg: Config):
+    from .setup import delete_model, download_model, installed_models
+
+    if args.action == "download":
+        download_model(args.repo)
+    elif args.action == "delete":
+        print(f"Freed {delete_model(args.repo):.1f} GB")
+    else:
+        print("@@result " + json.dumps(installed_models()))
+
+
 def cmd_setup(args, cfg: Config):
     from .setup import run_setup
 
@@ -482,6 +493,11 @@ def main():
     cl = sub.add_parser("clips", help="make voice samples of each speaker for an older meeting")
     cl.add_argument("folder")
     cl.set_defaults(func=cmd_clips)
+
+    md = sub.add_parser("models", help="list / download / delete AI models")
+    md.add_argument("action", choices=["list", "download", "delete"])
+    md.add_argument("repo", nargs="?")
+    md.set_defaults(func=cmd_models)
 
     st = sub.add_parser("setup", help="download the speaker, speech and summary models")
     st.set_defaults(func=cmd_setup)

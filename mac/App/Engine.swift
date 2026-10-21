@@ -118,6 +118,10 @@ enum Engine {
 
     /// Writes the user's settings where the Python engine reads them.
     static func writeConfig(_ s: AppSettings) {
+        let catalog = ModelCatalog.load()
+        let llm = s.llmModel ?? ModelCatalog.recommended(catalog.notes, for: .current)?.repo ?? "mlx-community/Qwen3-8B-4bit"
+        let whisper = s.whisperModel ?? ModelCatalog.recommended(catalog.speech, for: .current)?.repo
+            ?? "mlx-community/whisper-large-v3-turbo"
         func q(_ v: String) -> String {
             "\"" + v.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
         }
@@ -129,6 +133,8 @@ enum Engine {
         vocabulary = \(q(s.vocabulary))
         summary_style = \(q(s.summaryStyle.rawValue))
         template = \(q(s.defaultTemplate))
+        llm_model = \(q(llm))
+        whisper_model = \(q(whisper))
 
         """
         try? toml.write(to: configFile, atomically: true, encoding: .utf8)

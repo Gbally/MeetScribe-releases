@@ -84,6 +84,11 @@ final class AppModel: ObservableObject {
     @Published var voices: [(name: String, samples: Int)] = []
     @Published var toast: String?
     @Published var nextEvent: CalendarEvent?     // happening now or within 30 min (for the brief card)
+    @Published var catalog = ModelCatalog.load()
+    @Published var installedModels: [String: Double] = [:]   // repo → GB on disk
+    @Published var modelDownload: (repo: String, progress: Double?, status: String)?
+    @Published var settingsTab: SettingsTab = .general
+    let updater = AppModelHolder.updater
     @Published var askQuestion = ""
     @Published var askResult: AskResult?
     @Published var askError: String?
@@ -152,10 +157,16 @@ final class AppModel: ObservableObject {
                 model.refreshCalendar()
                 model.checkBriefs()
                 model.cleanUpOldAudio()
+                await model.refreshCatalogDaily()
             }
         }
         refreshCalendar()
         if phase == .ready { askForScreenAudioIfNeeded() }
+        updater.start()
+        Task {
+            if let c = await ModelCatalog.refresh() { catalog = c }
+            loadInstalledModels()
+        }
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
             // Make sure the recording files are finalized if the app is quit mid-meeting.
             let sem = DispatchSemaphore(value: 0)
@@ -244,6 +255,9 @@ final class AppModel: ObservableObject {
             let sync = await Engine.run(Engine.uv, ["sync", "--frozen", "--no-install-project", "--project", Engine.engineSource.path]) { _ in }
             guard sync.ok else { return failSetup("Couldn't install the engine.\n\(sync.errorTail)") }
 
+            // Pick the models that fit this Mac, and keep them (a later catalog only recommends).
+            if settings.llmModel == nil { settings.llmModel = ModelCatalog.recommended(catalog.notes, for: .current)?.repo }
+            if settings.whisperModel == nil { settings.whisperModel = ModelCatalog.recommended(catalog.speech, for: .current)?.repo }
             Engine.writeConfig(settings)
             let setup = await Engine.meetscribe(["setup"]) { [weak self] line in
                 guard let self else { return }
@@ -672,6 +686,69 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - AI models
+
+    private var lastCatalogRefresh = Date()
+
+    func refreshCatalogDaily() async {
+        guard Date().timeIntervalSince(lastCatalogRefresh) > 24 * 3600 else { return }
+        lastCatalogRefresh = Date()
+        if let c = await ModelCatalog.refresh() { catalog = c }
+    }
+
+    var notesModel: String { settings.llmModel ?? ModelCatalog.recommended(catalog.notes, for: .current)?.repo ?? "" }
+    var speechModel: String { settings.whisperModel ?? ModelCatalog.recommended(catalog.speech, for: .current)?.repo ?? "" }
+
+    /// A better notes model than the one in use fits this Mac.
+    var betterNotesModel: CatalogModel? {
+        guard let best = ModelCatalog.recommended(catalog.notes, for: .current), best.repo != notesModel else { return nil }
+        let current = catalog.notes.first { $0.repo == notesModel }
+        return (current == nil || best.quality > current!.quality) ? best : nil
+    }
+
+    func loadInstalledModels() {
+        guard phase == .ready else { return }
+        Task {
+            var found: [String: Double] = [:]
+            _ = await Engine.meetscribe(["models", "list"]) { line in
+                if line.hasPrefix("@@result "), let data = line.dropFirst(9).data(using: .utf8),
+                   let dict = try? JSONDecoder().decode([String: Double].self, from: data) { found = dict }
+            }
+            installedModels = found
+        }
+    }
+
+    /// Switch to a model, downloading it first if needed.
+    func useModel(_ model: CatalogModel, speech: Bool) {
+        let apply = { [weak self] in
+            guard let self else { return }
+            if speech { self.settings.whisperModel = model.repo } else { self.settings.llmModel = model.repo }
+            Engine.writeConfig(self.settings)
+        }
+        if installedModels[model.repo] != nil { apply(); return }
+        guard modelDownload == nil else { return }
+        modelDownload = (model.repo, nil, "Starting download…")
+        Task {
+            let result = await Engine.meetscribe(["models", "download", model.repo]) { [weak self] line in
+                guard let self, var d = self.modelDownload else { return }
+                if line.hasPrefix("@@progress "), let v = Double(line.dropFirst(11)) { d.progress = v }
+                else if line.hasPrefix("→ ") { d.status = String(line.dropFirst(2)) }
+                self.modelDownload = d
+            }
+            modelDownload = nil
+            if result.ok { apply() } else { show("Download failed: \(result.errorTail)") }
+            loadInstalledModels()
+        }
+    }
+
+    func deleteModel(_ repo: String) {
+        guard repo != notesModel, repo != speechModel else { return }
+        Task {
+            _ = await Engine.meetscribe(["models", "delete", repo]) { _ in }
+            loadInstalledModels()
+        }
+    }
+
     // MARK: - Ask
 
     func ask(_ question: String) {
@@ -741,7 +818,8 @@ final class AppModel: ObservableObject {
                 let eventID = String(meeting.dropFirst(6))
                 if let e = briefEvents[eventID] { pendingRoute = .brief(e) }
             } else if let meeting {
-                pendingRoute = .meeting(meeting)
+                Windows.showMeeting(meeting, model: self)
+                return
             } else {
                 return
             }

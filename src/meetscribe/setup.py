@@ -95,3 +95,39 @@ def run_setup(cfg: Config):
         _progress(base, total)
 
     print("→ Ready", flush=True)
+
+
+def download_model(repo: str) -> None:
+    """Download one model (when switching models in the app), with progress."""
+    size = _repo_size(repo)
+    print(f"→ Downloading {repo.split('/')[-1]} ({size / 1e9:.1f} GB)", flush=True)
+    for attempt in range(3):
+        try:
+            _hf_download(repo, 0, size)
+            break
+        except Exception as e:
+            if attempt == 2:
+                raise
+            print(f"→ Download interrupted ({e.__class__.__name__}), retrying…", flush=True)
+            time.sleep(3)
+    print("→ Ready", flush=True)
+
+
+def delete_model(repo: str) -> float:
+    """Remove a downloaded model from the Hugging Face cache; returns GB freed."""
+    from huggingface_hub import scan_cache_dir
+
+    cache = scan_cache_dir()
+    for r in cache.repos:
+        if r.repo_id == repo:
+            strategy = cache.delete_revisions(*[rev.commit_hash for rev in r.revisions])
+            strategy.execute()
+            return strategy.expected_freed_size / 1e9
+    return 0.0
+
+
+def installed_models() -> dict[str, float]:
+    """repo id → size on disk (GB) of the models in the cache."""
+    from huggingface_hub import scan_cache_dir
+
+    return {r.repo_id: round(r.size_on_disk / 1e9, 2) for r in scan_cache_dir().repos}

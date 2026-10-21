@@ -1,0 +1,86 @@
+{
+ "title": "",
+ "languages": [
+  "en"
+ ],
+ "tracks": [
+  "meeting",
+  "mic"
+ ],
+ "duration": 76.16,
+ "created": "2026-10-21T14:30:00",
+ "utterances": [
+  {
+   "start": 0.0,
+   "end": 8.84,
+   "speaker": "Guillaume",
+   "text": "Good morning everyone. Let's start the weekly sync. The main topic today is the release of version 2 of the mobile app, planned for the end of the month.",
+   "lang": "en",
+   "track": "mic"
+  },
+  {
+   "start": 9.62,
+   "end": 21.44,
+   "speaker": "Flo",
+   "text": "Thanks Daniel. On the backend side, the new payment API is done, but we still have a performance problem with the leaderboard query. It takes about 3 seconds under load.",
+   "lang": "en",
+   "track": "meeting"
+  },
+  {
+   "start": 22.320000000000007,
+   "end": 27.32,
+   "speaker": "Guillaume",
+   "text": "3 seconds is too slow. Can you investigate and propose a fix by Friday?",
+   "lang": "en",
+   "track": "mic"
+  },
+  {
+   "start": 28.080000000000002,
+   "end": 34.16,
+   "speaker": "Flo",
+   "text": "Yes, I'll look at adding an index and caching the results. I'll send a proposal by Friday.",
+   "lang": "en",
+   "track": "meeting"
+  },
+  {
+   "start": 35.040000000000006,
+   "end": 42.68,
+   "speaker": "Speaker 2",
+   "text": "From the design side, the new onboarding screens are ready. I still need feedback from marketing on the welcome text.",
+   "lang": "en",
+   "track": "meeting"
+  },
+  {
+   "start": 43.56,
+   "end": 51.12,
+   "speaker": "Guillaume",
+   "text": "Okay, let's decide now. We will ship the new onboarding in version 2, and the dark mode moves to version 2.1.",
+   "lang": "en",
+   "track": "mic"
+  },
+  {
+   "start": 52.019999999999996,
+   "end": 57.12,
+   "speaker": "Speaker 2",
+   "text": "Agreed. I will contact Sarah from marketing today to get the final text.",
+   "lang": "en",
+   "track": "meeting"
+  },
+  {
+   "start": 57.92,
+   "end": 66.48,
+   "speaker": "Flo",
+   "text": "One open question. Do we need to support Android 11, or can we drop it? I don't know how many users are still on it.",
+   "lang": "en",
+   "track": "meeting"
+  },
+  {
+   "start": 67.24,
+   "end": 76.16,
+   "speaker": "Guillaume",
+   "text": "Good question. I will check the analytics and answer next week. Anything else? No? Then thanks everyone. See you next Tuesday.",
+   "lang": "en",
+   "track": "mic"
+  }
+ ]
+}

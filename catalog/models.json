@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "updated": "2026-10-21",
+  "notes": [
+    {
+      "id": "qwen3-8b",
+      "repo": "mlx-community/Qwen3-8B-4bit",
+      "name": "Qwen3 8B",
+      "size_gb": 4.6,
+      "min_ram_gb": 12,
+      "recommended_ram_gb": 16,
+      "quality": 3,
+      "speed": 3,
+      "license": "Apache-2.0",
+      "tested": "2026-10-21",
+      "description": "Good notes for most meetings."
+    }
+  ],
+  "speech": [
+    {
+      "id": "whisper-turbo",
+      "repo": "mlx-community/whisper-large-v3-turbo",
+      "name": "Whisper large-v3 turbo",
+      "size_gb": 1.6,
+      "min_ram_gb": 8,
+      "recommended_ram_gb": 8,
+      "quality": 4,
+      "speed": 3,
+      "license": "MIT",
+      "tested": "2026-10-21",
+      "description": "99 languages, fast on Apple silicon."
+    }
+  ]
+}

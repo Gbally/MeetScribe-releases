@@ -31,6 +31,7 @@ if [ ! -f build-cache/AppIcon.icns ]; then
   iconutil -c icns build-cache/AppIcon.iconset -o build-cache/AppIcon.icns
 fi
 cp build-cache/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+cp catalog/models.json "$APP/Contents/Resources/models.json"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -48,6 +49,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>LSUIElement</key><true/>
   <key>LSArchitecturePriority</key><array><string>arm64</string></array>
+  <key>MSReleasesRepo</key><string>Gbally/MeetScribe-releases</string>
   <key>NSMicrophoneUsageDescription</key><string>MeetScribe records your voice during meetings to create a transcript. Audio stays on this Mac.</string>
   <key>NSAudioCaptureUsageDescription</key><string>MeetScribe records the meeting audio (the other participants) to create a transcript. Audio stays on this Mac.</string>
   <key>NSCalendarsUsageDescription</key><string>MeetScribe reads the current meeting's title and attendees to name the notes and email them. Nothing leaves this Mac.</string>

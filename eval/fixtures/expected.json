@@ -1,0 +1,24 @@
+{
+ "weekly_sync": {
+  "min_actions": 3,
+  "owners": [
+   "Flo",
+   "Speaker 2",
+   "Guillaume"
+  ],
+  "due_dates": [
+   "2026-10-23",
+   "2026-10-21"
+  ],
+  "language": "English"
+ },
+ "mixed_en_fr": {
+  "min_actions": 1,
+  "owners": [],
+  "due_dates": [],
+  "language": "English",
+  "must_mention": [
+   "engineer"
+  ]
+ }
+}

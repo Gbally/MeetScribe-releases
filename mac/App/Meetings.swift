@@ -174,7 +174,7 @@ struct Meeting: Identifiable, Equatable {
     /// Plain-text notes for pasting into an email / Teams chat.
     var shareText: String {
         guard let n = notes else { return title }
-        var out = ["\(title) — \(date.formatted(date: .abbreviated, time: .shortened))", ""]
+        var out = ["\(title) — \(date.local(date: .abbreviated, time: .shortened))", ""]
         if !n.summary.isEmpty { out += [tr("Summary")] + n.summary.map { "• \($0)" } + [""] }
         if !n.decisions.isEmpty { out += [tr("Decisions")] + n.decisions.map { "• \($0)" } + [""] }
         if !n.actions.isEmpty {

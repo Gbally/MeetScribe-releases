@@ -181,7 +181,6 @@
  "MeetScribe is still recording.": "MeetScribe はまだ録音中です。",
  "MeetScribe runs its AI entirely on this Mac — your meetings never leave it. It first needs to download its engine and models (4–6 GB, 10–20 minutes).": "MeetScribe の AI はすべてこの Mac 上で動作し、会議の内容が外部に出ることはありません。最初にエンジンとモデル（4〜6 GB、10〜20 分）をダウンロードします。",
  "MeetScribe Settings": "MeetScribe の設定",
- "MeetScribe switches language when it restarts.": "MeetScribe は再起動すると言語が切り替わります。",
  "MeetScribe's notes engine can't run the “%@” architecture.": "MeetScribe のメモ用エンジンは「%@」アーキテクチャに対応していません。",
  "MeetScribe's speech engine only runs Whisper models in MLX format.": "MeetScribe の音声エンジンは MLX 形式の Whisper モデルのみ対応しています。",
  "Microphone access isn't allowed — your voice won't be recorded.": "マイクへのアクセスが許可されていないため、自分の声は録音されません。",

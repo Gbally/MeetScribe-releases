@@ -21,7 +21,7 @@ struct CalendarEvent: Codable, Equatable {
     var seriesKey: String?   // shared by all occurrences of a recurring meeting
 
     var timeRange: String {
-        "\(start.formatted(date: .omitted, time: .shortened))–\(end.formatted(date: .omitted, time: .shortened))"
+        "\(start.local(date: .omitted, time: .shortened))–\(end.local(date: .omitted, time: .shortened))"
     }
 }
 

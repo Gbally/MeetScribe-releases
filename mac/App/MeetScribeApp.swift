@@ -31,6 +31,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             Windows.showSettings(model, tab: tab)
         }
         if args.contains("--preview") { Windows.showPreview(model) }
+        // Testing: switch language while running, e.g. --switch-language fr
+        if let i = args.firstIndex(of: "--switch-language"), i + 1 < args.count {
+            let code = args[i + 1]
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { self.model.setLanguage(code) }
+        }
         if let i = args.firstIndex(of: "--meeting"), i + 1 < args.count {
             let id = args[i + 1]
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { Windows.showMeeting(id, model: self.model) }

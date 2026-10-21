@@ -83,6 +83,12 @@ enum Windows {
         present(others["preview"]!)
     }
 
+    /// Re-titles open windows; their content redraws by itself (keyed by model.uiLanguage).
+    static func languageChanged(_ model: AppModel) {
+        settings?.title = tr("MeetScribe Settings")
+        for (id, w) in meetings { w.title = model.meeting(id)?.title ?? tr("Meeting") }
+    }
+
     private static func make<V: View>(title: String, size: NSSize, view: V, autosave: String?) -> NSWindow {
         let w = NSWindow(contentRect: NSRect(origin: .zero, size: size),
                          styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
@@ -105,6 +111,7 @@ enum Windows {
 
 /// A meeting in its own resizable window (same content as the menu bar view).
 struct MeetingWindow: View {
+    @EnvironmentObject var model: AppModel
     var id: Meeting.ID
     @State private var route: Route = .home
 
@@ -116,10 +123,13 @@ struct MeetingWindow: View {
             }
         }
         .frame(minWidth: 460, minHeight: 480)
+        .environment(\.locale, AppLanguage.locale)
+        .id(model.uiLanguage)
     }
 }
 
 struct BriefWindow: View {
+    @EnvironmentObject var model: AppModel
     var event: CalendarEvent
     @State private var route: Route = .home
 
@@ -131,6 +141,8 @@ struct BriefWindow: View {
             }
         }
         .frame(minWidth: 380, minHeight: 440)
+        .environment(\.locale, AppLanguage.locale)
+        .id(model.uiLanguage)
     }
 }
 
@@ -152,6 +164,8 @@ struct SettingsWindow: View {
         }
         .frame(minWidth: 680, minHeight: 460)
         .environmentObject(draft)
+        .environment(\.locale, AppLanguage.locale)
+        .id(model.uiLanguage)
     }
 
     @ViewBuilder var pane: some View {
@@ -183,23 +197,14 @@ struct Caption: View {
 struct GeneralPane: View {
     @EnvironmentObject var model: AppModel
     @State private var language = AppLanguage.forced
-    private let launchLanguage = AppLanguage.forced
 
     var body: some View {
         Section("Language") {
-            Picker("App language", selection: Binding(get: { language }, set: { language = $0; AppLanguage.forced = $0 })) {
+            Picker("App language", selection: Binding(get: { language }, set: { language = $0; model.setLanguage($0) })) {
                 Text(tr("Same as the Mac") + " (" + languageName(Locale.preferredLanguages.first ?? "en") + ")").tag("")
                 ForEach(AppLanguage.supported, id: \.code) { Text(verbatim: $0.name).tag($0.code) }
             }
-            if language != launchLanguage {
-                HStack {
-                    Caption("MeetScribe switches language when it restarts.")
-                    Spacer()
-                    Button("Restart MeetScribe") { model.restartApp() }
-                }
-            } else {
-                Caption("Other languages show in English. Meeting notes follow the meeting's language (Settings → Notes).")
-            }
+            Caption("Other languages show in English. Meeting notes follow the meeting's language (Settings → Notes).")
         }
         Section("You") {
             TextField("Your name", text: $model.settings.myName)
@@ -403,7 +408,7 @@ struct AboutPane: View {
                 LabeledContent("Updates") {
                     Button(updater.state == .checking ? tr("Checking…") : tr("Check now")) { Task { await updater.check() } }
                 }
-                if let d = updater.lastChecked { Caption(tr("Up to date · checked %@", d.formatted(date: .omitted, time: .shortened))) }
+                if let d = updater.lastChecked { Caption(tr("Up to date · checked %@", d.local(date: .omitted, time: .shortened))) }
             }
             switch updater.state {
             case .downloading: ProgressView("Downloading the update…").progressViewStyle(.linear)

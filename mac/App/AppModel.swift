@@ -89,6 +89,14 @@ final class AppModel: ObservableObject {
     @Published var installedModels: [String: Double] = [:]   // repo → GB on disk
     @Published var modelDownload: (repo: String, progress: Double?, status: String)?
     @Published var settingsTab: SettingsTab = .general
+    /// The UI language; changing it redraws every window (views are keyed by it).
+    @Published private(set) var uiLanguage = AppLanguage.current
+
+    func setLanguage(_ code: String) {
+        AppLanguage.forced = code
+        uiLanguage = AppLanguage.current
+        Windows.languageChanged(self)
+    }
     let updater = AppModelHolder.updater
     @Published var askQuestion = ""
     @Published var askResult: AskResult?
@@ -245,10 +253,11 @@ final class AppModel: ObservableObject {
         let rec = recorder
         Task {
             await rec?.stop()
-            // Relaunch shortly after we quit (the new instance would otherwise see us running).
+            // Relaunch once this process has really exited (a fixed delay could reopen us too early).
             let task = Process()
             task.executableURL = URL(fileURLWithPath: "/bin/sh")
-            task.arguments = ["-c", "sleep 1; /usr/bin/open \"$0\"", url.path]
+            task.arguments = ["-c", "while kill -0 $1 2>/dev/null; do sleep 0.2; done; /usr/bin/open \"$0\"",
+                              url.path, "\(ProcessInfo.processInfo.processIdentifier)"]
             try? task.run()
             NSApp.terminate(nil)
         }
@@ -671,7 +680,7 @@ final class AppModel: ObservableObject {
             var body = b.openTodos.isEmpty ? tr("No open to-dos from last time")
                 : b.openTodos.count == 1 ? tr("1 open to-do from last time")
                 : tr("%@ open to-dos from last time", "\(b.openTodos.count)")
-            if let last = b.last { body += " (\(last.date.formatted(date: .abbreviated, time: .omitted)))" }
+            if let last = b.last { body += " (\(last.date.local(date: .abbreviated, time: .omitted)))" }
             let content = UNMutableNotificationContent()
             content.title = tr("In %@ min: %@", "\(minutes)", event.title)
             content.body = body + ". " + tr("Click to review.")

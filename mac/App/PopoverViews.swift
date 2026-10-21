@@ -25,6 +25,8 @@ struct RootView: View {
             }
         }
         .frame(width: 380, height: 580)
+        .environment(\.locale, AppLanguage.locale)
+        .id(model.uiLanguage)
         .onAppear {
             model.reload()
             model.refreshPermissions()
@@ -191,8 +193,8 @@ struct HomeView: View {
     var header: some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 0) {
-                Text(Date().formatted(.dateTime.weekday(.wide))).font(.headline)
-                Text(Date().formatted(.dateTime.day().month(.wide))).font(.caption).foregroundColor(.secondary)
+                Text(Date().formatted(.dateTime.weekday(.wide).locale(AppLanguage.locale))).font(.headline)
+                Text(Date().formatted(.dateTime.day().month(.wide).locale(AppLanguage.locale))).font(.caption).foregroundColor(.secondary)
             }
             Spacer()
             if updater.available != nil {
@@ -230,7 +232,7 @@ struct HomeView: View {
                     Text(formatDuration(model.elapsed)).font(.system(.title2, design: .monospaced))
                 }
                 if let e = model.recordingEvent {
-                    Label(tr("%@ · until %@", e.title, e.end.formatted(date: .omitted, time: .shortened)), systemImage: "calendar")
+                    Label(tr("%@ · until %@", e.title, e.end.local(date: .omitted, time: .shortened)), systemImage: "calendar")
                         .font(.caption).foregroundColor(.secondary).lineLimit(1)
                 }
                 LevelMeter(label: "Your mic", icon: "mic.fill", level: model.micLevel, active: model.recorder?.mic != nil)
@@ -276,7 +278,7 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(event.map { tr("Record %@", $0.title) } ?? tr("Record")).font(.headline).lineLimit(1)
                     HStack(spacing: 4) {
-                        if let e = event { Text(tr("Now · %@ ·", e.start.formatted(date: .omitted, time: .shortened))) }
+                        if let e = event { Text(tr("Now · %@ ·", e.start.local(date: .omitted, time: .shortened))) }
                         Menu {
                             ForEach(meetingTemplates, id: \.id) { t in Button(tr(t.name)) { template = t.id } }
                         } label: {
@@ -342,7 +344,7 @@ struct HomeView: View {
                 else if let e = item.event, !model.brief(for: e).isEmpty { route = .brief(e) }
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(item.time.formatted(date: .omitted, time: .shortened)
+                    Text(item.time.local(date: .omitted, time: .shortened)
                          + (phase == .now ? " · " + tr("now") : item.meeting == nil && phase == .done ? " · " + tr("not recorded") : ""))
                         .font(.caption).foregroundColor(phase == .now ? .red : .secondary)
                     Text(item.title).font(.callout).lineLimit(1)
@@ -548,7 +550,7 @@ struct MeetingRow: View {
     }
 
     var subtitle: String {
-        var parts = [meeting.date.formatted(date: .abbreviated, time: .shortened)]
+        var parts = [meeting.date.local(date: .abbreviated, time: .shortened)]
         if let d = meeting.duration { parts.append(formatDuration(d)) }
         return parts.joined(separator: " · ")
     }

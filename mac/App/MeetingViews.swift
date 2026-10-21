@@ -160,7 +160,7 @@ struct MeetingView: View {
     }
 
     func meta(_ m: Meeting) -> String {
-        var parts = [m.date.formatted(date: .long, time: .shortened)]
+        var parts = [m.date.local(date: .long, time: .shortened)]
         if let d = m.duration { parts.append(formatDuration(d)) }
         if let p = m.notes?.participants, !p.isEmpty { parts.append(p.joined(separator: ", ")) }
         return parts.joined(separator: " · ")
@@ -467,11 +467,11 @@ struct DueBadge: View {
             let today = cal.startOfDay(for: Date())
             let days = cal.dateComponents([.day], from: today, to: cal.startOfDay(for: day)).day ?? 0
             let (text, color): (String, Color) =
-                days < 0 ? (tr("Overdue · %@", day.formatted(.dateTime.day().month(.abbreviated))), .red)
+                days < 0 ? (tr("Overdue · %@", day.formatted(.dateTime.day().month(.abbreviated).locale(AppLanguage.locale))), .red)
                 : days == 0 ? (tr("Due today"), .orange)
                 : days == 1 ? (tr("Due tomorrow"), .orange)
-                : days < 7 ? (tr("Due %@", day.formatted(.dateTime.weekday(.wide))), .accentColor)
-                : (tr("Due %@", day.formatted(.dateTime.day().month(.abbreviated))), .secondary)
+                : days < 7 ? (tr("Due %@", day.formatted(.dateTime.weekday(.wide).locale(AppLanguage.locale))), .accentColor)
+                : (tr("Due %@", day.formatted(.dateTime.day().month(.abbreviated).locale(AppLanguage.locale))), .secondary)
             Text(text).font(.caption2.weight(.semibold))
                 .foregroundColor(done ? .secondary : color)
                 .padding(.horizontal, 5).padding(.vertical, 1)
@@ -496,7 +496,7 @@ struct BriefView: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(verbatim: "\(event.start.formatted(date: .abbreviated, time: .shortened)) – \(event.end.formatted(date: .omitted, time: .shortened))"
+                    Text(verbatim: "\(event.start.local(date: .abbreviated, time: .shortened)) – \(event.end.local(date: .omitted, time: .shortened))"
                          + (event.attendees.isEmpty ? "" : " · " + tr("%@ people", "\(event.attendees.count + 1)")))
                         .font(.caption).foregroundColor(.secondary)
                     if !model.isRecording {
@@ -530,7 +530,7 @@ struct BriefView: View {
                         }
                     }
                     if let last = b.last, let n = last.notes {
-                        SectionTitle(text: tr("Last time · %@", last.date.formatted(date: .abbreviated, time: .omitted)))
+                        SectionTitle(text: tr("Last time · %@", last.date.local(date: .abbreviated, time: .omitted)))
                         ForEach((n.decisions.isEmpty ? n.summary : n.decisions).prefix(5), id: \.self) { item in
                             HStack(alignment: .top, spacing: 6) {
                                 Text("•").foregroundColor(.secondary)

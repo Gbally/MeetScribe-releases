@@ -18,13 +18,13 @@ struct MeetingView: View {
     var body: some View {
         VStack(spacing: 0) {
             if let m = model.meeting(id) {
-                Header(title: editing ? "Edit" : m.title, back: inWindow ? nil : { editing = false; route = .home }) {
+                Header(title: editing ? tr("Edit") : m.title, back: inWindow ? nil : { editing = false; route = .home }) {
                     if !inWindow {
                         Button { Windows.showMeeting(id, model: model) } label: { Image(systemName: "macwindow") }
                             .buttonStyle(.borderless).help("Open in a window")
                     }
                     if m.notes != nil && !model.isBusy(id) {
-                        Button(editing ? "Done" : "Edit") { editing ? save() : startEditing(m) }
+                        Button(editing ? tr("Done") : tr("Edit")) { editing ? save() : startEditing(m) }
                             .controlSize(.small)
                             .keyboardShortcut(editing ? KeyboardShortcut.defaultAction : nil)
                     }
@@ -46,7 +46,7 @@ struct MeetingView: View {
                             Button("Regenerate notes") { model.enqueue(.resummarize(id)) }.disabled(!m.hasTranscript)
                             Menu("Regenerate as…") {
                                 ForEach(meetingTemplates, id: \.id) { t in
-                                    Button(t.name + (t.id == (m.notes?.template ?? "general") ? " ✓" : "")) {
+                                    Button(tr(t.name) + (t.id == (m.notes?.template ?? "general") ? " ✓" : "")) {
                                         model.regenerate(id, template: t.id)
                                     }
                                 }
@@ -59,7 +59,7 @@ struct MeetingView: View {
                     } label: { Image(systemName: "ellipsis.circle") }
                         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                 }
-                .confirmationDialog("Move “\(m.title)” to the Trash?", isPresented: $confirmDelete) {
+                .confirmationDialog(tr("Move “%@” to the Trash?", m.title), isPresented: $confirmDelete) {
                     Button("Move to Trash", role: .destructive) { model.delete(id); route = .home }
                 }
                 Divider()
@@ -77,7 +77,7 @@ struct MeetingView: View {
                             model.copyNotes(id)
                             copied = true
                             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
-                        } label: { Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc") }
+                        } label: { Label(copied ? tr("Copied") : tr("Copy"), systemImage: copied ? "checkmark" : "doc.on.doc") }
                     }
                     .controlSize(.small)
                     .padding(10)
@@ -126,7 +126,8 @@ struct MeetingView: View {
                 Button { route = .speakers(id) } label: {
                     HStack {
                         Image(systemName: "person.crop.circle.badge.questionmark").foregroundColor(.accentColor)
-                        Text("\(m.unnamedSpeakers.count) speaker\(m.unnamedSpeakers.count == 1 ? "" : "s") without a name — name them")
+                        Text(m.unnamedSpeakers.count == 1 ? tr("1 speaker without a name — name them")
+                             : tr("%@ speakers without a name — name them", "\(m.unnamedSpeakers.count)"))
                             .font(.callout)
                         Spacer()
                         Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
@@ -144,7 +145,7 @@ struct MeetingView: View {
                         Button { model.toggleDone(id, i) } label: { todoRow(a, done: m.done.contains(i)) }
                             .buttonStyle(.plain)
                             .contextMenu {
-                                Button(m.done.contains(i) ? "Mark as not done" : "Mark as done") { model.toggleDone(id, i) }
+                                Button(m.done.contains(i) ? tr("Mark as not done") : tr("Mark as done")) { model.toggleDone(id, i) }
                                 Button("Delete this to-do", role: .destructive) { model.deleteTodo(id, i) }
                             }
                     }
@@ -286,7 +287,7 @@ struct SpeakersView: View {
                                         HStack(alignment: .top, spacing: 6) {
                                             Image(systemName: player.playing == url ? "stop.circle.fill" : "play.circle.fill")
                                                 .font(.title3).foregroundColor(.accentColor)
-                                            Text("“\(clip.text)”").font(.caption).foregroundColor(.secondary)
+                                            Text(verbatim: "“\(clip.text)”").font(.caption).foregroundColor(.secondary)
                                                 .fixedSize(horizontal: false, vertical: true)
                                             Spacer(minLength: 0)
                                         }
@@ -296,7 +297,7 @@ struct SpeakersView: View {
                                 }
                             } else {
                                 ForEach(samples[s] ?? [], id: \.self) { line in
-                                    Text("“\(line)”").font(.caption).foregroundColor(.secondary)
+                                    Text(verbatim: "“\(line)”").font(.caption).foregroundColor(.secondary)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
                                 if (samples[s] ?? []).isEmpty {
@@ -409,7 +410,8 @@ struct TodosView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     if items.isEmpty {
-                        Text(mineOnly ? "Nothing assigned to you\(showDone ? "" : " is open"). 🎉" : "No to-dos.")
+                        Text(mineOnly ? (showDone ? tr("Nothing assigned to you. 🎉") : tr("Nothing assigned to you is open. 🎉"))
+                             : tr("No to-dos."))
                             .font(.callout).foregroundColor(.secondary).padding(.top, 20)
                         if mineOnly && model.settings.myName.isEmpty {
                             Text("Set your name in Settings so MeetScribe knows which to-dos are yours.")
@@ -440,7 +442,7 @@ struct TodosView: View {
                         }
                         .buttonStyle(.plain)
                         .contextMenu {
-                            Button(ref.done ? "Mark as not done" : "Mark as done") { model.toggleDone(id, ref.index) }
+                            Button(ref.done ? tr("Mark as not done") : tr("Mark as done")) { model.toggleDone(id, ref.index) }
                             Button("Open the meeting") { route = .meeting(id) }
                             Button("Delete this to-do", role: .destructive) { model.deleteTodo(id, ref.index) }
                         }
@@ -465,11 +467,11 @@ struct DueBadge: View {
             let today = cal.startOfDay(for: Date())
             let days = cal.dateComponents([.day], from: today, to: cal.startOfDay(for: day)).day ?? 0
             let (text, color): (String, Color) =
-                days < 0 ? ("Overdue · \(day.formatted(.dateTime.day().month(.abbreviated)))", .red)
-                : days == 0 ? ("Due today", .orange)
-                : days == 1 ? ("Due tomorrow", .orange)
-                : days < 7 ? ("Due \(day.formatted(.dateTime.weekday(.wide)))", .accentColor)
-                : ("Due \(day.formatted(.dateTime.day().month(.abbreviated)))", .secondary)
+                days < 0 ? (tr("Overdue · %@", day.formatted(.dateTime.day().month(.abbreviated))), .red)
+                : days == 0 ? (tr("Due today"), .orange)
+                : days == 1 ? (tr("Due tomorrow"), .orange)
+                : days < 7 ? (tr("Due %@", day.formatted(.dateTime.weekday(.wide))), .accentColor)
+                : (tr("Due %@", day.formatted(.dateTime.day().month(.abbreviated))), .secondary)
             Text(text).font(.caption2.weight(.semibold))
                 .foregroundColor(done ? .secondary : color)
                 .padding(.horizontal, 5).padding(.vertical, 1)
@@ -494,8 +496,8 @@ struct BriefView: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("\(event.start.formatted(date: .abbreviated, time: .shortened)) – \(event.end.formatted(date: .omitted, time: .shortened))"
-                         + (event.attendees.isEmpty ? "" : " · \(event.attendees.count + 1) people"))
+                    Text(verbatim: "\(event.start.formatted(date: .abbreviated, time: .shortened)) – \(event.end.formatted(date: .omitted, time: .shortened))"
+                         + (event.attendees.isEmpty ? "" : " · " + tr("%@ people", "\(event.attendees.count + 1)")))
                         .font(.caption).foregroundColor(.secondary)
                     if !model.isRecording {
                         Button {
@@ -528,7 +530,7 @@ struct BriefView: View {
                         }
                     }
                     if let last = b.last, let n = last.notes {
-                        SectionTitle(text: "Last time · \(last.date.formatted(date: .abbreviated, time: .omitted))")
+                        SectionTitle(text: tr("Last time · %@", last.date.formatted(date: .abbreviated, time: .omitted)))
                         ForEach((n.decisions.isEmpty ? n.summary : n.decisions).prefix(5), id: \.self) { item in
                             HStack(alignment: .top, spacing: 6) {
                                 Text("•").foregroundColor(.secondary)
@@ -579,7 +581,7 @@ struct AskView: View {
                                 let id = URL(fileURLWithPath: src.folder).lastPathComponent
                                 Button { route = .meeting(id) } label: {
                                     HStack {
-                                        Text("[\(src.n)]").font(.caption.monospacedDigit()).foregroundColor(.secondary)
+                                        Text(verbatim: "[\(src.n)]").font(.caption.monospacedDigit()).foregroundColor(.secondary)
                                         Text(src.title).font(.callout).lineLimit(1)
                                         Spacer()
                                         Text(src.date + (src.time.map { " · \(formatDuration($0))" } ?? ""))

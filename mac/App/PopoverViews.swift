@@ -66,7 +66,7 @@ struct JobProgress: View {
                 Text(model.jobStatus).lineLimit(1)
                 Spacer()
                 if let p = model.jobProgress {
-                    Text("\(Int(p * 100)) %" + (model.jobETA.map { " · \($0)" } ?? "")).monospacedDigit()
+                    Text(verbatim: "\(Int(p * 100)) %" + (model.jobETA.map { " · \($0)" } ?? "")).monospacedDigit()
                 }
             }
             .font(.caption).foregroundColor(.secondary)
@@ -88,7 +88,7 @@ struct Header<Trailing: View>: View {
                     .buttonStyle(.borderless)
                     .keyboardShortcut(.cancelAction)
             }
-            Text(title).font(.headline).lineLimit(1)
+            Text(tr(title)).font(.headline).lineLimit(1)
             Spacer()
             trailing
         }
@@ -100,7 +100,7 @@ struct Header<Trailing: View>: View {
 struct SectionTitle: View {
     var text: String
     var body: some View {
-        Text(text.uppercased())
+        Text(tr(text).uppercased())
             .font(.caption.weight(.semibold))
             .foregroundColor(.secondary)
             .padding(.top, 6)
@@ -126,7 +126,7 @@ struct LevelMeter: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: icon).frame(width: 16).foregroundColor(.secondary)
-            Text(label).font(.caption).frame(width: 70, alignment: .leading)
+            Text(tr(label)).font(.caption).frame(width: 70, alignment: .leading)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.primary.opacity(0.08))
@@ -225,12 +225,12 @@ struct HomeView: View {
             Card {
                 HStack {
                     Circle().fill(Color.red).frame(width: 10, height: 10)
-                    Text("Recording").font(.headline)
+                    Text("Recording now").font(.headline)
                     Spacer()
                     Text(formatDuration(model.elapsed)).font(.system(.title2, design: .monospaced))
                 }
                 if let e = model.recordingEvent {
-                    Label("\(e.title) · until \(e.end.formatted(date: .omitted, time: .shortened))", systemImage: "calendar")
+                    Label(tr("%@ · until %@", e.title, e.end.formatted(date: .omitted, time: .shortened)), systemImage: "calendar")
                         .font(.caption).foregroundColor(.secondary).lineLimit(1)
                 }
                 LevelMeter(label: "Your mic", icon: "mic.fill", level: model.micLevel, active: model.recorder?.mic != nil)
@@ -274,23 +274,24 @@ struct HomeView: View {
                 .disabled(model.isStarting)
                 .help("Start recording")
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(event.map { "Record \($0.title)" } ?? "Record").font(.headline).lineLimit(1)
+                    Text(event.map { tr("Record %@", $0.title) } ?? tr("Record")).font(.headline).lineLimit(1)
                     HStack(spacing: 4) {
-                        if let e = event { Text("Now · \(e.start.formatted(date: .omitted, time: .shortened)) ·") }
+                        if let e = event { Text(tr("Now · %@ ·", e.start.formatted(date: .omitted, time: .shortened))) }
                         Menu {
-                            ForEach(meetingTemplates, id: \.id) { t in Button(t.name) { template = t.id } }
+                            ForEach(meetingTemplates, id: \.id) { t in Button(tr(t.name)) { template = t.id } }
                         } label: {
                             Text(templateName(template ?? model.settings.defaultTemplate) + " ▾").font(.caption)
                         }
                         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                         .help("Meeting type: shapes the notes")
-                        if let hk = model.settings.hotkey { Text("· \(hk.display)") }
+                        if let hk = model.settings.hotkey { Text(verbatim: "· \(hk.display)") }
                     }
                     .font(.caption).foregroundColor(.secondary)
                     if let e = event, let b = brief, !b.isEmpty {
                         Button { route = .brief(e) } label: {
-                            Text(b.openTodos.isEmpty ? "Notes from last time ›"
-                                 : "\(b.openTodos.count) open to-do\(b.openTodos.count == 1 ? "" : "s") from last time ›")
+                            Text(b.openTodos.isEmpty ? tr("Notes from last time ›")
+                                 : b.openTodos.count == 1 ? tr("1 open to-do from last time ›")
+                                 : tr("%@ open to-dos from last time ›", "\(b.openTodos.count)"))
                                 .font(.caption).foregroundColor(.accentColor)
                         }
                         .buttonStyle(.plain)
@@ -315,7 +316,7 @@ struct HomeView: View {
                 Text("Press record when your next meeting starts. Your notes and to-dos will show up here.")
                     .font(.callout).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
             } else {
-                Text(CalendarService.shared.eventsAllowed ? "No meetings today. Recent:" : "Recent")
+                Text(CalendarService.shared.eventsAllowed ? tr("No meetings today. Recent:") : tr("Recent"))
                     .font(.caption).foregroundColor(.secondary)
                 recentList
             }
@@ -342,13 +343,13 @@ struct HomeView: View {
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.time.formatted(date: .omitted, time: .shortened)
-                         + (phase == .now ? " · now" : item.meeting == nil && phase == .done ? " · not recorded" : ""))
+                         + (phase == .now ? " · " + tr("now") : item.meeting == nil && phase == .done ? " · " + tr("not recorded") : ""))
                         .font(.caption).foregroundColor(phase == .now ? .red : .secondary)
                     Text(item.title).font(.callout).lineLimit(1)
                         .foregroundColor(item.meeting == nil && phase == .done ? .secondary : .primary)
                     if let n = item.meeting?.notes, !n.actions.isEmpty {
                         let mine = n.actions.filter { model.isMine($0.owner) }.count
-                        Text("\(n.actions.count) to-do\(n.actions.count == 1 ? "" : "s")" + (mine > 0 ? " · \(mine) yours" : ""))
+                        Text(todoCount(n.actions.count) + (mine > 0 ? " · " + tr("%@ yours", "\(mine)") : ""))
                             .font(.caption).foregroundColor(.secondary)
                     } else if item.meeting.map({ model.isBusy($0.id) }) == true {
                         Text("Creating notes…").font(.caption).foregroundColor(.secondary)
@@ -380,7 +381,7 @@ struct HomeView: View {
     @ViewBuilder var searchResults: some View {
         if model.phase == .ready {
             Button { askAI() } label: {
-                Label("Ask your meetings: “\(search)”", systemImage: "sparkles").font(.callout).lineLimit(1)
+                Label(tr("Ask your meetings: “%@”", search), systemImage: "sparkles").font(.callout).lineLimit(1)
             }
             .buttonStyle(.borderless)
         }
@@ -407,18 +408,18 @@ struct HomeView: View {
             HStack {
                 tabButton(.today, icon: "calendar", label: "Today")
                 tabButton(.meetings, icon: "list.bullet", label: "Meetings")
-                tabButton(.todos, icon: "checklist", label: model.myOpenTodoCount > 0 ? "To-dos · \(model.myOpenTodoCount)" : "To-dos")
+                tabButton(.todos, icon: "checklist", label: "To-dos", count: model.myOpenTodoCount)
             }
             .padding(.vertical, 6)
         }
         .padding(.top, 8)
     }
 
-    func tabButton(_ t: Tab, icon: String, label: String) -> some View {
+    func tabButton(_ t: Tab, icon: String, label: String, count: Int = 0) -> some View {
         Button { tab = t; search = "" } label: {
             VStack(spacing: 2) {
                 Image(systemName: icon).font(.system(size: 15))
-                Text(label).font(.caption2)
+                Text(tr(label) + (count > 0 ? " · \(count)" : "")).font(.caption2)
             }
             .foregroundColor(tab == t && search.isEmpty ? .accentColor : .secondary)
             .frame(maxWidth: .infinity)
@@ -433,7 +434,7 @@ struct HomeView: View {
             m.id != model.recordingID && words.allSatisfy { m.searchText.contains($0) }
         }
         if past.isEmpty {
-            Text(search.isEmpty ? "Your meetings will appear here." : "No meeting mentions that. Press ↩ to ask.")
+            Text(search.isEmpty ? tr("Your meetings will appear here.") : tr("No meeting mentions that. Press ↩ to ask."))
                 .font(.callout).foregroundColor(.secondary)
         }
         VStack(spacing: 0) {
@@ -452,7 +453,7 @@ struct HomeView: View {
                 if m.id != past.last?.id { Divider() }
             }
         }
-        .confirmationDialog("Delete “\(deleting?.title ?? "")”?", isPresented: Binding(
+        .confirmationDialog(tr("Delete “%@”?", deleting?.title ?? ""), isPresented: Binding(
             get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button("Move to Trash", role: .destructive) { if let d = deleting { model.delete(d.id) } }
         } message: {
@@ -465,7 +466,7 @@ struct HomeView: View {
             ($0.item.dueDay ?? .distantFuture, $1.meeting.date) < ($1.item.dueDay ?? .distantFuture, $0.meeting.date)
         }
         if mine.isEmpty {
-            Text(model.settings.myName.isEmpty ? "Set your name in Settings to see your to-dos." : "Nothing open. Nice.")
+            Text(model.settings.myName.isEmpty ? tr("Set your name in Settings to see your to-dos.") : tr("Nothing open. Nice."))
                 .font(.callout).foregroundColor(.secondary)
         }
         VStack(spacing: 0) {
@@ -504,7 +505,7 @@ struct HomeView: View {
             HStack {
                 Text(jobTitle(job)).font(.callout.weight(.medium)).lineLimit(1)
                 Spacer()
-                if !model.queue.isEmpty { Text("+\(model.queue.count) waiting").font(.caption2).foregroundColor(.secondary) }
+                if !model.queue.isEmpty { Text(tr("+%@ waiting", "\(model.queue.count)")).font(.caption2).foregroundColor(.secondary) }
             }
             JobProgress()
         }
@@ -512,10 +513,10 @@ struct HomeView: View {
 
     func jobTitle(_ job: Job) -> String {
         switch job {
-        case .process(let id): return "Processing “\(model.meeting(id)?.title ?? "meeting")”"
-        case .processFile(let url): return "Processing \(url.lastPathComponent)"
-        case .rename(let id, _), .resummarize(let id): return "Updating “\(model.meeting(id)?.title ?? "meeting")”"
-        case .ask(let q): return "Answering “\(q)”"
+        case .process(let id): return tr("Processing “%@”", model.meeting(id)?.title ?? tr("meeting"))
+        case .processFile(let url): return tr("Processing %@", url.lastPathComponent)
+        case .rename(let id, _), .resummarize(let id): return tr("Updating “%@”", model.meeting(id)?.title ?? tr("meeting"))
+        case .ask(let q): return tr("Answering “%@”", q)
         }
     }
 }
@@ -535,7 +536,7 @@ struct MeetingRow: View {
             if let n = meeting.notes, !n.actions.isEmpty {
                 let open = n.actions.indices.filter { !meeting.done.contains($0) }.count
                 if open > 0 {
-                    Text("\(open) to-do").font(.caption2.weight(.semibold))
+                    Text(tr("%@ to-do", "\(open)")).font(.caption2.weight(.semibold))
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .background(Capsule().fill(Color.accentColor.opacity(0.15)))
                 }
@@ -573,12 +574,12 @@ struct SetupCard: View {
     var body: some View {
         Card {
             Label("One-time setup", systemImage: "arrow.down.circle").font(.headline)
-            Text("MeetScribe runs its AI entirely on this Mac — nothing is sent to the cloud. It first needs to download its engine and models (about 6 GB, 10–20 minutes).")
+            Text("MeetScribe runs its AI entirely on this Mac — your meetings never leave it. It first needs to download its engine and models (4–6 GB, 10–20 minutes).")
                 .font(.callout).fixedSize(horizontal: false, vertical: true)
             if model.phase == .settingUp {
                 if let p = model.setupProgress {
                     ProgressView(value: p) { Text(model.setupStatus).font(.caption) } currentValueLabel: {
-                        Text("\(Int(p * 100)) %").font(.caption2)
+                        Text(verbatim: "\(Int(p * 100)) %").font(.caption2)
                     }
                 } else {
                     ProgressView { Text(model.setupStatus).font(.caption) }.progressViewStyle(.linear)
@@ -590,7 +591,7 @@ struct SetupCard: View {
                 Button {
                     model.runSetup()
                 } label: {
-                    Text(model.setupError == nil ? "Download & set up" : "Try again").frame(maxWidth: .infinity)
+                    Text(model.setupError == nil ? tr("Download & set up") : tr("Try again")).frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
@@ -633,7 +634,7 @@ struct PermissionsCard: View {
 
     func permissionRow(_ text: String, pane: String, action: @escaping () -> Void) -> some View {
         HStack {
-            Text(text).font(.caption).fixedSize(horizontal: false, vertical: true)
+            Text(tr(text)).font(.caption).fixedSize(horizontal: false, vertical: true)
             Spacer()
             Button("Allow…", action: action).controlSize(.small)
         }
@@ -643,3 +644,6 @@ struct PermissionsCard: View {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")!)
     }
 }
+
+/// "1 to-do" / "3 to-dos" in the UI language.
+func todoCount(_ n: Int) -> String { n == 1 ? tr("1 to-do") : tr("%@ to-dos", "\(n)") }

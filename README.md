@@ -113,6 +113,21 @@ Each meeting gets a folder in `~/Documents/MeetingNotes/` with `notes.md`,
   you're not running much else). Or point `llm_backend = "openai"` at Ollama / LM Studio.
 - Too many / too few speakers? Pass `--speakers N`, or tune `diarization_threshold`.
 
+## Translations
+
+The app is in English, French, Spanish, Portuguese, Japanese and Chinese (Simplified). It follows the
+Mac's language (anything else → English); Settings → General → Language forces one.
+
+- Texts live in `mac/Localization/<lang>.json` (English text → translation). Placeholders are
+  `%@` (or `%1$@`, `%2$@` to reorder them).
+- After changing UI texts: `python3 scripts/i18n.py extract` adds new texts to every language file
+  (empty = not translated yet, English is shown) and lists anything left to translate.
+- **Add a language:** copy `en.json` to `<code>.json`, translate the values, add the code to
+  `AppLanguage.supported` (`mac/Shared/Localization.swift`) and to `LANGS` in `scripts/i18n.py`,
+  and to `CFBundleLocalizations` in `scripts/build_app.sh`.
+- Model descriptions are translated in `catalog/models.json` (`"descriptions": {"fr": …}`).
+- Engine progress messages are translatable too (`progress.step("…%@…", value)`).
+
 ## Layout
 
 - `mac/Shared/AudioCapture.swift` — mic + system audio capture (shared)

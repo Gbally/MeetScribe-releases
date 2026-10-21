@@ -28,6 +28,7 @@ struct Hardware {
     }()
 
     var summary: String { "\(chip) · \(memoryGB) GB memory · \(freeDiskGB) GB free" }
+    var localizedSummary: String { tr("%@ · %@ GB memory · %@ GB free", chip, "\(memoryGB)", "\(freeDiskGB)") }
 }
 
 struct CatalogModel: Codable, Identifiable, Hashable {
@@ -42,9 +43,15 @@ struct CatalogModel: Codable, Identifiable, Hashable {
     var license: String
     var tested: String?
     var description: String
+    var descriptions: [String: String]? = nil   // translations, e.g. {"fr": "…"}
+
+    var localizedDescription: String {
+        let lang = AppLanguage.current
+        return descriptions?[lang] ?? descriptions?[String(lang.prefix(2))] ?? tr(description)
+    }
 
     enum CodingKeys: String, CodingKey {
-        case id, repo, name, license, tested, description, quality, speed
+        case id, repo, name, license, tested, description, descriptions, quality, speed
         case sizeGB = "size_gb", minRamGB = "min_ram_gb", recommendedRamGB = "recommended_ram_gb"
     }
 
@@ -130,14 +137,14 @@ struct CustomModelCheck: Equatable {
     static func inspect(_ input: String) async -> CustomModelCheck {
         guard let repo = repoID(from: input),
               let url = URL(string: "https://huggingface.co/api/models/\(repo)?blobs=true") else {
-            return CustomModelCheck(repo: input, error: "That doesn't look like a Hugging Face model link (huggingface.co/organisation/model).")
+            return CustomModelCheck(repo: input, error: tr("That doesn't look like a Hugging Face model link (huggingface.co/organisation/model)."))
         }
         guard let (data, resp) = try? await URLSession.shared.data(from: url) else {
-            return CustomModelCheck(repo: repo, error: "Couldn't reach Hugging Face. Check your internet connection.")
+            return CustomModelCheck(repo: repo, error: tr("Couldn't reach Hugging Face. Check your internet connection."))
         }
         guard (resp as? HTTPURLResponse)?.statusCode == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return CustomModelCheck(repo: repo, error: "No public model called “\(repo)” on Hugging Face.")
+            return CustomModelCheck(repo: repo, error: tr("No public model called “%@” on Hugging Face.", repo))
         }
         let siblings = json["siblings"] as? [[String: Any]] ?? []
         let bytes = siblings.compactMap { $0["size"] as? Double }.reduce(0, +)
@@ -149,21 +156,22 @@ struct CustomModelCheck: Equatable {
 
     /// Plain-language risks of using this model.
     func warnings(speech: Bool, hw: Hardware) -> [String] {
-        var w = [speech ? "Not tested with MeetScribe: transcripts may be less accurate or slower."
-                        : "Not tested with MeetScribe: notes may come out in the wrong format, slowly, or not at all."]
+        var w = [speech ? tr("Not tested with MeetScribe: transcripts may be less accurate or slower.")
+                        : tr("Not tested with MeetScribe: notes may come out in the wrong format, slowly, or not at all.")]
         if compatible == nil {
-            if !isMLX { w.append("It isn't in MLX format (made for Apple silicon) — it may not load. Look for a version from “mlx-community”.") }
-            if speech && pipeline != "automatic-speech-recognition" { w.append("It doesn't look like a speech-to-text model.") }
+            if !isMLX { w.append(tr("It isn't in MLX format (made for Apple silicon) — it may not load. Look for a version from “mlx-community”.")) }
+            if speech && pipeline != "automatic-speech-recognition" { w.append(tr("It doesn't look like a speech-to-text model.")) }
             if !speech && !["text-generation", "image-text-to-text", ""].contains(pipeline) {
-                w.append("It doesn't look like a text model (it's “\(pipeline)”).")
+                w.append(tr("It doesn't look like a text model (it's “%@”).", pipeline))
             }
         } else if !speech && !isMLX {
-            w.append("It isn't converted for Apple silicon (MLX): it will be larger and slower than an mlx-community version.")
+            w.append(tr("It isn't converted for Apple silicon (MLX): it will be larger and slower than an mlx-community version."))
         }
         if sizeGB > Double(hw.memoryGB) * 0.6 {
-            w.append(String(format: "It's %.1f GB and this Mac has %d GB of memory — it will probably run out of memory.", sizeGB, hw.memoryGB))
+            w.append(tr("It's %@ GB and this Mac has %@ GB of memory — it will probably run out of memory.",
+                        String(format: "%.1f", sizeGB), "\(hw.memoryGB)"))
         }
-        if sizeGB > Double(hw.freeDiskGB) - 5 { w.append("There isn't enough free disk space for it.") }
+        if sizeGB > Double(hw.freeDiskGB) - 5 { w.append(tr("There isn't enough free disk space for it.")) }
         return w
     }
 
@@ -176,7 +184,13 @@ struct CustomModelCheck: Equatable {
             }
         }
         compatible = verdict?["compatible"] as? Bool
-        compatibilityReason = verdict?["reason"] as? String ?? ""
+        // The engine sends an English sentence plus its translatable form (key + args).
+        if let key = verdict?["key"] as? String {
+            let args = (verdict?["args"] as? [String]) ?? []
+            compatibilityReason = args.isEmpty ? tr(key) : String(format: tr(key), arguments: args.map { $0 as CVarArg })
+        } else {
+            compatibilityReason = verdict?["reason"] as? String ?? ""
+        }
     }
 
     func asCatalogModel() -> CatalogModel {

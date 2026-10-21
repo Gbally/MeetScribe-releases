@@ -12,11 +12,11 @@ enum EmailApp: String, Codable, CaseIterable {
 
     var label: String {
         switch self {
-        case .systemDefault: return "Default mail app"
+        case .systemDefault: return i18n("Default mail app")
         case .outlook: return "Microsoft Outlook"
         case .appleMail: return "Apple Mail"
-        case .gmail: return "Gmail (in Chrome)"
-        case .outlookWeb: return "Outlook on the web"
+        case .gmail: return i18n("Gmail (in Chrome)")
+        case .outlookWeb: return i18n("Outlook on the web")
         }
     }
 
@@ -28,17 +28,17 @@ enum SummaryStyle: String, Codable, CaseIterable {
 
     var label: String {
         switch self {
-        case .detailed: return "Detailed"
-        case .standard: return "Standard"
-        case .brief: return "Brief"
+        case .detailed: return i18n("Detailed")
+        case .standard: return i18n("Standard")
+        case .brief: return i18n("Brief")
         }
     }
 
     var help: String {
         switch self {
-        case .detailed: return "Long notes with context, who said what, numbers — for people who missed the meeting."
-        case .standard: return "The main topics and outcomes, one line each."
-        case .brief: return "As short as possible — a few bullet points to skim in 15 seconds."
+        case .detailed: return i18n("Long notes with context, who said what, numbers — for people who missed the meeting.")
+        case .standard: return i18n("The main topics and outcomes, one line each.")
+        case .brief: return i18n("As short as possible — a few bullet points to skim in 15 seconds.")
         }
     }
 }
@@ -229,13 +229,19 @@ let meetingLanguages: [(code: String, name: String)] = [
 
 /// Meeting types (must match TEMPLATES in the engine's summarize.py).
 let meetingTemplates: [(id: String, name: String)] = [
-    ("general", "General"), ("one_on_one", "1:1"), ("standup", "Stand-up"), ("client", "Client call"),
-    ("interview", "Interview"), ("workshop", "Workshop / brainstorm"),
+    ("general", i18n("General")), ("one_on_one", i18n("1:1")), ("standup", i18n("Stand-up")), ("client", i18n("Client call")),
+    ("interview", i18n("Interview")), ("workshop", i18n("Workshop / brainstorm")),
 ]
 
-func templateName(_ id: String) -> String { meetingTemplates.first { $0.id == id }?.name ?? "General" }
+func templateName(_ id: String) -> String { tr(meetingTemplates.first { $0.id == id }?.name ?? "General") }
+
+/// A language's name in the UI language ("Français", "French", "フランス語"…).
+func languageName(_ code: String) -> String {
+    let name = Locale.current.localizedString(forLanguageCode: code) ?? code
+    return name.prefix(1).uppercased() + name.dropFirst()
+}
 
 let retentionChoices: [(days: Int, label: String)] = [
-    (0, "Right after the notes are made"), (1, "After 1 day"), (3, "After 3 days"), (7, "After 7 days"),
-    (14, "After 14 days"), (30, "After 30 days"), (-1, "Never"),
+    (0, i18n("Right after the notes are made")), (1, i18n("After 1 day")), (3, i18n("After 3 days")), (7, i18n("After 7 days")),
+    (14, i18n("After 14 days")), (30, i18n("After 30 days")), (-1, i18n("Never")),
 ]

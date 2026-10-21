@@ -101,7 +101,7 @@ final class CalendarService {
         let people = (e.attendees ?? []).filter {
             $0.participantType != .room && $0.participantType != .resource && !$0.isCurrentUser
         }
-        return CalendarEvent(title: e.title ?? "Meeting", start: e.startDate, end: e.endDate,
+        return CalendarEvent(title: e.title ?? tr("Meeting"), start: e.startDate, end: e.endDate,
                              organizer: e.organizer?.name ?? "", attendees: people.map(attendee),
                              isOnlineMeeting: isOnline(e), id: e.calendarItemIdentifier,
                              seriesKey: e.calendarItemExternalIdentifier)
@@ -115,7 +115,7 @@ final class CalendarService {
             let r = EKReminder(eventStore: store)
             r.calendar = list
             r.title = item.task
-            r.notes = ["From meeting: \(meetingTitle)", item.due.isEmpty ? nil : "Due: \(item.due)"]
+            r.notes = [tr("From meeting: %@", meetingTitle), item.due.isEmpty ? nil : tr("Due: %@", item.due)]
                 .compactMap { $0 }.joined(separator: "\n")
             if (try? store.save(r, commit: false)) != nil { added += 1 }
         }

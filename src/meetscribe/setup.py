@@ -8,6 +8,7 @@ import urllib.request
 from pathlib import Path
 
 from .config import MODELS_DIR, Config
+from .progress import step
 
 SHERPA = "https://github.com/k2-fsa/sherpa-onnx/releases/download"
 SEGMENTATION_URL = f"{SHERPA}/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2"
@@ -63,12 +64,12 @@ def run_setup(cfg: Config):
     seg_dir = MODELS_DIR / "sherpa-onnx-pyannote-segmentation-3-0"
     emb = MODELS_DIR / "nemo_en_titanet_small.onnx"
 
-    print("→ Checking what needs downloading…", flush=True)
+    step("Checking what needs downloading…")
     sizes = {repo: _repo_size(repo) for repo in (cfg.whisper_model, cfg.llm_model)}
     small = 50e6
     total = small + sum(sizes.values())
 
-    print("→ Downloading speaker models", flush=True)
+    step("Downloading speaker models")
     if not (seg_dir / "model.onnx").exists():
         archive = MODELS_DIR / "segmentation.tar.bz2"
         _download(SEGMENTATION_URL, archive, 0, total, 7e6)
@@ -80,8 +81,9 @@ def run_setup(cfg: Config):
     _progress(small, total)
 
     base = small
-    for repo, label in ((cfg.whisper_model, "speech recognition"), (cfg.llm_model, "summary")):
-        print(f"→ Downloading the {label} model ({sizes[repo] / 1e9:.1f} GB)", flush=True)
+    for repo, label in ((cfg.whisper_model, "Downloading the speech recognition model (%@ GB)"),
+                        (cfg.llm_model, "Downloading the summary model (%@ GB)")):
+        step(label, f"{sizes[repo] / 1e9:.1f}")
         for attempt in range(3):
             try:
                 _hf_download(repo, base, total)
@@ -89,18 +91,18 @@ def run_setup(cfg: Config):
             except Exception as e:  # flaky networks: resume a couple of times
                 if attempt == 2:
                     raise
-                print(f"→ Download interrupted ({e.__class__.__name__}), retrying…", flush=True)
+                step("Download interrupted (%@), retrying…", e.__class__.__name__)
                 time.sleep(3)
         base += sizes[repo]
         _progress(base, total)
 
-    print("→ Ready", flush=True)
+    step("Ready")
 
 
 def download_model(repo: str) -> None:
     """Download one model (when switching models in the app), with progress."""
     size = _repo_size(repo)
-    print(f"→ Downloading {repo.split('/')[-1]} ({size / 1e9:.1f} GB)", flush=True)
+    step("Downloading %@ (%@ GB)", repo.split("/")[-1], f"{size / 1e9:.1f}")
     for attempt in range(3):
         try:
             _hf_download(repo, 0, size)
@@ -108,9 +110,9 @@ def download_model(repo: str) -> None:
         except Exception as e:
             if attempt == 2:
                 raise
-            print(f"→ Download interrupted ({e.__class__.__name__}), retrying…", flush=True)
+            step("Download interrupted (%@), retrying…", e.__class__.__name__)
             time.sleep(3)
-    print("→ Ready", flush=True)
+    step("Ready")
 
 
 def delete_model(repo: str) -> float:
@@ -146,29 +148,32 @@ def check_model(repo: str, kind: str) -> dict:
         cfg = _json.loads(Path(hf_hub_download(repo, "config.json")).read_text())
     except Exception as e:
         return {"compatible": False, "architecture": "",
-                "reason": f"Couldn't read the model's configuration ({e.__class__.__name__})."}
+                "reason": f"Couldn't read the model's configuration ({e.__class__.__name__}).",
+                "key": "Couldn't read the model's configuration (%@).", "args": [e.__class__.__name__]}
 
     arch = cfg.get("model_type") or (cfg.get("text_config") or {}).get("model_type") or ""
     if kind == "speech":
         if "n_mels" in cfg and ({"weights.safetensors", "weights.npz"} & files):
-            return {"compatible": True, "architecture": "whisper (MLX)", "reason": "A Whisper model in MLX format."}
+            return {"compatible": True, "architecture": "whisper (MLX)", "reason": "A Whisper model in MLX format.", "key": "A Whisper model in MLX format.", "args": []}
         if arch == "whisper":
             return {"compatible": False, "architecture": "whisper",
-                    "reason": "This Whisper model isn't in MLX format. Use a version from mlx-community instead."}
+                    "reason": "This Whisper model isn't in MLX format. Use a version from mlx-community instead.", "key": "This Whisper model isn't in MLX format. Use a version from mlx-community instead.", "args": []}
         return {"compatible": False, "architecture": arch,
-                "reason": "MeetScribe's speech engine only runs Whisper models in MLX format."}
+                "reason": "MeetScribe's speech engine only runs Whisper models in MLX format.", "key": "MeetScribe's speech engine only runs Whisper models in MLX format.", "args": []}
 
     # Notes: an architecture mlx-lm knows, plus a tokenizer.
     if arch in ("whisper", "wav2vec2", "hubert") or "n_mels" in cfg:
-        return {"compatible": False, "architecture": arch, "reason": "This is a speech model, not a text model."}
+        return {"compatible": False, "architecture": arch, "reason": "This is a speech model, not a text model.", "key": "This is a speech model, not a text model.", "args": []}
     from mlx_lm.utils import MODEL_REMAPPING
 
     module = MODEL_REMAPPING.get(arch, arch).replace("-", "_")
     if not module or importlib.util.find_spec(f"mlx_lm.models.{module}") is None:
         return {"compatible": False, "architecture": arch,
-                "reason": f"MeetScribe's notes engine can't run the “{arch or 'unknown'}” architecture."}
+                "reason": f"MeetScribe's notes engine can't run the “{arch or 'unknown'}” architecture.",
+                "key": "MeetScribe's notes engine can't run the “%@” architecture.", "args": [arch or "unknown"]}
     if not ({"tokenizer.json", "tokenizer.model", "tokenizer_config.json"} & files):
-        return {"compatible": False, "architecture": arch, "reason": "The model has no tokenizer files."}
+        return {"compatible": False, "architecture": arch, "reason": "The model has no tokenizer files.", "key": "The model has no tokenizer files.", "args": []}
     if not any(f.endswith(".safetensors") for f in files):
-        return {"compatible": False, "architecture": arch, "reason": "The model has no .safetensors weights."}
-    return {"compatible": True, "architecture": arch, "reason": f"Supported architecture ({arch})."}
+        return {"compatible": False, "architecture": arch, "reason": "The model has no .safetensors weights.", "key": "The model has no .safetensors weights.", "args": []}
+    return {"compatible": True, "architecture": arch, "reason": f"Supported architecture ({arch}).",
+            "key": "Supported architecture (%@).", "args": [arch]}

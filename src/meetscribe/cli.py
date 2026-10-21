@@ -32,8 +32,7 @@ def new_session_dir(cfg: Config, title: str) -> Path:
     return path
 
 
-def step(msg: str):
-    print(f"→ {msg}", flush=True)
+from .progress import step  # noqa: E402  (status lines, translatable by the app)
 
 
 # ---------------------------------------------------------------- record
@@ -132,7 +131,7 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
     # Load everything first, so progress can be weighted by the amount of audio.
     sys_audio = mic_audio = file_audio = None
     if audio_file:  # a single recording (e.g. exported from Teams or a phone)
-        step(f"Loading {audio_file.name}")
+        step("Loading %@", audio_file.name)
         file_audio = load_audio(audio_file)
     else:
         sys_file, mic_file = session / "system.caf", session / "mic.caf"
@@ -157,24 +156,24 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
                    ("notes", notes_work(cfg, total_audio) if summary else 0)])
 
     if file_audio is not None:
-        step(f"Transcribing + identifying speakers ({len(file_audio) / 16000 / 60:.0f} min of audio)")
+        step("Transcribing + identifying speakers (%@ min of audio)", f"{len(file_audio) / 16000 / 60:.0f}")
         tagged(diarized_track(file_audio, "Speaker ", speakers, "file")[1], "file")
         audio_by_track["file"] = file_audio
     else:
         system_words: list = []
         if sys_audio is not None:
-            step(f"Remote participants: transcribing + identifying speakers ({len(sys_audio) / 16000 / 60:.0f} min)")
+            step("Remote participants: transcribing + identifying speakers (%@ min)", f"{len(sys_audio) / 16000 / 60:.0f}")
             system_words, system_utts = diarized_track(sys_audio, "Speaker ", speakers, "meeting", exclude={cfg.me})
             tagged(system_utts, "meeting")
             audio_by_track["meeting"] = sys_audio
         if mic_audio is not None:
             audio = mic_audio
             if room:
-                step(f"Room microphone: transcribing + identifying speakers ({len(audio) / 16000 / 60:.0f} min)")
+                step("Room microphone: transcribing + identifying speakers (%@ min)", f"{len(audio) / 16000 / 60:.0f}")
                 tagged(diarized_track(audio, "Speaker ", speakers, "mic", guess_me=True)[1], "room")
                 audio_by_track["room"] = audio
             else:
-                step(f"Your microphone: transcribing ({len(audio) / 16000 / 60:.0f} min)")
+                step("Your microphone: transcribing (%@ min)", f"{len(audio) / 16000 / 60:.0f}")
                 progress.start("mic")
                 words, lang = transcribe(audio, cfg.whisper_model, cfg.language, cfg.vocabulary)
                 languages.add(lang)
@@ -255,7 +254,7 @@ def write_notes(session: Path, cfg: Config):
     template = meeting_info(session).get("template") or cfg.template
     if template not in TEMPLATES:
         template = "general"
-    step(f"Writing the summary and to-do list ({language})")
+    step("Writing the summary and to-do list (%@)", language)
     from . import progress
 
     progress.ensure("notes")

@@ -103,7 +103,7 @@ def ask(question: str, cfg: Config) -> dict:
 
     progress.plan([("search", 2), ("answer", 25)])
     progress.start("search")
-    print("→ Searching your meetings", flush=True)
+    progress.step("Searching your meetings")
     hits = search(question, [cfg.notes_path])
     if not hits:
         return {"answer": "I couldn't find anything about that in your meetings.", "sources": []}
@@ -112,7 +112,7 @@ def ask(question: str, cfg: Config) -> dict:
         where = f"notes" if h["kind"] == "notes" else f"transcript at {fmt_time(h['time'])}"
         excerpts.append(f"[{i}] {h['title']} ({h['date']}, {where}):\n{h['text'][:1500]}")
     progress.start("answer")
-    print("→ Writing the answer", flush=True)
+    progress.step("Writing the answer")
     answer = LLM(cfg).chat(PROMPT.format(question=question, excerpts="\n\n".join(excerpts)), max_tokens=700,
                            on_token=lambda n: progress.update(0.3 + 0.7 * min(n / 200, 0.97)))
     used = {int(n) for n in re.findall(r"\[(\d+)\]", answer)}

@@ -37,12 +37,17 @@ fi
 cp build-cache/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 cp catalog/models.json "$APP/Contents/Resources/models.json"
 
+echo "• Translations"
+python3 scripts/i18n.py build "$APP/Contents/Resources"
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>CFBundleName</key><string>MeetScribe</string>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleLocalizations</key><array><string>en</string><string>fr</string><string>es</string><string>pt</string><string>ja</string><string>zh-Hans</string></array>
   <key>CFBundleDisplayName</key><string>MeetScribe</string>
   <key>CFBundleIdentifier</key><string>app.meetscribe.MeetScribe</string>
   <key>CFBundleExecutable</key><string>MeetScribe</string>

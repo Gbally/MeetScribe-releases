@@ -137,15 +137,15 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         do {
             content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
         } catch {
-            throw CaptureError.permission("Mac audio isn't allowed yet (Screen & System Audio Recording permission).")
+            throw CaptureError.permission(tr("Mac audio isn't allowed yet (Screen & System Audio Recording permission)."))
         }
-        guard let display = content.displays.first else { throw CaptureError.other("No display found.") }
+        guard let display = content.displays.first else { throw CaptureError.other(tr("No display found.")) }
 
         var filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
         if let appName {
             let apps = content.applications.filter { $0.applicationName.localizedCaseInsensitiveContains(appName) }
             if apps.isEmpty {
-                onNotice?("\(appName) isn't running — recording all Mac audio instead.")
+                onNotice?(tr("%@ isn't running — recording all Mac audio instead.", appName))
             } else {
                 filter = SCContentFilter(display: display, including: apps, exceptingWindows: [])
             }
@@ -191,7 +191,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         guard !stopped else { return }
         NSLog("MeetScribe: system audio stopped: \(error.localizedDescription)")
         guard restarts < 20 else {
-            onNotice?("Mac audio capture stopped: \(error.localizedDescription)")
+            onNotice?(tr("Mac audio capture stopped: %@", error.localizedDescription))
             return
         }
         restarts += 1
@@ -199,7 +199,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
             try? await Task.sleep(nanoseconds: 1_000_000_000)
             guard !self.stopped else { return }
             do { try await self.startStream() } catch {
-                self.onNotice?("Mac audio capture stopped: \(error.localizedDescription)")
+                self.onNotice?(tr("Mac audio capture stopped: %@", error.localizedDescription))
             }
         }
     }
@@ -238,7 +238,7 @@ final class MicCapture {
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else {
-            throw CaptureError.other("No microphone available.")
+            throw CaptureError.other(tr("No microphone available."))
         }
         input.installTap(onBus: 0, bufferSize: 4096, format: format) { [writer] buffer, time in
             let t = time.isHostTimeValid ? AVAudioTime.seconds(forHostTime: time.hostTime) : hostSeconds()
@@ -280,7 +280,7 @@ final class MeetingRecorder {
                 try await cap.start(appName: appName)
                 system = cap
             } catch {
-                notice(error.localizedDescription + " Only your microphone is recorded.")
+                notice(error.localizedDescription + " " + tr("Only your microphone is recorded."))
             }
         }
         if captureMic {
@@ -291,10 +291,10 @@ final class MeetingRecorder {
                     try cap.start()
                     mic = cap
                 } catch {
-                    notice("Microphone: \(error.localizedDescription)")
+                    notice(tr("Microphone: %@", error.localizedDescription))
                 }
             } else {
-                notice("Microphone access isn't allowed — your voice won't be recorded.")
+                notice(tr("Microphone access isn't allowed — your voice won't be recorded."))
             }
         }
         if mic == nil && system == nil {

@@ -7,14 +7,14 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .general: return "General"
-        case .recording: return "Recording"
-        case .notes: return "Notes"
-        case .models: return "AI models"
-        case .notifications: return "Notifications"
-        case .privacy: return "Privacy and storage"
-        case .voices: return "Voices"
-        case .about: return "About"
+        case .general: return i18n("General")
+        case .recording: return i18n("Recording")
+        case .notes: return i18n("Notes")
+        case .models: return i18n("AI models")
+        case .notifications: return i18n("Notifications")
+        case .privacy: return i18n("Privacy and storage")
+        case .voices: return i18n("Voices")
+        case .about: return i18n("About")
         }
     }
 
@@ -42,7 +42,7 @@ enum Windows {
     static func showSettings(_ model: AppModel, tab: SettingsTab? = nil) {
         if let tab { model.settingsTab = tab }
         if settings == nil {
-            let w = make(title: "MeetScribe Settings", size: NSSize(width: 720, height: 520),
+            let w = make(title: tr("MeetScribe Settings"), size: NSSize(width: 780, height: 540),
                          view: SettingsWindow().environmentObject(model), autosave: "Settings")
             // Closing it forgets temporary state (e.g. a custom model check); reopening starts fresh.
             NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: w, queue: .main) { _ in
@@ -55,7 +55,7 @@ enum Windows {
 
     static func showMeeting(_ id: Meeting.ID, model: AppModel) {
         if meetings[id] == nil {
-            let title = model.meeting(id)?.title ?? "Meeting"
+            let title = model.meeting(id)?.title ?? tr("Meeting")
             meetings[id] = make(title: title, size: NSSize(width: 560, height: 680),
                                 view: MeetingWindow(id: id).environmentObject(model), autosave: nil)
         }
@@ -142,13 +142,13 @@ struct SettingsWindow: View {
         NavigationSplitView {
             List(SettingsTab.allCases, selection: Binding<SettingsTab?>(
                 get: { model.settingsTab }, set: { if let t = $0 { model.settingsTab = t } })) { tab in
-                Label(tab.title, systemImage: tab.icon).tag(tab)
+                Label(tr(tab.title), systemImage: tab.icon).tag(tab)
             }
-            .navigationSplitViewColumnWidth(190)
+            .navigationSplitViewColumnWidth(230)
         } detail: {
             Form { pane }
                 .formStyle(.grouped)
-                .navigationTitle(model.settingsTab.title)
+                .navigationTitle(tr(model.settingsTab.title))
         }
         .frame(minWidth: 680, minHeight: 460)
         .environmentObject(draft)
@@ -176,14 +176,31 @@ struct Caption: View {
     var text: String
     init(_ text: String) { self.text = text }
     var body: some View {
-        Text(text).font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+        Text(tr(text)).font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
     }
 }
 
 struct GeneralPane: View {
     @EnvironmentObject var model: AppModel
+    @State private var language = AppLanguage.forced
+    private let launchLanguage = AppLanguage.forced
 
     var body: some View {
+        Section("Language") {
+            Picker("App language", selection: Binding(get: { language }, set: { language = $0; AppLanguage.forced = $0 })) {
+                Text(tr("Same as the Mac") + " (" + languageName(Locale.preferredLanguages.first ?? "en") + ")").tag("")
+                ForEach(AppLanguage.supported, id: \.code) { Text(verbatim: $0.name).tag($0.code) }
+            }
+            if language != launchLanguage {
+                HStack {
+                    Caption("MeetScribe switches language when it restarts.")
+                    Spacer()
+                    Button("Restart MeetScribe") { model.restartApp() }
+                }
+            } else {
+                Caption("Other languages show in English. Meeting notes follow the meeting's language (Settings → Notes).")
+            }
+        }
         Section("You") {
             TextField("Your name", text: $model.settings.myName)
             Caption("Used for your voice in transcripts and to find the to-dos that are yours.")
@@ -223,16 +240,16 @@ struct NotesPane: View {
     var body: some View {
         Section("Notes") {
             Picker("Usual meeting type", selection: $model.settings.defaultTemplate) {
-                ForEach(meetingTemplates, id: \.id) { Text($0.name).tag($0.id) }
+                ForEach(meetingTemplates, id: \.id) { Text(tr($0.name)).tag($0.id) }
             }
             Picker("Detail", selection: $model.settings.summaryStyle) {
-                ForEach(SummaryStyle.allCases, id: \.self) { Text($0.label).tag($0) }
+                ForEach(SummaryStyle.allCases, id: \.self) { Text(tr($0.label)).tag($0) }
             }
             .pickerStyle(.segmented)
             Caption(model.settings.summaryStyle.help)
             Picker("Language", selection: $model.settings.notesLanguage) {
                 Text("Same as the meeting").tag("auto")
-                ForEach(meetingLanguages, id: \.code) { Text($0.name).tag($0.name) }
+                ForEach(meetingLanguages, id: \.code) { Text(languageName($0.code)).tag($0.name) }
             }
             Caption("Applies to new meetings. To redo one: open it → ⋯ → Regenerate notes.")
         }
@@ -245,9 +262,10 @@ struct ModelsPane: View {
 
     var body: some View {
         Section {
-            LabeledContent("This Mac", value: hw.summary)
+            LabeledContent("This Mac", value: hw.localizedSummary)
         } footer: {
-            Caption("Models run on this Mac only. Recommendations come from a list of models tested with MeetScribe (updated \(model.catalog.updated.isEmpty ? "—" : model.catalog.updated)).")
+            Caption(tr("Models run on this Mac only. Recommendations come from a list of models tested with MeetScribe (updated %@).",
+                       model.catalog.updated.isEmpty ? "—" : model.catalog.updated))
         }
         if let d = model.modelDownload {
             Section("Downloading") {
@@ -272,7 +290,7 @@ struct ModelsPane: View {
             Section("Downloaded, not in use") {
                 ForEach(unused.sorted(by: { $0.key < $1.key }), id: \.key) { repo, gb in
                     LabeledContent(repo.components(separatedBy: "/").last ?? repo) {
-                        Button("Delete (\(String(format: "%.1f", gb)) GB)") { model.deleteModel(repo) }
+                        Button(tr("Delete (%@ GB)", String(format: "%.1f", gb))) { model.deleteModel(repo) }
                     }
                 }
             }
@@ -291,11 +309,11 @@ struct ModelsPane: View {
                         Tag(text: "Custom", color: .orange)
                         Tag(text: "In use", color: .green)
                     }
-                    Caption(repo + " · not tested with MeetScribe")
+                    Caption(repo + " · " + tr("not tested with MeetScribe"))
                 }
                 Spacer()
                 if let rec = ModelCatalog.recommended(list, for: hw) {
-                    Button("Back to \(rec.name)") { model.useModel(rec, speech: speech) }
+                    Button(tr("Back to %@", rec.name)) { model.useModel(rec, speech: speech) }
                         .disabled(model.modelDownload != nil)
                 }
             }
@@ -313,14 +331,14 @@ struct ModelsPane: View {
                     if recommended { Tag(text: "Recommended", color: .accentColor) }
                     if inUse { Tag(text: "In use", color: .green) }
                 }
-                Caption("\(String(format: "%.1f", m.sizeGB)) GB · \(m.description)"
-                        + (fits ? "" : " · needs \(m.minRamGB) GB memory"))
+                Caption(String(format: "%.1f GB", m.sizeGB) + " · " + m.localizedDescription
+                        + (fits ? "" : " · " + tr("needs %@ GB memory", "\(m.minRamGB)")))
             }
             Spacer()
             if !inUse {
                 let installed = model.installedModels[m.repo] != nil
                 VStack(alignment: .trailing, spacing: 4) {
-                    Button(installed ? "Use" : "Download and use") { model.useModel(m, speech: speech) }
+                    Button(installed ? tr("Use") : tr("Download and use")) { model.useModel(m, speech: speech) }
                         .disabled(model.modelDownload != nil || !fits)
                     if installed {
                         Button("Delete") { model.deleteModel(m.repo) }
@@ -336,7 +354,7 @@ struct Tag: View {
     var text: String
     var color: Color
     var body: some View {
-        Text(text).font(.caption2.weight(.medium)).foregroundColor(color)
+        Text(tr(text)).font(.caption2.weight(.medium)).foregroundColor(color)
             .padding(.horizontal, 6).padding(.vertical, 1)
             .background(Capsule().fill(color.opacity(0.12)))
     }
@@ -376,16 +394,16 @@ struct AboutPane: View {
             LabeledContent("Version", value: Engine.appVersion)
             if let info = updater.available {
                 LabeledContent("Update available") {
-                    Button("Install \(info.version) and restart") { updater.install() }
+                    Button(tr("Install %@ and restart", info.version)) { updater.install() }
                         .disabled(model.isRecording || model.currentJob != nil || updater.state == .downloading)
                 }
                 if let notes = info.notes, !notes.isEmpty { Caption(notes) }
                 if model.isRecording || model.currentJob != nil { Caption("Available once nothing is recording or processing.") }
             } else {
                 LabeledContent("Updates") {
-                    Button(updater.state == .checking ? "Checking…" : "Check now") { Task { await updater.check() } }
+                    Button(updater.state == .checking ? tr("Checking…") : tr("Check now")) { Task { await updater.check() } }
                 }
-                if let d = updater.lastChecked { Caption("Up to date · checked \(d.formatted(date: .omitted, time: .shortened))") }
+                if let d = updater.lastChecked { Caption(tr("Up to date · checked %@", d.formatted(date: .omitted, time: .shortened))) }
             }
             switch updater.state {
             case .downloading: ProgressView("Downloading the update…").progressViewStyle(.linear)
@@ -444,7 +462,7 @@ struct CustomModelSection: View {
                 TextField("Hugging Face link", text: link,
                           prompt: Text(speech ? "huggingface.co/mlx-community/whisper-…" : "huggingface.co/mlx-community/…"))
                     .onSubmit { inspect() }
-                Button(checking ? "Checking…" : "Check") { inspect() }
+                Button(checking ? tr("Checking…") : tr("Check")) { inspect() }
                     .disabled(link.wrappedValue.trimmingCharacters(in: .whitespaces).isEmpty || checking)
             }
             if let c = check {
@@ -453,11 +471,11 @@ struct CustomModelSection: View {
                 } else {
                     LabeledContent(c.repo, value: String(format: "%.1f GB", c.sizeGB))
                     if c.compatible == false {
-                        Label("MeetScribe can't run it: \(c.compatibilityReason)", systemImage: "xmark.octagon.fill")
+                        Label(tr("MeetScribe can't run it: %@", c.compatibilityReason), systemImage: "xmark.octagon.fill")
                             .font(.caption).foregroundColor(.red).fixedSize(horizontal: false, vertical: true)
                     } else {
                         if c.compatible == true {
-                            Label("Compatible: \(c.compatibilityReason)", systemImage: "checkmark.circle.fill")
+                            Label(tr("Compatible: %@", c.compatibilityReason), systemImage: "checkmark.circle.fill")
                                 .font(.caption).foregroundColor(.green)
                         }
                         VStack(alignment: .leading, spacing: 4) {
@@ -480,7 +498,7 @@ struct CustomModelSection: View {
         } footer: {
             Caption("For experiments: any model from Hugging Face. MeetScribe checks it can run it; you can go back to the recommended model at any time.")
         }
-        .confirmationDialog("Use \(check?.repo ?? "this model")?", isPresented: $confirm) {
+        .confirmationDialog(tr("Use %@?", check?.repo ?? tr("this model")), isPresented: $confirm) {
             Button("Download and use") {
                 if let c = checks[speech] { model.useModel(c.asCatalogModel(), speech: speech) }
             }

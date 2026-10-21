@@ -86,11 +86,11 @@ struct HotkeyField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(capturing ? "Press the keys…" : (hotkey?.display ?? "None"))
+                Text(capturing ? tr("Press the keys…") : (hotkey?.display ?? tr("None")))
                     .font(.system(.body, design: .rounded).weight(.semibold))
                     .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(RoundedRectangle(cornerRadius: 6).stroke(capturing ? Color.accentColor : Color.secondary.opacity(0.4)))
-                Button(capturing ? "Cancel" : "Change…") { capturing ? stop() : startCapture() }
+                Button(capturing ? tr("Cancel") : tr("Change…")) { capturing ? stop() : startCapture() }
                 if hotkey != nil && !capturing { Button("Remove") { hotkey = nil } }
             }
             .controlSize(.small)
@@ -110,7 +110,7 @@ struct HotkeyField: View {
                 hotkey = hk
                 stop()
             } else {
-                hint = "Use at least ⌃, ⌥ or ⌘ together with a key."
+                hint = tr("Use at least ⌃, ⌥ or ⌘ together with a key.")
             }
             return nil
         }

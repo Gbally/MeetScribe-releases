@@ -4,6 +4,7 @@ The job is split into weighted stages (estimated seconds of work); each stage re
 0..1 fraction. Whisper's internal progress bar is redirected here.
 """
 
+import json
 import time
 import types
 
@@ -80,3 +81,13 @@ def ensure(name: str) -> None:
     if name not in [n for n, _ in _stages]:
         plan([(name, 1.0)])
     start(name)
+
+
+def step(key: str, *args) -> None:
+    """A status line: "→ text" for people, plus "@@step {key, args}" so the app can show it in
+    the user's language (keys are translated in mac/Localization; %@ = an argument)."""
+    text = key
+    for a in args:
+        text = text.replace("%@", str(a), 1)
+    print(f"→ {text}", flush=True)
+    print("@@step " + json.dumps({"key": key, "args": [str(a) for a in args]}, ensure_ascii=False), flush=True)

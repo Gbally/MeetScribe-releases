@@ -54,8 +54,8 @@ final class Updater: ObservableObject {
         guard let info = available, UserDefaults.standard.integer(forKey: "announcedBuild") < info.build else { return }
         UserDefaults.standard.set(info.build, forKey: "announcedBuild")
         let content = UNMutableNotificationContent()
-        content.title = "MeetScribe \(info.version) is available"
-        content.body = (info.notes.map { $0 + " " } ?? "") + "Click to install."
+        content.title = tr("MeetScribe %@ is available", info.version)
+        content.body = (info.notes.map { $0 + " " } ?? "") + tr("Click to install.")
         content.userInfo = ["action": "update"]
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "update-\(info.build)", content: content, trigger: nil))
     }
@@ -85,7 +85,7 @@ final class Updater: ObservableObject {
         let (file, _) = try await URLSession.shared.download(from: url)
         let data = try Data(contentsOf: file)
         let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-        guard digest == sha256.lowercased() else { throw UpdateError("The download is damaged (checksum mismatch).") }
+        guard digest == sha256.lowercased() else { throw UpdateError(tr("The download is damaged (checksum mismatch).")) }
 
         let work = FileManager.default.temporaryDirectory.appendingPathComponent("MeetScribeUpdate-\(UUID().uuidString)")
         let mount = work.appendingPathComponent("mnt")
@@ -96,7 +96,7 @@ final class Updater: ObservableObject {
         defer { try? run("/usr/bin/hdiutil", ["detach", mount.path, "-force"]) }
 
         let newApp = mount.appendingPathComponent("MeetScribe.app")
-        guard FileManager.default.fileExists(atPath: newApp.path) else { throw UpdateError("The update doesn't contain MeetScribe.") }
+        guard FileManager.default.fileExists(atPath: newApp.path) else { throw UpdateError(tr("The update doesn't contain MeetScribe.")) }
         try verifySameSigner(newApp)
         let staged = work.appendingPathComponent("MeetScribe.app")
         try run("/usr/bin/ditto", [newApp.path, staged.path])
@@ -113,11 +113,11 @@ final class Updater: ObservableObject {
               SecCodeCopyStaticCode(me, [], &meStatic) == errSecSuccess, let meStatic,
               SecCodeCopyDesignatedRequirement(meStatic, [], &requirement) == errSecSuccess,
               SecStaticCodeCreateWithPath(app as CFURL, [], &newCode) == errSecSuccess, let newCode else {
-            throw UpdateError("Couldn't check the update's signature.")
+            throw UpdateError(tr("Couldn't check the update's signature."))
         }
         let status = SecStaticCodeCheckValidity(newCode, SecCSFlags(rawValue: kSecCSCheckAllArchitectures), requirement)
         guard status == errSecSuccess else {
-            throw UpdateError("The update isn't signed by the MeetScribe developer — not installed.")
+            throw UpdateError(tr("The update isn't signed by the MeetScribe developer — not installed."))
         }
     }
 
@@ -127,7 +127,7 @@ final class Updater: ObservableObject {
         guard FileManager.default.isWritableFile(atPath: current.deletingLastPathComponent().path) else {
             // No permission to write /Applications (managed Mac): let the user drag it in.
             NSWorkspace.shared.activateFileViewerSelecting([staged])
-            throw UpdateError("Drag the new MeetScribe from the Finder window into Applications (replace the old one).")
+            throw UpdateError(tr("Drag the new MeetScribe from the Finder window into Applications (replace the old one)."))
         }
         let script = """
         while kill -0 \(ProcessInfo.processInfo.processIdentifier) 2>/dev/null; do sleep 0.2; done
@@ -151,7 +151,7 @@ final class Updater: ObservableObject {
         try p.run()
         p.waitUntilExit()
         let text = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-        guard p.terminationStatus == 0 else { throw UpdateError("\(URL(fileURLWithPath: exe).lastPathComponent) failed: \(text)") }
+        guard p.terminationStatus == 0 else { throw UpdateError(URL(fileURLWithPath: exe).lastPathComponent + " failed: " + text) }
         return text
     }
 }

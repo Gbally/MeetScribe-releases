@@ -181,7 +181,7 @@ final class AppModel: ObservableObject {
         if phase == .ready { askForScreenAudioIfNeeded() }
         updater.start()
         Task {
-            if let c = await ModelCatalog.refresh() { catalog = c }
+            if await ModelCatalog.refresh() != nil { catalog = ModelCatalog.load() } // newest of online / built-in
             loadInstalledModels()
         }
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
@@ -268,9 +268,9 @@ final class AppModel: ObservableObject {
         setupError = nil
         setupProgress = nil
         Task {
-            setupStatus = "Installing the engine (Python + packages)…"
+            setupStatus = tr("Installing the engine (Python + packages)…")
             let sync = await Engine.run(Engine.uv, ["sync", "--frozen", "--no-install-project", "--project", Engine.engineSource.path]) { _ in }
-            guard sync.ok else { return failSetup("Couldn't install the engine.\n\(sync.errorTail)") }
+            guard sync.ok else { return failSetup(tr("Couldn't install the engine.") + "\n" + sync.errorTail) }
 
             // Pick the models that fit this Mac, and keep them (a later catalog only recommends).
             if settings.llmModel == nil { settings.llmModel = ModelCatalog.recommended(catalog.notes, for: .current)?.repo }
@@ -280,11 +280,11 @@ final class AppModel: ObservableObject {
                 guard let self else { return }
                 if line.hasPrefix("@@progress "), let v = Double(line.dropFirst(11)) {
                     self.setupProgress = v
-                } else if line.hasPrefix("→ ") {
-                    self.setupStatus = String(line.dropFirst(2))
+                } else if let text = localizedStep(line) {
+                    self.setupStatus = text
                 }
             }
-            guard setup.ok else { return failSetup("Download failed.\n\(setup.errorTail)") }
+            guard setup.ok else { return failSetup(tr("Download failed.") + "\n" + setup.errorTail) }
             Engine.markInstalled()
             phase = .ready
             setupStatus = ""
@@ -339,8 +339,8 @@ final class AppModel: ObservableObject {
                 writeInfo(folder, MeetingInfo(title: name, started: ISO8601DateFormatter.local.string(from: Date()),
                                               duration: nil, calendar: event, template: template ?? settings.defaultTemplate))
                 if auto {
-                    notify(title: "Recording “\(name.isEmpty ? "this call" : name)”",
-                           body: "Started automatically — it stops by itself when the call ends.", category: "AUTO")
+                    notify(title: tr("Recording “%@”", name.isEmpty ? tr("this call") : name),
+                           body: tr("Started automatically — it stops by itself when the call ends."), category: "AUTO")
                 }
                 recordingEvent = event
                 endReminderSent = false
@@ -352,7 +352,7 @@ final class AppModel: ObservableObject {
             } catch {
                 startError = error.localizedDescription
                 try? FileManager.default.removeItem(at: folder)
-                if auto { notify(title: "Couldn't start recording", body: error.localizedDescription) }
+                if auto { notify(title: tr("Couldn't start recording"), body: error.localizedDescription) }
             }
             isStarting = false
             refreshPermissions()
@@ -398,8 +398,8 @@ final class AppModel: ObservableObject {
         // The calendar says the meeting ended 5 minutes ago: offer to stop.
         if settings.endReminders, let end = recordingEvent?.end, !endReminderSent, Date() > end.addingTimeInterval(300) {
             endReminderSent = true
-            notify(title: "Is “\(recordingEvent?.title ?? "the meeting")” over?",
-                   body: "MeetScribe is still recording.", category: "ENDED")
+            notify(title: tr("Is “%@” over?", recordingEvent?.title ?? tr("the meeting")),
+                   body: tr("MeetScribe is still recording."), category: "ENDED")
         }
         // Smooth the meters so they don't flicker.
         micLevel = max(rec.mic?.writer.takePeak() ?? 0, micLevel * 0.6)
@@ -440,7 +440,7 @@ final class AppModel: ObservableObject {
         guard currentJob == nil, phase == .ready, !queue.isEmpty else { return }
         let job = queue.removeFirst()
         currentJob = job
-        jobStatus = "Starting…"
+        jobStatus = tr("Starting…")
         jobProgress = nil
         jobStarted = Date()
         Engine.writeConfig(settings)
@@ -451,8 +451,8 @@ final class AppModel: ObservableObject {
             let result = await Engine.meetscribe(args) { [weak self] line in
                 if line.hasPrefix("@@result "), let data = line.dropFirst(9).data(using: .utf8) {
                     self?.askResult = try? JSONDecoder().decode(AskResult.self, from: data)
-                } else if line.hasPrefix("→ ") {
-                    self?.jobStatus = String(line.dropFirst(2))
+                } else if let text = localizedStep(line) {
+                    self?.jobStatus = text
                 } else if line.hasPrefix("@@progress "), let v = Double(line.dropFirst(11)) {
                     self?.jobProgress = max(self?.jobProgress ?? 0, v)
                 }
@@ -467,7 +467,7 @@ final class AppModel: ObservableObject {
                         finalFolder = await moveToNotesFolder(folder)
                     }
                 } else if !Task.isCancelled {
-                    let msg = result.errorTail.isEmpty ? "Processing failed." : result.errorTail
+                    let msg = result.errorTail.isEmpty ? tr("Processing failed.") : result.errorTail
                     try? msg.write(to: folder.appendingPathComponent("error.txt"), atomically: true, encoding: .utf8)
                 }
             }
@@ -482,7 +482,7 @@ final class AppModel: ObservableObject {
             }
             reload()
             if case .ask = job {
-                if !result.ok { askError = result.errorTail.isEmpty ? "Something went wrong." : result.errorTail }
+                if !result.ok { askError = result.errorTail.isEmpty ? tr("Something went wrong.") : result.errorTail }
             } else {
                 notify(job: job, ok: result.ok, folder: finalFolder)
             }
@@ -542,7 +542,7 @@ final class AppModel: ObservableObject {
         guard from.standardizedFileURL != to.standardizedFileURL else { settings = new; return }
         guard moveExisting else { settings = new; return }
         let folders = Meeting.loadAll(in: from).map(\.folder)
-        movingStatus = "Moving \(folders.count) meeting(s)…"
+        movingStatus = tr("Moving %@ meeting(s)…", "\(folders.count)")
         Task {
             let failed = await Task.detached { () -> Int in
                 let fm = FileManager.default
@@ -560,21 +560,21 @@ final class AppModel: ObservableObject {
                 return failed
             }.value
             settings = new
-            movingStatus = failed > 0 ? "\(failed) meeting(s) couldn't be moved — they're still in \(from.path)." : nil
+            movingStatus = failed > 0 ? tr("%@ meeting(s) couldn't be moved — they're still in %@.", "\(failed)", from.path) : nil
         }
     }
 
     private func notify(job: Job, ok: Bool, folder: URL?) {
         guard settings.notifyWhenReady else { return }
         let content = UNMutableNotificationContent()
-        let title = folder.flatMap { Meeting.load($0)?.title } ?? "Meeting"
+        let title = folder.flatMap { Meeting.load($0)?.title } ?? tr("Meeting")
         content.sound = .default
         if let folder { content.userInfo = ["meeting": folder.lastPathComponent] }
         if ok {
-            content.title = "Notes ready"
-            content.body = "\(title) — click to see the summary and to-dos."
+            content.title = tr("Notes ready")
+            content.body = tr("%@ — click to see the summary and to-dos.", title)
         } else {
-            content.title = "Couldn't process the meeting"
+            content.title = tr("Couldn't process the meeting")
             content.body = title
         }
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
@@ -668,12 +668,13 @@ final class AppModel: ObservableObject {
             guard !b.isEmpty else { continue }
             briefEvents[key] = event
             let minutes = max(1, Int(event.start.timeIntervalSinceNow / 60))
-            var body = b.openTodos.isEmpty ? "No open to-dos from last time"
-                : "\(b.openTodos.count) open to-do\(b.openTodos.count == 1 ? "" : "s") from last time"
+            var body = b.openTodos.isEmpty ? tr("No open to-dos from last time")
+                : b.openTodos.count == 1 ? tr("1 open to-do from last time")
+                : tr("%@ open to-dos from last time", "\(b.openTodos.count)")
             if let last = b.last { body += " (\(last.date.formatted(date: .abbreviated, time: .omitted)))" }
             let content = UNMutableNotificationContent()
-            content.title = "In \(minutes) min: \(event.title)"
-            content.body = body + ". Click to review."
+            content.title = tr("In %@ min: %@", "\(minutes)", event.title)
+            content.body = body + ". " + tr("Click to review.")
             content.sound = .default
             content.userInfo = ["meeting": "brief:\(key)"]
             UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "brief-\(key)", content: content, trigger: nil))
@@ -706,9 +707,9 @@ final class AppModel: ObservableObject {
             guard let due = ref.item.dueDay else { continue }
             let dayBefore = cal.date(bySettingHour: 9, minute: 0, second: 0, of: cal.date(byAdding: .day, value: -1, to: due)!)!
             let onTheDay = cal.date(bySettingHour: 9, minute: 0, second: 0, of: due)!
-            let (when, label) = dayBefore > Date() ? (dayBefore, "Due tomorrow") : (onTheDay, "Due today")
+            let (when, label) = dayBefore > Date() ? (dayBefore, tr("Due tomorrow")) : (onTheDay, tr("Due today"))
             guard when > Date() else { continue }
-            planned.append(("due-\(ref.id)", when, label, "\(ref.item.task) — from “\(ref.meeting.title)”", ref.meeting.id))
+            planned.append(("due-\(ref.id)", when, label, tr("%@ — from “%@”", ref.item.task, ref.meeting.title), ref.meeting.id))
         }
         planned = Array(planned.sorted { $0.date < $1.date }.prefix(40))
         let signature = planned.map { "\($0.id)\($0.date)\($0.body)" }.joined()
@@ -768,7 +769,7 @@ final class AppModel: ObservableObject {
     func refreshCatalogDaily() async {
         guard Date().timeIntervalSince(lastCatalogRefresh) > 24 * 3600 else { return }
         lastCatalogRefresh = Date()
-        if let c = await ModelCatalog.refresh() { catalog = c }
+        if await ModelCatalog.refresh() != nil { catalog = ModelCatalog.load() }
     }
 
     var notesModel: String { settings.llmModel ?? ModelCatalog.recommended(catalog.notes, for: .current)?.repo ?? "" }
@@ -804,16 +805,16 @@ final class AppModel: ObservableObject {
         }
         if installedModels[model.repo] != nil { apply(); return }
         guard modelDownload == nil else { return }
-        modelDownload = (model.repo, nil, "Starting download…")
+        modelDownload = (model.repo, nil, tr("Starting download…"))
         Task {
             let result = await Engine.meetscribe(["models", "download", model.repo]) { [weak self] line in
                 guard let self, var d = self.modelDownload else { return }
                 if line.hasPrefix("@@progress "), let v = Double(line.dropFirst(11)) { d.progress = v }
-                else if line.hasPrefix("→ ") { d.status = String(line.dropFirst(2)) }
+                else if let text = localizedStep(line) { d.status = text }
                 self.modelDownload = d
             }
             modelDownload = nil
-            if result.ok { apply() } else { show("Download failed: \(result.errorTail)") }
+            if result.ok { apply() } else { show(tr("Download failed: %@", result.errorTail)) }
             loadInstalledModels()
         }
     }
@@ -872,8 +873,8 @@ final class AppModel: ObservableObject {
     private func offerToRecord(app: String) {
         guard settings.callReminders else { return }
         let event = settings.useCalendar ? CalendarService.shared.currentMeeting() : nil
-        notify(title: event.map { "Record “\($0.title)”?" } ?? "Record this call?",
-               body: "\(app) is using the microphone. Click Record to take notes with MeetScribe.", category: "CALL")
+        notify(title: event.map { tr("Record “%@”?", $0.title) } ?? tr("Record this call?"),
+               body: tr("%@ is using the microphone. Click Record to take notes with MeetScribe.", app), category: "CALL")
     }
 
     func notify(title: String, body: String, category: String? = nil) {
@@ -905,12 +906,12 @@ final class AppModel: ObservableObject {
             var problem: String?
             switch s.authorizationStatus {
             case .denied:
-                problem = "Notifications are turned off for MeetScribe in macOS, so you won't see these."
+                problem = tr("Notifications are turned off for MeetScribe in macOS, so you won't see these.")
             case .notDetermined:
-                problem = "macOS hasn't asked for permission yet."
+                problem = tr("macOS hasn't asked for permission yet.")
             default:
                 if s.alertStyle == .none {
-                    problem = "macOS only lists MeetScribe's notifications in Notification Center — no pop-up."
+                    problem = tr("macOS only lists MeetScribe's notifications in Notification Center — no pop-up.")
                 }
             }
             DispatchQueue.main.async { self.notificationProblem = problem }
@@ -928,8 +929,8 @@ final class AppModel: ObservableObject {
         guard let p = jobProgress, p > 0.05, p < 0.999 else { return nil }
         let elapsed = Date().timeIntervalSince(jobStarted)
         let left = elapsed * (1 - p) / p
-        if left < 50 { return "less than a minute left" }
-        return "about \(Int((left / 60).rounded(.up))) min left"
+        if left < 50 { return tr("less than a minute left") }
+        return tr("about %@ min left", "\(Int((left / 60).rounded(.up)))")
     }
 
     // MARK: - To-dos
@@ -967,7 +968,7 @@ final class AppModel: ObservableObject {
     func emailNotes(_ id: Meeting.ID) {
         guard let m = meeting(id) else { return }
         let to = (m.info?.calendar?.attendees ?? []).map(\.email).filter { !$0.isEmpty }.joined(separator: ",")
-        let subject = "Notes: \(m.title)"
+        let subject = tr("Notes: %@", m.title)
         let body = m.shareText
         let app = settings.emailApp
 
@@ -1004,7 +1005,7 @@ final class AppModel: ObservableObject {
             c.queryItems = [URLQueryItem(name: "subject", value: subject), URLQueryItem(name: "body", value: body)]
             let bundle = app == .outlook ? "com.microsoft.Outlook" : app == .appleMail ? "com.apple.mail" : nil
             if let bundle, NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) == nil {
-                show("\(app.label) isn't installed — using your default mail app.")
+                show(tr("%@ isn't installed — using your default mail app.", tr(app.label)))
             }
             open(c.url, withApp: bundle)
         }
@@ -1013,12 +1014,12 @@ final class AppModel: ObservableObject {
     func addToReminders(_ id: Meeting.ID, mineOnly: Bool) {
         guard let m = meeting(id), let actions = m.notes?.actions else { return }
         let items = actions.enumerated().filter { !m.done.contains($0.offset) && (!mineOnly || isMine($0.element.owner)) }.map(\.element)
-        guard !items.isEmpty else { show(mineOnly ? "No open to-dos for you in this meeting." : "No open to-dos."); return }
+        guard !items.isEmpty else { show(mineOnly ? tr("No open to-dos for you in this meeting.") : tr("No open to-dos.")); return }
         Task {
             if let n = await CalendarService.shared.addReminders(items, meetingTitle: m.title) {
-                show("Added \(n) to-do\(n == 1 ? "" : "s") to Reminders.")
+                show(n == 1 ? tr("Added 1 to-do to Reminders.") : tr("Added %@ to-dos to Reminders.", "\(n)"))
             } else {
-                show("Reminders access is off — allow it in System Settings → Privacy & Security → Reminders.")
+                show(tr("Reminders access is off — allow it in System Settings → Privacy & Security → Reminders."))
             }
         }
     }
@@ -1168,7 +1169,7 @@ final class AppModel: ObservableObject {
         NSApp.activate(ignoringOtherApps: true)
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.audio, .movie]
-        panel.message = "Choose a meeting recording to transcribe"
+        panel.message = tr("Choose a meeting recording to transcribe")
         if panel.runModal() == .OK, let url = panel.url { enqueue(.processFile(url)) }
     }
 
@@ -1178,7 +1179,7 @@ final class AppModel: ObservableObject {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
-        panel.prompt = "Use this folder"
+        panel.prompt = tr("Use this folder")
         panel.directoryURL = settings.notesFolder
         return panel.runModal() == .OK ? panel.url : nil
     }

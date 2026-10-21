@@ -122,7 +122,7 @@ struct Meeting: Identifiable, Equatable {
     var title: String {
         if let t = notes?.title, !t.isEmpty { return t }
         if let t = info?.title, !t.isEmpty { return t }
-        return "Meeting"
+        return tr("Meeting")
     }
 
     var date: Date {
@@ -175,17 +175,17 @@ struct Meeting: Identifiable, Equatable {
     var shareText: String {
         guard let n = notes else { return title }
         var out = ["\(title) — \(date.formatted(date: .abbreviated, time: .shortened))", ""]
-        if !n.summary.isEmpty { out += ["Summary"] + n.summary.map { "• \($0)" } + [""] }
-        if !n.decisions.isEmpty { out += ["Decisions"] + n.decisions.map { "• \($0)" } + [""] }
+        if !n.summary.isEmpty { out += [tr("Summary")] + n.summary.map { "• \($0)" } + [""] }
+        if !n.decisions.isEmpty { out += [tr("Decisions")] + n.decisions.map { "• \($0)" } + [""] }
         if !n.actions.isEmpty {
-            out += ["Action items"] + n.actions.map { a in
+            out += [tr("Action items")] + n.actions.map { a in
                 var s = "☐ \(a.task)"
                 let extra = [a.owner, a.due].filter { !$0.isEmpty }
                 if !extra.isEmpty { s += " (\(extra.joined(separator: ", ")))" }
                 return s
             } + [""]
         }
-        if !n.questions.isEmpty { out += ["Open questions"] + n.questions.map { "• \($0)" } }
+        if !n.questions.isEmpty { out += [tr("Open questions")] + n.questions.map { "• \($0)" } }
         return out.joined(separator: "\n")
     }
 }

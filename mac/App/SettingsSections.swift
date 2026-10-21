@@ -11,7 +11,7 @@ struct StorageSection: View {
         Section("Where notes are saved") {
             Picker("Storage", selection: Binding(get: { model.settings.storage }, set: choose)) {
                 Text("This Mac only").tag(Storage.local)
-                Text(accounts.isEmpty ? "OneDrive (not set up on this Mac)" : "OneDrive").tag(Storage.oneDrive)
+                Text(accounts.isEmpty ? tr("OneDrive (not set up on this Mac)") : "OneDrive").tag(Storage.oneDrive)
                 Text("Another folder…").tag(Storage.custom)
             }
             .pickerStyle(.radioGroup)
@@ -53,7 +53,7 @@ struct StorageSection: View {
         }
         .onAppear { accounts = CloudFolders.oneDriveAccounts }
         .confirmationDialog(
-            "Move your \(model.meetingsInNotesFolder) existing meeting(s) to the new location?",
+            tr("Move your %@ existing meeting(s) to the new location?", "\(model.meetingsInNotesFolder)"),
             isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } })
         ) {
             Button("Move them") { if let p = pending { model.changeStorage(to: p, moveExisting: true) } }
@@ -67,16 +67,16 @@ struct StorageSection: View {
         let folder = model.settings.notesFolder
         switch model.settings.storage {
         case .local:
-            var s = "Stays on this Mac — never uploaded anywhere."
+            var s = tr("Stays on this Mac — never uploaded anywhere.")
             if !folder.path.contains("/Documents/") {
-                s += " (Your Documents folder is synced to the cloud, so notes go in your home folder instead.)"
+                s += " " + tr("(Your Documents folder is synced to the cloud, so notes go in your home folder instead.)")
             }
             return s
         case .oneDrive:
             let name = accounts.first { $0.url.path == model.settings.oneDrivePath }?.name ?? "OneDrive"
-            return "Synced to \(name): backed up, and available on your other devices and on the web. Your company's OneDrive rules apply."
+            return tr("Synced to %@: backed up, and available on your other devices and on the web. Your company's OneDrive rules apply.", name)
         case .custom:
-            return CloudFolders.syncService(for: folder).map { "This folder is synced to \($0)." } ?? "This folder isn't synced to the cloud."
+            return CloudFolders.syncService(for: folder).map { tr("This folder is synced to %@.", $0) } ?? tr("This folder isn't synced to the cloud.")
         }
     }
 
@@ -92,8 +92,8 @@ struct StorageSection: View {
                 model.movingStatus = nil
                 NSApp.activate(ignoringOtherApps: true)
                 let alert = NSAlert()
-                alert.messageText = "OneDrive isn't set up on this Mac"
-                alert.informativeText = "Install the OneDrive app and sign in with your work account, then choose OneDrive again."
+                alert.messageText = tr("OneDrive isn't set up on this Mac")
+                alert.informativeText = tr("Install the OneDrive app and sign in with your work account, then choose OneDrive again.")
                 alert.runModal()
                 return
             }
@@ -123,7 +123,7 @@ struct LanguagesSection: View {
             LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading),
                                 GridItem(.flexible(), alignment: .leading)], spacing: 4) {
                 ForEach(meetingLanguages, id: \.code) { lang in
-                    Toggle(lang.name, isOn: Binding(
+                    Toggle(languageName(lang.code), isOn: Binding(
                         get: { model.settings.languages.contains(lang.code) },
                         set: { on in
                             var l = model.settings.languages.filter { $0 != lang.code }
@@ -139,9 +139,9 @@ struct LanguagesSection: View {
 
     var languagesHelp: String {
         switch model.settings.languages.count {
-        case 0: return "None ticked: the language is detected automatically (one per meeting)."
-        case 1: return "Everything is transcribed as \(meetingLanguages.first { $0.code == model.settings.languages[0] }?.name ?? "that language")."
-        default: return "Meetings can switch between these languages — detected every few seconds."
+        case 0: return tr("None ticked: the language is detected automatically (one per meeting).")
+        case 1: return tr("Everything is transcribed as %@.", languageName(model.settings.languages[0]))
+        default: return tr("Meetings can switch between these languages — detected every few seconds.")
         }
     }
 }
@@ -185,14 +185,14 @@ struct VoicesSection: View {
                 HStack {
                     Image(systemName: "person.wave.2").foregroundColor(.secondary)
                     Text(v.name).font(.callout)
-                    Text("\(v.samples) sample\(v.samples == 1 ? "" : "s")").font(.caption2).foregroundColor(.secondary)
+                    Text(v.samples == 1 ? tr("1 sample") : tr("%@ samples", "\(v.samples)")).font(.caption2).foregroundColor(.secondary)
                     Spacer()
                     Button("Forget") { forget = v.name }.controlSize(.small)
                 }
             }
         }
         .onAppear { model.reloadVoices() }
-        .confirmationDialog("Forget \(forget ?? "")'s voice?", isPresented: Binding(get: { forget != nil }, set: { if !$0 { forget = nil } })) {
+        .confirmationDialog(tr("Forget %@'s voice?", forget ?? ""), isPresented: Binding(get: { forget != nil }, set: { if !$0 { forget = nil } })) {
             Button("Forget", role: .destructive) { if let f = forget { model.forgetVoice(f) } }
         }
     }
@@ -233,7 +233,7 @@ struct EmailSection: View {
     var body: some View {
         Section("Email") {
             Picker("Write emails with", selection: $model.settings.emailApp) {
-                ForEach(EmailApp.allCases, id: \.self) { Text($0.label).tag($0) }
+                ForEach(EmailApp.allCases, id: \.self) { Text(tr($0.label)).tag($0) }
             }
             if model.settings.emailApp == .gmail {
                 TextField("Gmail address (optional, if you use several)", text: $model.settings.gmailAccount)
@@ -253,7 +253,7 @@ struct RetentionSection: View {
     var body: some View {
         Section("Audio recordings") {
             Picker("Delete audio recordings", selection: $model.settings.audioRetentionDays) {
-                ForEach(retentionChoices, id: \.days) { Text($0.label).tag($0.days) }
+                ForEach(retentionChoices, id: \.days) { Text(tr($0.label)).tag($0.days) }
             }
             Text("Notes and transcripts are kept. The audio — including the short voice samples used to name speakers — is deleted.")
                 .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)

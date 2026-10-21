@@ -48,6 +48,16 @@ enum Telemetry {
              fields: ["Notes model": short(notesModel), "Speech model": short(speechModel)])
     }
 
+    /// The user switched the notes or speech model (from the catalog or a custom one).
+    static func modelChanged(speech: Bool, from old: String, to new: String, custom: Bool) {
+        send(title: "\(speech ? "Speech" : "Notes") model → \(short(new))", emoji: "🧠", fields: [
+            "Kind": speech ? "Speech" : "Notes",
+            "From": short(old),
+            "To": new,
+            "Source": custom ? "Custom (Hugging Face)" : "Catalog",
+        ])
+    }
+
     static func updated(from old: String) {
         send(title: "Updated to \(Engine.appVersion)", emoji: "⬆️", fields: ["From": old])
     }

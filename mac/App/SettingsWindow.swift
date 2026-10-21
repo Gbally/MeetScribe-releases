@@ -508,7 +508,7 @@ struct UsageStatsSection: View {
     var body: some View {
         Section("Usage statistics") {
             Toggle("Send anonymous usage statistics", isOn: Binding(get: { on }, set: { on = $0; Telemetry.enabled = $0 }))
-            Caption("Helps improve MeetScribe: a new install, each recording's length and type, updates, and errors — with your Mac model and the AI models used. Never audio, transcripts, notes, titles or names.")
+            Caption("Helps improve MeetScribe: a new install, each recording's length and type, model changes, updates, and errors — with your Mac model and the AI models used. Never audio, transcripts, notes, titles or names.")
         }
     }
 }

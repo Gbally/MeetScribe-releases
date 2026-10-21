@@ -797,8 +797,10 @@ final class AppModel: ObservableObject {
     func useModel(_ model: CatalogModel, speech: Bool) {
         let apply = { [weak self] in
             guard let self else { return }
+            let old = speech ? self.speechModel : self.notesModel
             if speech { self.settings.whisperModel = model.repo } else { self.settings.llmModel = model.repo }
             Engine.writeConfig(self.settings)
+            if old != model.repo { Telemetry.modelChanged(speech: speech, from: old, to: model.repo, custom: model.id == "custom") }
         }
         if installedModels[model.repo] != nil { apply(); return }
         guard modelDownload == nil else { return }

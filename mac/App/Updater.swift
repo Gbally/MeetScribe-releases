@@ -6,6 +6,7 @@ import AppKit
 import CryptoKit
 import Foundation
 import Security
+import UserNotifications
 
 struct ReleaseInfo: Codable, Equatable {
     var version: String
@@ -27,7 +28,7 @@ final class Updater: ObservableObject {
     private var timer: Timer?
 
     func start() {
-        Task { try? await Task.sleep(nanoseconds: 30_000_000_000); await check() }
+        Task { try? await Task.sleep(nanoseconds: 5_000_000_000); await check() }
         timer = Timer.scheduledTimer(withTimeInterval: 24 * 3600, repeats: true) { [weak self] _ in
             guard let updater = self else { return }
             Task { @MainActor in await updater.check() }
@@ -45,6 +46,18 @@ final class Updater: ObservableObject {
               let info = try? JSONDecoder().decode(ReleaseInfo.self, from: data) else { return }
         lastChecked = Date()
         available = info.build > Self.currentBuild ? info : nil
+        announce()
+    }
+
+    /// One notification per new version (clicking it opens Settings → About).
+    private func announce() {
+        guard let info = available, UserDefaults.standard.integer(forKey: "announcedBuild") < info.build else { return }
+        UserDefaults.standard.set(info.build, forKey: "announcedBuild")
+        let content = UNMutableNotificationContent()
+        content.title = "MeetScribe \(info.version) is available"
+        content.body = (info.notes.map { $0 + " " } ?? "") + "Click to install."
+        content.userInfo = ["action": "update"]
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "update-\(info.build)", content: content, trigger: nil))
     }
 
     /// Downloads, verifies and installs `available`, then relaunches. Call only when idle.

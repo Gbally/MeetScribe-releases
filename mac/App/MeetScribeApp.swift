@@ -44,8 +44,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                                             withCompletionHandler completionHandler: @escaping () -> Void) {
         let action = response.actionIdentifier
         let meeting = response.notification.request.content.userInfo["meeting"] as? String
+        let isUpdate = response.notification.request.content.userInfo["action"] as? String == "update"
         Task { @MainActor in
-            self.model.handleNotificationAction(action, meeting: meeting)
+            if isUpdate { Windows.showSettings(self.model, tab: .about) }
+            else { self.model.handleNotificationAction(action, meeting: meeting) }
             completionHandler()
         }
     }

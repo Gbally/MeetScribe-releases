@@ -7,6 +7,22 @@ enum Storage: String, Codable, CaseIterable {
     case custom     // a folder the user picked
 }
 
+enum EmailApp: String, Codable, CaseIterable {
+    case systemDefault, outlook, appleMail, gmail, outlookWeb
+
+    var label: String {
+        switch self {
+        case .systemDefault: return "Default mail app"
+        case .outlook: return "Microsoft Outlook"
+        case .appleMail: return "Apple Mail"
+        case .gmail: return "Gmail (in Chrome)"
+        case .outlookWeb: return "Outlook on the web"
+        }
+    }
+
+    var isWeb: Bool { self == .gmail || self == .outlookWeb }
+}
+
 enum SummaryStyle: String, Codable, CaseIterable {
     case detailed, standard, brief
 
@@ -40,6 +56,10 @@ struct AppSettings: Codable, Equatable {
     var customFolderPath = ""
     var useCalendar = true       // meeting title + attendees from the calendar
     var callReminders = true     // "Record this meeting?" when a call starts
+    var endReminders = true      // "Is the meeting over?" when the calendar event has ended
+    var notifyWhenReady = true   // "Notes ready" notification
+    var emailApp = EmailApp.systemDefault
+    var gmailAccount = ""        // which Google account opens (several signed in)
 
     var notesFolder: URL {
         switch storage {
@@ -69,6 +89,10 @@ struct AppSettings: Codable, Equatable {
         notesLanguage = try c.decodeIfPresent(String.self, forKey: .notesLanguage) ?? d.notesLanguage
         useCalendar = try c.decodeIfPresent(Bool.self, forKey: .useCalendar) ?? d.useCalendar
         callReminders = try c.decodeIfPresent(Bool.self, forKey: .callReminders) ?? d.callReminders
+        endReminders = try c.decodeIfPresent(Bool.self, forKey: .endReminders) ?? d.endReminders
+        notifyWhenReady = try c.decodeIfPresent(Bool.self, forKey: .notifyWhenReady) ?? d.notifyWhenReady
+        emailApp = (try? c.decodeIfPresent(EmailApp.self, forKey: .emailApp)) ?? d.emailApp
+        gmailAccount = try c.decodeIfPresent(String.self, forKey: .gmailAccount) ?? ""
         vocabulary = try c.decodeIfPresent(String.self, forKey: .vocabulary) ?? d.vocabulary
         summaryStyle = (try? c.decodeIfPresent(SummaryStyle.self, forKey: .summaryStyle)) ?? d.summaryStyle
         teamsOnly = try c.decodeIfPresent(Bool.self, forKey: .teamsOnly) ?? d.teamsOnly
@@ -85,7 +109,8 @@ struct AppSettings: Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case myName, language, languages, notesLanguage, useCalendar, callReminders, vocabulary, summaryStyle, teamsOnly, keepAudio, storage, oneDrivePath,
+        case myName, language, languages, notesLanguage, useCalendar, callReminders, endReminders, notifyWhenReady,
+             emailApp, gmailAccount, vocabulary, summaryStyle, teamsOnly, keepAudio, storage, oneDrivePath,
              customFolderPath, notesFolderPath
     }
 
@@ -96,6 +121,10 @@ struct AppSettings: Codable, Equatable {
         try c.encode(notesLanguage, forKey: .notesLanguage)
         try c.encode(useCalendar, forKey: .useCalendar)
         try c.encode(callReminders, forKey: .callReminders)
+        try c.encode(endReminders, forKey: .endReminders)
+        try c.encode(notifyWhenReady, forKey: .notifyWhenReady)
+        try c.encode(emailApp, forKey: .emailApp)
+        try c.encode(gmailAccount, forKey: .gmailAccount)
         try c.encode(vocabulary, forKey: .vocabulary)
         try c.encode(summaryStyle, forKey: .summaryStyle)
         try c.encode(teamsOnly, forKey: .teamsOnly)

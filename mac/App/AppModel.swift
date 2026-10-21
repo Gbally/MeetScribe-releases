@@ -46,6 +46,9 @@ final class AppModel: ObservableObject {
     @Published var currentJob: Job?
     @Published var jobStatus = ""
     @Published var jobProgress: Double?
+    /// New notes the user hasn't looked at yet: shown as "✓ Ready" in the menu bar.
+    @Published var hasUnseenResult = false
+    @Published var notificationStatus = ""
     @Published var jobStarted = Date()
     /// Set by a notification click: the window opens on this meeting.
     @Published var pendingRoute: Route?
@@ -295,7 +298,7 @@ final class AppModel: ObservableObject {
         guard let rec = recorder else { return }
         elapsed = rec.elapsed
         // The calendar says the meeting ended 5 minutes ago: offer to stop.
-        if let end = recordingEvent?.end, !endReminderSent, Date() > end.addingTimeInterval(300) {
+        if settings.endReminders, let end = recordingEvent?.end, !endReminderSent, Date() > end.addingTimeInterval(300) {
             endReminderSent = true
             notify(title: "Is “\(recordingEvent?.title ?? "the meeting")” over?",
                    body: "MeetScribe is still recording.", category: "ENDED")
@@ -447,6 +450,8 @@ final class AppModel: ObservableObject {
     }
 
     private func notify(job: Job, ok: Bool, folder: URL?) {
+        if ok, case .process = job { hasUnseenResult = true }
+        guard settings.notifyWhenReady else { return }
         let content = UNMutableNotificationContent()
         let title = folder.flatMap { Meeting.load($0)?.title } ?? "Meeting"
         content.sound = .default
@@ -506,6 +511,40 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// How macOS currently shows our notifications, for Settings.
+    func refreshNotificationStatus() {
+        UNUserNotificationCenter.current().getNotificationSettings { s in
+            let text: String
+            switch s.authorizationStatus {
+            case .denied: text = "Turned off for MeetScribe in System Settings."
+            case .notDetermined: text = "macOS hasn't asked yet."
+            default:
+                switch s.alertStyle {
+                case .alert: text = "Allowed — they stay on screen until you click them."
+                case .banner: text = "Allowed — shown as banners that disappear after a few seconds."
+                default: text = "Allowed, but only listed in Notification Center (no pop-up)."
+                }
+            }
+            DispatchQueue.main.async { self.notificationStatus = text }
+        }
+    }
+
+    func sendTestNotification() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        let content = UNMutableNotificationContent()
+        content.title = "MeetScribe notifications work"
+        content.body = "This is how you'll be told that your notes are ready."
+        content.sound = .default
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.refreshNotificationStatus() }
+    }
+
+    func openNotificationSettings() {
+        let id = Bundle.main.bundleIdentifier ?? ""
+        let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(id)")!
+        NSWorkspace.shared.open(url)
+    }
+
     /// "About 3 min left", from the progress so far.
     var jobETA: String? {
         guard let p = jobProgress, p > 0.05, p < 0.999 else { return nil }
@@ -559,19 +598,50 @@ final class AppModel: ObservableObject {
 
     // MARK: - Sharing
 
-    /// Opens an email draft (Outlook if installed) to the calendar attendees with the notes.
+    /// Opens an email draft to the calendar attendees with the notes, in the chosen app.
     func emailNotes(_ id: Meeting.ID) {
         guard let m = meeting(id) else { return }
-        var c = URLComponents()
-        c.scheme = "mailto"
-        c.path = (m.info?.calendar?.attendees ?? []).map(\.email).filter { !$0.isEmpty }.joined(separator: ",")
-        c.queryItems = [URLQueryItem(name: "subject", value: "Notes: \(m.title)"),
-                        URLQueryItem(name: "body", value: m.shareText)]
-        guard let url = c.url else { return }
-        if let outlook = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.microsoft.Outlook") {
-            NSWorkspace.shared.open([url], withApplicationAt: outlook, configuration: NSWorkspace.OpenConfiguration())
-        } else {
-            NSWorkspace.shared.open(url)
+        let to = (m.info?.calendar?.attendees ?? []).map(\.email).filter { !$0.isEmpty }.joined(separator: ",")
+        let subject = "Notes: \(m.title)"
+        let body = m.shareText
+        let app = settings.emailApp
+
+        func open(_ url: URL?, withApp bundleID: String? = nil) {
+            // URLComponents leaves "+" as is, which web apps read as a space.
+            guard var c = url.flatMap({ URLComponents(url: $0, resolvingAgainstBaseURL: false) }) else { return }
+            c.percentEncodedQuery = c.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+            guard let url = c.url else { return }
+            if let bundleID, let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+                NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: NSWorkspace.OpenConfiguration())
+            } else {
+                NSWorkspace.shared.open(url)
+            }
+        }
+
+        switch app {
+        case .gmail:
+            var c = URLComponents(string: "https://mail.google.com/mail/")!
+            c.queryItems = [URLQueryItem(name: "view", value: "cm"), URLQueryItem(name: "fs", value: "1"),
+                            URLQueryItem(name: "to", value: to), URLQueryItem(name: "su", value: subject),
+                            URLQueryItem(name: "body", value: body)]
+            let account = settings.gmailAccount.trimmingCharacters(in: .whitespaces)
+            if !account.isEmpty { c.queryItems?.insert(URLQueryItem(name: "authuser", value: account), at: 0) }
+            open(c.url, withApp: "com.google.Chrome") // falls back to the default browser
+        case .outlookWeb:
+            var c = URLComponents(string: "https://outlook.office.com/mail/deeplink/compose")!
+            c.queryItems = [URLQueryItem(name: "to", value: to), URLQueryItem(name: "subject", value: subject),
+                            URLQueryItem(name: "body", value: body)]
+            open(c.url)
+        case .systemDefault, .outlook, .appleMail:
+            var c = URLComponents()
+            c.scheme = "mailto"
+            c.path = to
+            c.queryItems = [URLQueryItem(name: "subject", value: subject), URLQueryItem(name: "body", value: body)]
+            let bundle = app == .outlook ? "com.microsoft.Outlook" : app == .appleMail ? "com.apple.mail" : nil
+            if let bundle, NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) == nil {
+                show("\(app.label) isn't installed — using your default mail app.")
+            }
+            open(c.url, withApp: bundle)
         }
     }
 

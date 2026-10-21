@@ -57,6 +57,8 @@ struct MenuBarLabel: View {
             }
         } else if model.phase == .settingUp {
             Image(systemName: "hourglass")
+        } else if model.hasUnseenResult {
+            Text("\(Image(systemName: "checkmark.circle.fill")) Ready")
         } else {
             Image(systemName: "waveform")
         }

@@ -24,6 +24,7 @@ struct RootView: View {
         }
         .frame(width: 400, height: 580)
         .onAppear {
+            model.hasUnseenResult = false
             model.reload()
             model.refreshPermissions()
             model.refreshCalendar()
@@ -783,10 +784,11 @@ struct SettingsView: View {
                         }
                         Toggle("Keep audio files after creating notes", isOn: $model.settings.keepAudio)
                         Toggle("Open MeetScribe at login", isOn: $model.launchAtLogin)
-                        Toggle("Remind me to record when a call starts", isOn: $model.settings.callReminders)
                         CalendarRow()
 
                     }
+                    NotificationsSection()
+                    EmailSection()
                     StorageSection()
                     VoicesSection()
                     Group {
@@ -1103,6 +1105,52 @@ struct TodosView: View {
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+}
+
+struct NotificationsSection: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SectionTitle(text: "Notifications")
+            Toggle("When notes are ready", isOn: $model.settings.notifyWhenReady)
+            Toggle("When a call starts (“Record this call?”)", isOn: $model.settings.callReminders)
+            Toggle("When the calendar meeting is over (“Stop recording?”)", isOn: $model.settings.endReminders)
+            if !model.notificationStatus.isEmpty {
+                Text("macOS: \(model.notificationStatus)").font(.caption).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                Button("Send a test") { model.sendTestNotification() }
+                Button("Notification settings…") { model.openNotificationSettings() }
+            }
+            .controlSize(.small)
+            Text("Tip: in Notification settings, choose “Persistent” so they stay until you click them. When notes are ready, the menu bar icon also shows ✓ Ready.")
+                .font(.caption2).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+        .onAppear { model.refreshNotificationStatus() }
+    }
+}
+
+struct EmailSection: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SectionTitle(text: "Email")
+            Picker("Write emails with", selection: $model.settings.emailApp) {
+                ForEach(EmailApp.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            if model.settings.emailApp == .gmail {
+                TextField("Gmail address (optional, if you use several)", text: $model.settings.gmailAccount)
+                    .textFieldStyle(.roundedBorder)
+            }
+            if model.settings.emailApp.isWeb {
+                Text("The draft opens in your browser, so the notes are sent to that website to create it.")
+                    .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
     }

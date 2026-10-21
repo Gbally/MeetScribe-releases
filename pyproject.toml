@@ -1,0 +1,20 @@
+[project]
+name = "meetscribe"
+version = "0.1.0"
+description = "Local meeting recorder, transcriber and note-taker for macOS"
+requires-python = ">=3.12"
+dependencies = [
+    "mlx-lm>=0.32.2",
+    "mlx-whisper>=0.4.3",
+    "numpy>=2.5.4",
+    "sherpa-onnx>=1.13.8",
+    "sherpa-onnx-core>=1.13.8",
+    "soundfile>=0.14.0",
+]
+
+[project.scripts]
+meetscribe = "meetscribe.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.13.4,<0.14.0"]
+build-backend = "uv_build"

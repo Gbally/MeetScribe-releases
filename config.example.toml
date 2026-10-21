@@ -1,0 +1,17 @@
+# Copy to config.toml and uncomment what you want to change.
+
+# notes_dir = "~/Documents/MeetingNotes"   # where meeting folders go
+# me = "Guillaume"                         # your name in transcripts (mic track)
+# app = "Microsoft Teams"                  # only capture this app's audio ("" = all system audio)
+
+# whisper_model = "mlx-community/whisper-large-v3-turbo"
+# language = "en"                          # "" = auto-detect (en, fr, …)
+# vocabulary = "FlagQuest, Supabase, AdMob" # names/jargon to spell correctly
+
+# diarization_threshold = 0.5              # lower = splits into more speakers
+
+# llm_backend = "mlx"                      # or "openai" for an Ollama / LM Studio server
+# llm_model = "mlx-community/Qwen3-8B-4bit" # try "mlx-community/Qwen3.5-9B-4bit" for better notes
+# llm_url = "http://localhost:11434/v1"    # Ollama; LM Studio = http://localhost:1234/v1
+# summary_language = "English"
+# max_context_tokens = 20000

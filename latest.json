@@ -1,0 +1,7 @@
+{
+ "version": "0.2.0",
+ "build": 21,
+ "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.2.0/MeetScribe-0.2.0.dmg",
+ "sha256": "8acf5209b29d0aa826751d97d590ae27efe9d23c291e83e61deec46c5c50eb07",
+ "notes": "First public version: local meeting notes, to-dos, briefs, ask your meetings, automatic updates."
+}

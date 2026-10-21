@@ -42,8 +42,13 @@ enum Windows {
     static func showSettings(_ model: AppModel, tab: SettingsTab? = nil) {
         if let tab { model.settingsTab = tab }
         if settings == nil {
-            settings = make(title: "MeetScribe Settings", size: NSSize(width: 720, height: 520),
-                            view: SettingsWindow().environmentObject(model), autosave: "Settings")
+            let w = make(title: "MeetScribe Settings", size: NSSize(width: 720, height: 520),
+                         view: SettingsWindow().environmentObject(model), autosave: "Settings")
+            // Closing it forgets temporary state (e.g. a custom model check); reopening starts fresh.
+            NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: w, queue: .main) { _ in
+                Task { @MainActor in Windows.settings = nil }
+            }
+            settings = w
         }
         present(settings!)
     }
@@ -131,6 +136,7 @@ struct BriefWindow: View {
 
 struct SettingsWindow: View {
     @EnvironmentObject var model: AppModel
+    @StateObject private var draft = CustomModelDraft()
 
     var body: some View {
         NavigationSplitView {
@@ -145,6 +151,7 @@ struct SettingsWindow: View {
                 .navigationTitle(model.settingsTab.title)
         }
         .frame(minWidth: 680, minHeight: 460)
+        .environmentObject(draft)
     }
 
     @ViewBuilder var pane: some View {
@@ -400,23 +407,34 @@ enum AppModelHolder {
 }
 
 /// Any model from Hugging Face, at the user's own risk.
+/// What the user typed and checked in "Custom model" — kept while the Settings window is open.
+final class CustomModelDraft: ObservableObject {
+    @Published var speech = false
+    @Published var links = [false: "", true: ""]   // one link per kind
+    @Published var checks: [Bool: CustomModelCheck] = [:]
+    @Published var checking = false
+}
+
 struct CustomModelSection: View {
     @EnvironmentObject var model: AppModel
-    @State private var speech = false
-    @State private var links = [false: "", true: ""]            // one link per kind
-    @State private var checks: [Bool: CustomModelCheck] = [:]
-    @State private var checking = false
+    @EnvironmentObject var draft: CustomModelDraft
     @State private var confirm = false
     private let hw = Hardware.current
 
+    private var speech: Bool { draft.speech }
+    private var checks: [Bool: CustomModelCheck] { draft.checks }
+    private var checking: Bool { draft.checking }
+
     private var link: Binding<String> {
-        Binding(get: { links[speech] ?? "" }, set: { links[speech] = $0; checks[speech] = nil })
+        // Only a real edit clears the result (the field re-sends its text when redrawn).
+        Binding(get: { draft.links[draft.speech] ?? "" },
+                set: { if $0 != draft.links[draft.speech] { draft.links[draft.speech] = $0; draft.checks[draft.speech] = nil } })
     }
 
     var body: some View {
         let check = checks[speech]
         Section {
-            Picker("Replace the", selection: $speech) {
+            Picker("Replace the", selection: $draft.speech) {
                 Text("Notes model").tag(false)
                 Text("Speech model").tag(true)
             }
@@ -471,14 +489,14 @@ struct CustomModelSection: View {
     }
 
     private func inspect() {
-        checking = true
-        let input = links[speech] ?? ""
+        draft.checking = true
+        let input = draft.links[speech] ?? ""
         let kind = speech
         Task {
             var c = await CustomModelCheck.inspect(input)
             if c.error == nil && model.phase == .ready { await c.checkCompatibility(speech: kind) }
-            checks[kind] = c
-            checking = false
+            draft.checks[kind] = c
+            draft.checking = false
         }
     }
 }

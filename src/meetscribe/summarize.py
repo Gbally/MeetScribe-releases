@@ -11,7 +11,8 @@ The transcript is machine-generated: it may contain recognition errors, and spea
 labelled by name or as "Speaker N". Only state what the transcript supports — never invent
 owners, dates or decisions. If something is unclear, say so."""
 
-NOTES_PROMPT = """Write the meeting notes in {language}, in Markdown, with exactly these sections:
+NOTES_PROMPT = """Write the meeting notes in {language}, in Markdown. Start with one line
+"Title: <a short title for this meeting, max 6 words>", then exactly these sections:
 
 ## Summary
 3–8 bullet points covering the main topics and outcomes.
@@ -29,7 +30,7 @@ Write "None recorded." if none.
 ## Open questions
 Unresolved questions or topics to follow up on (write "None." if none).
 
-Do not add a title or any other section.
+Do not add any other section.
 
 Transcript:
 {transcript}"""

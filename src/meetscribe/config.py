@@ -1,12 +1,16 @@
 """Settings, with optional overrides from config.toml at the project root."""
 
+import os
 import tomllib
 from dataclasses import dataclass, fields
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-CONFIG_FILE = PROJECT_ROOT / "config.toml"
-MODELS_DIR = PROJECT_ROOT / "models"
+# Data dir: the project folder when run from source, ~/Library/Application Support/MeetScribe
+# when run by the menu bar app (which sets MEETSCRIBE_HOME).
+HOME = Path(os.environ.get("MEETSCRIBE_HOME", PROJECT_ROOT))
+CONFIG_FILE = HOME / "config.toml"
+MODELS_DIR = HOME / "models"
 
 
 @dataclass

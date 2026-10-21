@@ -20,7 +20,7 @@ if [ ! -f models/nemo_en_titanet_small.onnx ]; then
   curl -fL -o models/nemo_en_titanet_small.onnx https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/nemo_en_titanet_small.onnx
 fi
 
-./recorder/build.sh
+./scripts/build_recorder.sh
 
 if [ "$1" = "--models" ]; then
   echo "Pre-downloading Whisper (~1.6 GB) and the summary model (~4.6 GB)…"

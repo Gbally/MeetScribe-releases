@@ -18,3 +18,7 @@ meetscribe = "meetscribe.cli:main"
 [build-system]
 requires = ["uv_build>=0.13.4,<0.14.0"]
 build-backend = "uv_build"
+
+[tool.uv]
+# mlx-whisper only needs torch to convert models, which we never do (saves ~0.5 GB).
+override-dependencies = ["torch; sys_platform == 'never'"]

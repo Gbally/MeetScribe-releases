@@ -15,3 +15,5 @@ bin/
 config.toml
 *.caf
 *.wav
+build-cache/
+dist/

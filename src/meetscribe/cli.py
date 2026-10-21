@@ -4,9 +4,11 @@
   meetscribe process <folder-or-audio-file> [--title T] [--room] [--speakers N]
   meetscribe rename <folder> "Speaker 1=Alice" "Speaker 2=Bob"
   meetscribe summarize <folder>
+  meetscribe setup
 """
 
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -72,7 +74,6 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
     from .transcript import drop_echo, group_words, merge, save_json, speaker_for
 
     t0 = time.time()
-    title = title or session.name
     tracks: list[list] = []
     languages = set()
 
@@ -97,7 +98,7 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
     else:
         system_words: list = []
         sys_file, mic_file = session / "system.caf", session / "mic.caf"
-        if sys_file.exists():
+        if has_audio(sys_file):
             audio = load_audio(sys_file)
             if is_silent(audio):
                 print("   system track is silent — skipping")
@@ -105,7 +106,7 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
                 step(f"Remote participants: transcribing + identifying speakers ({len(audio) / 16000 / 60:.0f} min)")
                 system_words, system_utts = diarized_track(audio, "Speaker ", speakers)
                 tracks.append(system_utts)
-        if mic_file.exists():
+        if has_audio(mic_file):
             audio = load_audio(mic_file)
             if room:
                 step(f"Room microphone: transcribing + identifying speakers ({len(audio) / 16000 / 60:.0f} min)")
@@ -122,9 +123,9 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
     if not utterances:
         sys.exit("No speech found in the recording.")
     meta = {"title": title, "languages": sorted(l for l in languages if l),
-            "duration": max(u.end for u in utterances), "created": datetime.now().isoformat(timespec="seconds")}
+            "duration": max(u.end for u in utterances), "created": started_at(session).isoformat(timespec="seconds")}
     save_json(utterances, session / "transcript.json", meta)
-    write_transcript(session, utterances, title)
+    write_transcript(session, utterances, title or "Meeting")
     print(f"   transcript ready in {time.time() - t0:.0f}s")
 
     if summary:
@@ -132,6 +133,18 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
         write_notes(session, cfg)
     print(f"\n✅ Done in {time.time() - t0:.0f}s → {session}")
 
+
+
+def has_audio(path: Path) -> bool:
+    return path.exists() and path.stat().st_size > 8192
+
+
+def started_at(session: Path) -> datetime:
+    """Recording start: from the app's meeting.json, else the folder's creation time."""
+    try:
+        return datetime.fromisoformat(json.loads((session / "meeting.json").read_text())["started"])
+    except Exception:
+        return datetime.fromtimestamp(session.stat().st_birthtime)
 
 
 def free_whisper():
@@ -154,17 +167,19 @@ def write_transcript(session: Path, utterances, title: str):
 
 
 def write_notes(session: Path, cfg: Config):
+    from .notes import parse_notes, split_title
     from .summarize import summarize
     from .transcript import fmt_time, load_json, to_plain
 
     utterances, meta = load_json(session / "transcript.json")
-    step(f"Writing notes with {cfg.llm_model}")
+    step("Writing the summary and to-do list")
     t0 = time.time()
-    body = summarize(to_plain(utterances), cfg)
+    ai_title, body = split_title(summarize(to_plain(utterances), cfg))
     speakers = list(dict.fromkeys(u.speaker for u in utterances))
     created = datetime.fromisoformat(meta["created"]) if "created" in meta else datetime.now()
+    title = meta.get("title") or ai_title or f"Meeting {created:%Y-%m-%d %H:%M}"
     header = [
-        f"# {meta['title']}",
+        f"# {title}",
         "",
         f"- **Date:** {created:%Y-%m-%d %H:%M}",
         f"- **Duration:** {fmt_time(meta['duration'])}",
@@ -174,6 +189,10 @@ def write_notes(session: Path, cfg: Config):
         "",
     ]
     (session / "notes.md").write_text("\n".join(header) + body + "\n")
+    write_transcript(session, utterances, title)
+    notes = {"title": title, "date": created.isoformat(timespec="seconds"), "duration": meta["duration"],
+             "participants": speakers, **parse_notes(body)}
+    (session / "notes.json").write_text(json.dumps(notes, indent=1, ensure_ascii=False))
     print(f"   notes ready in {time.time() - t0:.0f}s")
 
 
@@ -185,7 +204,7 @@ def cmd_process(args, cfg: Config):
         process_session(target, cfg, args.title or "", args.room, args.speakers, summary=not args.no_summary)
     elif target.is_file():
         session = new_session_dir(cfg, args.title or target.stem)
-        process_session(session, cfg, args.title or target.stem, args.room, args.speakers,
+        process_session(session, cfg, args.title or "", args.room, args.speakers,
                         audio_file=target, summary=not args.no_summary)
     else:
         sys.exit(f"Not found: {target}")
@@ -212,10 +231,16 @@ def cmd_rename(args, cfg: Config):
     for u in utterances:
         u.speaker = mapping.get(u.speaker, u.speaker)
     save_json(utterances, session / "transcript.json", meta)
-    write_transcript(session, utterances, meta["title"])
+    write_transcript(session, utterances, meta.get("title") or "Meeting")
     print("Transcript updated.")
     if not args.no_summary:
         write_notes(session, cfg)
+
+
+def cmd_setup(args, cfg: Config):
+    from .setup import run_setup
+
+    run_setup(cfg)
 
 
 def cmd_summarize(args, cfg: Config):
@@ -254,6 +279,9 @@ def main():
     sm = sub.add_parser("summarize", help="(re)write notes.md from transcript.json")
     sm.add_argument("folder")
     sm.set_defaults(func=cmd_summarize)
+
+    st = sub.add_parser("setup", help="download the speaker, speech and summary models")
+    st.set_defaults(func=cmd_setup)
 
     args = p.parse_args()
     args.func(args, load_config())

@@ -1,0 +1,23 @@
+Installing MeetScribe
+=====================
+
+Requires a Mac with Apple Silicon (M1 or newer), macOS 13 or later, 16 GB RAM
+recommended, and ~8 GB free disk space.
+
+1. Drag MeetScribe into the Applications folder.
+2. Open MeetScribe from Applications.
+   If macOS says it "can't be opened" / "cannot verify the developer":
+     System Settings → Privacy & Security → scroll down → "Open Anyway" next to MeetScribe.
+   (Only needed once.)
+3. A waveform icon appears in the menu bar (top right). Click it → "Download & set up"
+   (about 6 GB, 10–20 minutes, once).
+4. Allow the two permissions when asked:
+     • Microphone — your voice
+     • Screen & System Audio Recording — the other participants' voices
+   Then quit and reopen MeetScribe (menu ⋯ → Quit).
+
+Using it: click the icon → Start recording. Click again → Stop & create notes.
+Notes, to-dos and transcripts appear in the same window a few minutes later, and are saved in
+Documents/MeetingNotes.
+
+Everything runs on your Mac. Always tell participants that you are recording.

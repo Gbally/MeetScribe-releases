@@ -17,7 +17,34 @@ labelled with your name for free, and speaker separation only has to tell the re
 people apart (`Speaker 1`, `Speaker 2`, …). If you're not wearing headphones, the remote
 voices picked up by your mic are detected and removed.
 
-## Setup (once)
+## Menu bar app (recommended)
+
+Build the installer, then share `dist/MeetScribe-<version>.dmg` with colleagues:
+
+```sh
+./scripts/build_app.sh        # → build/MeetScribe.app + dist/MeetScribe-<version>.dmg (~16 MB)
+```
+
+The app is a waveform icon in the menu bar. Click it → **Start recording** (● + timer in the
+menu bar) → click again → **Stop & create notes**. A few minutes later the window shows the
+to-do list (tick items off), summary, decisions and open questions, with buttons to open the
+transcript, copy the notes for an email, name the speakers, etc. Every meeting stays in the
+history list. Also: transcribe an existing audio file, launch at login, notes folder, language
+and vocabulary in Settings.
+
+On first launch it installs its engine into `~/Library/Application Support/MeetScribe`
+(Python via the bundled `uv`) and downloads the models (~6 GB) — see `mac/INSTALL.txt`, which
+is included in the DMG. Requirements: Apple Silicon, macOS 13+, 16 GB RAM recommended.
+
+**Signing:** by default the app is ad-hoc signed, so on another Mac macOS blocks the first
+open (System Settings → Privacy & Security → Open Anyway). For a warning-free install, build
+with an Apple Developer ID (`SIGN_ID="Developer ID Application: …" ./scripts/build_app.sh`)
+and notarize the DMG (`xcrun notarytool submit dist/MeetScribe-*.dmg --wait`, then
+`xcrun stapler staple`) — or have IT deploy it via MDM.
+
+## Command line (for development)
+
+### Setup (once)
 
 ```sh
 ./setup.sh --models     # Python env, speaker models, recorder, Whisper + LLM (~6 GB)
@@ -31,7 +58,7 @@ Handy alias (add to `~/.zshrc`):
 allowed in System Settings → Privacy & Security → **Microphone** and **Screen & System
 Audio Recording**. Restart the terminal after granting.
 
-## Use
+### Use
 
 ```sh
 meetscribe record --title "Weekly sync"            # Ctrl+C when the meeting ends
@@ -47,7 +74,7 @@ meetscribe summarize <folder>                       # rewrite notes (e.g. after 
 Each meeting gets a folder in `~/Documents/MeetingNotes/` with `notes.md`,
 `transcript.md`, `transcript.json` and the raw audio (`mic.caf`, `system.caf`).
 
-## Tips
+### Tips
 
 - **Headphones** give the cleanest result (no echo to remove).
 - Put names and jargon in `vocabulary` in `config.toml` so Whisper spells them right.
@@ -59,7 +86,9 @@ Each meeting gets a folder in `~/Documents/MeetingNotes/` with `notes.md`,
 
 ## Layout
 
-- `recorder/Recorder.swift` — the capture tool (`bin/meeting-recorder`, built by `setup.sh`)
+- `mac/Shared/AudioCapture.swift` — mic + system audio capture (shared)
+- `mac/App/` — the menu bar app (SwiftUI); `mac/CLI/` — `bin/meeting-recorder`
+- `scripts/` — `build_app.sh` (app + DMG), `build_recorder.sh`, `make_icon.swift`
 - `src/meetscribe/` — `audio` (decode), `transcribe` (Whisper), `diarize` (speakers),
   `transcript` (merge, echo removal, output), `summarize` (LLM notes), `cli`
 
@@ -67,5 +96,5 @@ Each meeting gets a folder in `~/Documents/MeetingNotes/` with `notes.md`,
 
 - Voice enrollment: remember colleagues' voices → real names automatically
 - Live transcript while the meeting runs
-- Auto-start when a Teams call begins; menu-bar app
+- Auto-start when a Teams call begins
 - Export notes to OneNote / Outlook tasks

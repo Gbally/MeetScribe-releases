@@ -56,19 +56,34 @@ if ! "$GH" repo view "$RELEASES_REPO" >/dev/null 2>&1; then
   echo "• Creating the public repo $RELEASES_REPO"
   "$GH" repo create "$RELEASES_REPO" --public --description "MeetScribe installers and updates"
 fi
-echo "• GitHub release v$VERSION"
-"$GH" release create "v$VERSION" "$OUT/MeetScribe-$VERSION.dmg" --repo "$RELEASES_REPO" \
-  --title "MeetScribe $VERSION" --notes "$NOTES"
-echo "• latest.json, models.json, README"
 WORK="$ROOT/build-cache/releases-repo"
 rm -rf "$WORK" && mkdir -p "$WORK"
 git -C "$WORK" init -q -b main
 git -C "$WORK" remote add origin "https://github.com/$RELEASES_REPO.git"
 git -C "$WORK" fetch -q origin main 2>/dev/null && git -C "$WORK" checkout -q -B main origin/main || true
-cp "$OUT/latest.json" "$OUT/models.json" "$OUT/INSTALL.txt" "$OUT/README.md" "$WORK/"
-git -C "$WORK" add latest.json models.json INSTALL.txt README.md
-git -C "$WORK" commit -qm "MeetScribe $VERSION"
+
+# 1. Page files first (a release can't be created in an empty repository).
+echo "• README, INSTALL, models.json"
+cp "$OUT/models.json" "$OUT/INSTALL.txt" "$OUT/README.md" "$WORK/"
+git -C "$WORK" add models.json INSTALL.txt README.md
+git -C "$WORK" diff --cached --quiet || git -C "$WORK" commit -qm "MeetScribe $VERSION: page and models"
 git -C "$WORK" push -q -u origin main
+
+# 2. The release with the installer (skipped if it already exists).
+if "$GH" release view "v$VERSION" --repo "$RELEASES_REPO" >/dev/null 2>&1; then
+  echo "• Release v$VERSION already exists"
+else
+  echo "• GitHub release v$VERSION"
+  "$GH" release create "v$VERSION" "$OUT/MeetScribe-$VERSION.dmg" --repo "$RELEASES_REPO" \
+    --target main --title "MeetScribe $VERSION" --notes "$NOTES"
+fi
+
+# 3. Last: latest.json, so apps only see an update once its download exists.
+echo "• latest.json"
+cp "$OUT/latest.json" "$WORK/"
+git -C "$WORK" add latest.json
+git -C "$WORK" diff --cached --quiet || git -C "$WORK" commit -qm "MeetScribe $VERSION"
+git -C "$WORK" push -q origin main
 if git remote get-url origin >/dev/null 2>&1; then
   git tag -f "v$VERSION" && git push -q origin "v$VERSION"
 fi

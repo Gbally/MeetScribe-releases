@@ -1,7 +1,7 @@
 {
- "version": "0.3.1",
- "build": 35,
- "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.3.1/MeetScribe-0.3.1.dmg",
- "sha256": "ff238dd4e386d5172798298f2c2330a60c77d454719a4e7f4942cbf5eb6fa032",
- "notes": "Anonymous usage statistics (recording length, models used \u2014 never your content; can be turned off in Settings \u2192 Privacy). Update notifications. Small fixes."
+ "version": "0.4.0",
+ "build": 38,
+ "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.4.0/MeetScribe-0.4.0.dmg",
+ "sha256": "eb4d6bc55ffe723de452a3ba9f5aec01918e7332b6a8454201b26313479324e3",
+ "notes": "MeetScribe now speaks English, French, Spanish, Portuguese, Japanese and Chinese \u2014 it follows your Mac's language, or pick one in Settings \u2192 General (switches instantly)."
 }

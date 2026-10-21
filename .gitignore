@@ -17,3 +17,4 @@ config.toml
 *.wav
 build-cache/
 dist/
+signing/

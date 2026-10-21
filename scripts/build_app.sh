@@ -60,13 +60,23 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 
 echo "• Signing"
+KC="$ROOT/signing/MeetScribe-signing.keychain-db"
 if [ -n "$SIGN_ID" ]; then
   codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$APP/Contents/MacOS/uv"
   codesign --force --options runtime --timestamp --entitlements mac/MeetScribe.entitlements --sign "$SIGN_ID" "$APP"
+elif [ -f "$KC" ]; then
+  # Stable local identity (scripts/make_signing_identity.sh): permissions survive updates.
+  security unlock-keychain -p "$(cat "$ROOT/signing/keychain-password")" "$KC"
+  HASH=$(security find-identity "$KC" | sed -n 's/.*) \([0-9A-F]\{40\}\) "MeetScribe Local Signing".*/\1/p' | head -1)
+  codesign --force --keychain "$KC" --sign "$HASH" "$APP/Contents/MacOS/uv"
+  codesign --force --keychain "$KC" --sign "$HASH" "$APP"
 else
+  echo "  ⚠️  ad-hoc signature: macOS will re-ask for permissions after every update."
+  echo "     Run scripts/make_signing_identity.sh once to fix that."
   codesign --force --sign - "$APP/Contents/MacOS/uv"
   codesign --force --sign - "$APP"
 fi
+codesign -dr - "$APP" 2>&1 | sed -n 's/^designated => /  identity: /p'
 
 echo "• DMG"
 STAGE=build/dmg && mkdir -p "$STAGE"

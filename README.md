@@ -47,7 +47,12 @@ On first launch it installs its engine into `~/Library/Application Support/MeetS
 (Python via the bundled `uv`) and downloads the models (~6 GB) — see `mac/INSTALL.txt`, which
 is included in the DMG. Requirements: Apple Silicon, macOS 13+, 16 GB RAM recommended.
 
-**Signing:** by default the app is ad-hoc signed, so on another Mac macOS blocks the first
+**Permissions across updates:** macOS remembers permissions per code signature. Run
+`./scripts/make_signing_identity.sh` once: it creates a fixed self-signed identity in
+`signing/` (its own keychain file, gitignored — **back it up**), and every build is signed with it,
+so permissions survive updates. Without it, builds are ad-hoc signed and every update re-asks.
+
+**Signing:** without a Developer ID the app is self-signed, so on another Mac macOS blocks the first
 open (System Settings → Privacy & Security → Open Anyway). For a warning-free install, build
 with an Apple Developer ID (`SIGN_ID="Developer ID Application: …" ./scripts/build_app.sh`)
 and notarize the DMG (`xcrun notarytool submit dist/MeetScribe-*.dmg --wait`, then

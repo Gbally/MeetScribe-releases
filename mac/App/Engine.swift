@@ -84,14 +84,31 @@ enum Engine {
                     DispatchQueue.main.async { rest.forEach(onLine) }
                     let tail = errLines.recent.filter { !$0.hasPrefix("Fetching") && !$0.contains("Warning") }
                         .suffix(6).joined(separator: "\n")
+                    log("\(exe.lastPathComponent) \(args.prefix(2).joined(separator: " ")) → exit \(p.terminationStatus)"
+                        + (p.terminationStatus == 0 ? "" : "\n" + errLines.recent.suffix(20).joined(separator: "\n")))
                     cont.resume(returning: Result(ok: p.terminationStatus == 0, errorTail: tail))
                 }
                 do { try process.run() } catch {
+                    log("could not start \(exe.path): \(error.localizedDescription)")
                     cont.resume(returning: Result(ok: false, errorTail: error.localizedDescription))
                 }
             }
         } onCancel: {
             if process.isRunning { process.terminate() }
+        }
+    }
+
+    /// Appends to ~/Library/Application Support/MeetScribe/engine.log (kept under ~1 MB).
+    static func log(_ message: String) {
+        let url = support.appendingPathComponent("engine.log")
+        let line = "[\(ISO8601DateFormatter().string(from: Date()))] \(message)\n"
+        if let size = try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int, size > 1_000_000 {
+            try? FileManager.default.removeItem(at: url)
+        }
+        if let h = try? FileHandle(forWritingTo: url) {
+            h.seekToEndOfFile(); h.write(line.data(using: .utf8)!); try? h.close()
+        } else {
+            try? line.write(to: url, atomically: true, encoding: .utf8)
         }
     }
 

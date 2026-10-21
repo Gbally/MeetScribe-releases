@@ -70,14 +70,9 @@ final class AppModel: ObservableObject {
         } else {
             settings = AppSettings()
         }
-        try? FileManager.default.createDirectory(at: settings.notesFolder, withIntermediateDirectories: true)
         reload()
         if phase == .needsSetup && FileManager.default.fileExists(atPath: Engine.python.path) {
             runSetup() // app was updated: refresh the engine quietly (models are already downloaded)
-        }
-        if phase == .ready {
-            // Finish meetings that were recorded but not processed (app quit / crashed meanwhile).
-            for m in meetings where m.needsProcessing { enqueue(.process(m.id)) }
         }
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
@@ -106,13 +101,36 @@ final class AppModel: ObservableObject {
 
     private func saveSettings() {
         if let data = try? JSONEncoder().encode(settings) { UserDefaults.standard.set(data, forKey: "settings") }
-        try? FileManager.default.createDirectory(at: settings.notesFolder, withIntermediateDirectories: true)
         reload()
     }
 
+    private var reloadGeneration = 0
+    private var resumedUnprocessed = false
+
+    /// Rescans the meeting folders in the background. (Reading ~/Documents can make macOS ask
+    /// for permission, which blocks the caller until answered — never do that on the main thread.)
     func reload() {
-        meetings = (Meeting.loadAll(in: Self.workDir) + Meeting.loadAll(in: settings.notesFolder))
-            .sorted { $0.date > $1.date }
+        reloadGeneration += 1
+        let generation = reloadGeneration
+        let roots = [Self.workDir, settings.notesFolder]
+        Task.detached(priority: .userInitiated) { [weak self] in
+            try? FileManager.default.createDirectory(at: roots[1], withIntermediateDirectories: true)
+            let all = roots.flatMap { Meeting.loadAll(in: $0) }.sorted { $0.date > $1.date }
+            await self?.applyReload(all, generation)
+        }
+    }
+
+    private func applyReload(_ all: [Meeting], _ generation: Int) {
+        guard generation == reloadGeneration else { return }
+        meetings = all
+        resumeUnprocessed()
+    }
+
+    /// Finish meetings that were recorded but never processed (app quit or crashed meanwhile).
+    private func resumeUnprocessed() {
+        guard phase == .ready, !resumedUnprocessed else { return }
+        resumedUnprocessed = true
+        for m in meetings where m.needsProcessing && m.id != recordingID { enqueue(.process(m.id)) }
     }
 
     func meeting(_ id: Meeting.ID) -> Meeting? { meetings.first { $0.id == id } }
@@ -126,6 +144,7 @@ final class AppModel: ObservableObject {
 
     func runSetup() {
         guard phase != .settingUp else { return }
+        Engine.log("setup \(Engine.appVersion) (installed: \(Engine.isInstalled))")
         phase = .settingUp
         setupError = nil
         setupProgress = nil
@@ -147,7 +166,8 @@ final class AppModel: ObservableObject {
             Engine.markInstalled()
             phase = .ready
             setupStatus = ""
-            for m in meetings where m.needsProcessing { enqueue(.process(m.id)) }
+            resumedUnprocessed = false
+            resumeUnprocessed()
             if micPermission == .notDetermined {
                 _ = await MicCapture.requestPermission()
                 refreshPermissions()
@@ -292,6 +312,7 @@ final class AppModel: ObservableObject {
             let result = await Engine.meetscribe(args) { [weak self] line in
                 if line.hasPrefix("→ ") { self?.jobStatus = String(line.dropFirst(2)) }
             }
+            var finalFolder = folder
             if let folder {
                 if result.ok {
                     try? FileManager.default.removeItem(at: folder.appendingPathComponent("error.txt"))
@@ -299,7 +320,7 @@ final class AppModel: ObservableObject {
                         if !settings.keepAudio {
                             for f in ["mic.caf", "system.caf"] { try? FileManager.default.removeItem(at: folder.appendingPathComponent(f)) }
                         }
-                        await moveToNotesFolder(folder)
+                        finalFolder = await moveToNotesFolder(folder)
                     }
                 } else if !Task.isCancelled {
                     let msg = result.errorTail.isEmpty ? "Processing failed." : result.errorTail
@@ -307,7 +328,7 @@ final class AppModel: ObservableObject {
                 }
             }
             reload()
-            notify(job: job, ok: result.ok, folder: folder)
+            notify(job: job, ok: result.ok, folder: finalFolder)
             currentJob = nil
             jobStatus = ""
             runNext()
@@ -315,7 +336,11 @@ final class AppModel: ObservableObject {
     }
 
     private func arguments(for job: Job) -> ([String], URL?) {
-        func folder(_ id: Meeting.ID) -> URL { meeting(id)?.folder ?? settings.notesFolder.appendingPathComponent(id) }
+        func folder(_ id: Meeting.ID) -> URL {
+            if let m = meeting(id) { return m.folder }
+            let work = Self.workDir.appendingPathComponent(id)
+            return FileManager.default.fileExists(atPath: work.path) ? work : settings.notesFolder.appendingPathComponent(id)
+        }
         switch job {
         case .process(let id):
             let f = folder(id)
@@ -331,13 +356,15 @@ final class AppModel: ObservableObject {
     }
 
     /// A processed recording leaves the working folder for the (possibly synced) notes folder.
-    private func moveToNotesFolder(_ folder: URL) async {
-        guard folder.deletingLastPathComponent().standardizedFileURL == Self.workDir.standardizedFileURL else { return }
+    /// Returns where the meeting ended up.
+    private func moveToNotesFolder(_ folder: URL) async -> URL {
+        guard folder.deletingLastPathComponent().standardizedFileURL == Self.workDir.standardizedFileURL else { return folder }
         let dest = settings.notesFolder.appendingPathComponent(folder.lastPathComponent, isDirectory: true)
-        await Task.detached {
+        return await Task.detached { () -> URL in
             let fm = FileManager.default
             try? fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if !fm.fileExists(atPath: dest.path) { try? fm.moveItem(at: folder, to: dest) }
+            if !fm.fileExists(atPath: dest.path), (try? fm.moveItem(at: folder, to: dest)) != nil { return dest }
+            return folder
         }.value
     }
 
@@ -379,7 +406,7 @@ final class AppModel: ObservableObject {
 
     private func notify(job: Job, ok: Bool, folder: URL?) {
         let content = UNMutableNotificationContent()
-        let title = folder.flatMap { f in meetings.first { $0.folder == f }?.title } ?? "Meeting"
+        let title = folder.flatMap { Meeting.load($0)?.title } ?? "Meeting"
         if ok {
             content.title = "Notes ready"
             content.body = "\(title) — click the MeetScribe icon in the menu bar."

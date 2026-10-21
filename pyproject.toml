@@ -1,6 +1,6 @@
 [project]
 name = "meetscribe"
-version = "0.3.0"
+version = "0.3.1"
 description = "Local meeting recorder, transcriber and note-taker for macOS"
 requires-python = ">=3.12"
 dependencies = [

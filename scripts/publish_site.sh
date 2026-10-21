@@ -10,6 +10,8 @@ WORK=build-cache/site-repo
 rm -rf "$WORK" && mkdir -p "$WORK"
 git -C "$WORK" init -q -b main
 git -C "$WORK" remote add origin "https://github.com/$REPO.git"
+git -C "$WORK" config user.name "$(git config user.name)"
+git -C "$WORK" config user.email "$(git config user.email)"
 git -C "$WORK" fetch -q origin main && git -C "$WORK" checkout -q -B main origin/main
 cp -R website/. "$WORK/"
 touch "$WORK/.nojekyll"   # serve files as they are

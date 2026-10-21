@@ -60,6 +60,8 @@ WORK="$ROOT/build-cache/releases-repo"
 rm -rf "$WORK" && mkdir -p "$WORK"
 git -C "$WORK" init -q -b main
 git -C "$WORK" remote add origin "https://github.com/$RELEASES_REPO.git"
+git -C "$WORK" config user.name "$(git config user.name)"
+git -C "$WORK" config user.email "$(git config user.email)"
 git -C "$WORK" fetch -q origin main 2>/dev/null && git -C "$WORK" checkout -q -B main origin/main || true
 
 # 1. Page files first (a release can't be created in an empty repository).

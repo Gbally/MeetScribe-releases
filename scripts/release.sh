@@ -70,8 +70,16 @@ git -C "$WORK" diff --cached --quiet || git -C "$WORK" commit -qm "MeetScribe $V
 git -C "$WORK" push -q -u origin main
 
 # 2. The release with the installer (skipped if it already exists).
+SHA=$(python3 -c "import json; print(json.load(open('$OUT/latest.json'))['sha256'])")
 if "$GH" release view "v$VERSION" --repo "$RELEASES_REPO" >/dev/null 2>&1; then
-  echo "• Release v$VERSION already exists"
+  REMOTE=$("$GH" api "repos/$RELEASES_REPO/releases/tags/v$VERSION" --jq '.assets[] | select(.name=="MeetScribe-'"$VERSION"'.dmg") | .digest' 2>/dev/null)
+  if [ "$REMOTE" = "sha256:$SHA" ]; then
+    echo "• Release v$VERSION already has this installer"
+  else
+    # Re-prepared after publishing: the installer must match latest.json or updates fail.
+    echo "• Release v$VERSION exists with a different installer — replacing it"
+    "$GH" release upload "v$VERSION" "$OUT/MeetScribe-$VERSION.dmg" --clobber --repo "$RELEASES_REPO"
+  fi
 else
   echo "• GitHub release v$VERSION"
   "$GH" release create "v$VERSION" "$OUT/MeetScribe-$VERSION.dmg" --repo "$RELEASES_REPO" \
@@ -85,6 +93,6 @@ git -C "$WORK" add latest.json
 git -C "$WORK" diff --cached --quiet || git -C "$WORK" commit -qm "MeetScribe $VERSION"
 git -C "$WORK" push -q origin main
 if git remote get-url origin >/dev/null 2>&1; then
-  git tag -f "v$VERSION" && git push -q origin "v$VERSION"
+  git tag -f "v$VERSION" && git push -q --force origin "v$VERSION"
 fi
 echo "✅ Released MeetScribe $VERSION — installed apps will offer the update within a day."

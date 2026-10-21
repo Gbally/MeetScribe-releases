@@ -31,6 +31,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             Windows.showSettings(model, tab: tab)
         }
         if args.contains("--preview") { Windows.showPreview(model) }
+        if let i = args.firstIndex(of: "--meeting"), i + 1 < args.count {
+            let id = args[i + 1]
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { Windows.showMeeting(id, model: self.model) }
+        }
     }
 
     // Show our banners even while the app is active.

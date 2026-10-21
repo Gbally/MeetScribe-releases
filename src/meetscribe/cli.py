@@ -79,13 +79,17 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
 
     t0 = time.time()
     tracks: list[list] = []
+    track_names: list[str] = []  # which audio was usable: "meeting", "mic", "room", "file"
     languages = set()
     session_prints: dict = {}  # label → voiceprint, saved so naming a speaker teaches the library
 
-    def diarized_track(audio, prefix: str, n: int, exclude: set[str] = frozenset()):
+    def diarized_track(audio, prefix: str, n: int, exclude: set[str] = frozenset(), guess_me: bool = False):
         # Diarization (+ voiceprints) runs on the CPU while Whisper uses the GPU.
+        # Voices re-recorded through laptop speakers sound alike less: be stricter (fewer splits).
+        threshold = max(cfg.diarization_threshold, 0.8) if guess_me else cfg.diarization_threshold
+
         def who():
-            turns = diarize(audio, n, cfg.diarization_threshold)
+            turns = diarize(audio, n, threshold)
             return turns, speaker_prints(audio, turns)
 
         with ThreadPoolExecutor(1) as pool:
@@ -95,6 +99,16 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
         languages.add(lang)
         known = identify(prints, exclude)
         labels = {spk: known[spk][0] if spk in known else f"{prefix}{spk + 1}" for spk in {t.speaker for t in turns}}
+        if guess_me and cfg.me not in labels.values() and len(labels) > 1:
+            # On your own mic you're the closest voice: clearly the loudest speaker is you.
+            loud = {}
+            for spk in labels:
+                seg = [audio[int(t.start * 16000): int(t.end * 16000)] for t in turns if t.speaker == spk and spk not in known]
+                if seg:
+                    loud[spk] = float(np.sqrt(np.mean(np.concatenate(seg) ** 2)))
+            ranked = sorted(loud, key=loud.get, reverse=True)
+            if len(ranked) >= 2 and loud[ranked[0]] >= 1.4 * loud[ranked[1]]:
+                labels[ranked[0]] = cfg.me
         for spk, p in prints.items():
             session_prints[labels[spk]] = p
         recognised = ", ".join(f"{name} ({sim:.0%})" for name, sim in known.values())
@@ -108,6 +122,7 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
         audio = load_audio(audio_file)
         step(f"Transcribing + identifying speakers ({len(audio) / 16000 / 60:.0f} min of audio)")
         tracks.append(diarized_track(audio, "Speaker ", speakers)[1])
+        track_names.append("file")
     else:
         system_words: list = []
         sys_file, mic_file = session / "system.caf", session / "mic.caf"
@@ -119,11 +134,18 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
                 step(f"Remote participants: transcribing + identifying speakers ({len(audio) / 16000 / 60:.0f} min)")
                 system_words, system_utts = diarized_track(audio, "Speaker ", speakers, exclude={cfg.me})
                 tracks.append(system_utts)
+                track_names.append("meeting")
         if has_audio(mic_file):
             audio = load_audio(mic_file)
+            if not room and not system_words:
+                # No meeting audio (permission missing, or an in-person meeting): everyone is on
+                # the mic, so separate the voices instead of labelling them all as you.
+                print("   no meeting audio — separating the voices on your microphone")
+                room = True
             if room:
                 step(f"Room microphone: transcribing + identifying speakers ({len(audio) / 16000 / 60:.0f} min)")
-                tracks.append(diarized_track(audio, "Speaker ", speakers)[1])
+                tracks.append(diarized_track(audio, "Speaker ", speakers, guess_me=True)[1])
+                track_names.append("room")
             else:
                 step(f"Your microphone: transcribing ({len(audio) / 16000 / 60:.0f} min)")
                 words, lang = transcribe(audio, cfg.whisper_model, cfg.language, cfg.vocabulary)
@@ -131,7 +153,9 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
                 own = drop_echo(words, system_words)
                 print(f"   {len(own)} words ({len(words) - len(own)} dropped as speaker echo)")
                 tracks.append(group_words(own, lambda w: cfg.me))
+                track_names.append("mic")
                 # Learn your own voice too (helps in-room meetings and imported recordings).
+                # Only here: with the meeting audio on its own track, the mic is really just you.
                 spans = [audio[int(w.start * 16000): int(w.end * 16000)] for w in own]
                 if cfg.me != "Me" and sum(len(x) for x in spans) > 16000 * 5:
                     enroll(cfg.me, [embed(np.concatenate(spans)[: 16000 * 60])])
@@ -141,7 +165,7 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
         sys.exit("No speech found in the recording.")
     if session_prints:
         save_session_prints(session, session_prints)
-    meta = {"title": title, "languages": sorted(l for l in languages if l),
+    meta = {"title": title, "languages": sorted(l for l in languages if l), "tracks": track_names,
             "duration": max(u.end for u in utterances), "created": started_at(session).isoformat(timespec="seconds")}
     save_json(utterances, session / "transcript.json", meta)
     write_transcript(session, utterances, title or "Meeting")
@@ -212,7 +236,7 @@ def write_notes(session: Path, cfg: Config):
     (session / "notes.md").write_text("\n".join(header) + body + "\n")
     write_transcript(session, utterances, title)
     notes = {"title": title, "date": created.isoformat(timespec="seconds"), "duration": meta["duration"],
-             "participants": speakers, **parse_notes(body)}
+             "participants": speakers, "tracks": meta.get("tracks", []), **parse_notes(body)}
     (session / "notes.json").write_text(json.dumps(notes, indent=1, ensure_ascii=False))
     print(f"   notes ready in {time.time() - t0:.0f}s")
 
@@ -288,7 +312,7 @@ def cmd_rename(args, cfg: Config):
         if old in prints:
             p = prints.pop(old)
             prints[new] = p
-            if not re.fullmatch(r"Speaker \d+", new) and new != cfg.me:
+            if not re.fullmatch(r"Speaker \d+", new):
                 enroll(new, [p])
                 print(f"Learned {new}'s voice.")
     if prints:

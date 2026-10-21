@@ -8,7 +8,7 @@
 # language = "en"                          # "" = auto-detect (en, fr, …)
 # vocabulary = "FlagQuest, Supabase, AdMob" # names/jargon to spell correctly
 
-# diarization_threshold = 0.5              # lower = splits into more speakers
+# diarization_threshold = 0.7              # lower = splits into more speakers
 
 # llm_backend = "mlx"                      # or "openai" for an Ollama / LM Studio server
 # llm_model = "mlx-community/Qwen3-8B-4bit" # try "mlx-community/Qwen3.5-9B-4bit" for better notes

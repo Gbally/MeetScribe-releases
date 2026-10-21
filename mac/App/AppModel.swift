@@ -90,6 +90,7 @@ final class AppModel: ObservableObject {
         }
         callMonitor.start()
         refreshCalendar()
+        if phase == .ready { askForScreenAudioIfNeeded() }
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
             // Make sure the recording files are finalized if the app is quit mid-meeting.
             let sem = DispatchSemaphore(value: 0)
@@ -135,6 +136,28 @@ final class AppModel: ObservableObject {
 
     func meeting(_ id: Meeting.ID) -> Meeting? { meetings.first { $0.id == id } }
 
+    /// Shows macOS's "record screen & system audio" request (and adds MeetScribe to the list in
+    /// System Settings) without waiting for the first recording to fail.
+    private func askForScreenAudioIfNeeded() {
+        guard !SystemAudioCapture.hasPermission else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { _ = CGRequestScreenCaptureAccess() }
+    }
+
+    /// macOS applies a new Screen & System Audio permission only to a fresh launch.
+    func restartApp() {
+        let url = Bundle.main.bundleURL
+        let rec = recorder
+        Task {
+            await rec?.stop()
+            // Relaunch shortly after we quit (the new instance would otherwise see us running).
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/bin/sh")
+            task.arguments = ["-c", "sleep 1; /usr/bin/open \"$0\"", url.path]
+            try? task.run()
+            NSApp.terminate(nil)
+        }
+    }
+
     func refreshPermissions() {
         micPermission = MicCapture.permission
         screenPermission = SystemAudioCapture.hasPermission
@@ -168,6 +191,7 @@ final class AppModel: ObservableObject {
             setupStatus = ""
             resumedUnprocessed = false
             resumeUnprocessed()
+            askForScreenAudioIfNeeded()
             if micPermission == .notDetermined {
                 _ = await MicCapture.requestPermission()
                 refreshPermissions()
@@ -550,6 +574,24 @@ final class AppModel: ObservableObject {
         guard let i = meetings.firstIndex(where: { $0.id == id }) else { return }
         if meetings[i].done.contains(index) { meetings[i].done.remove(index) } else { meetings[i].done.insert(index) }
         try? JSONEncoder().encode(Array(meetings[i].done).sorted()).write(to: meetings[i].url("todo.json"))
+    }
+
+    /// Removes one action item (e.g. a wrong one) from a meeting's to-do list.
+    func deleteTodo(_ id: Meeting.ID, _ index: Int) {
+        guard let i = meetings.firstIndex(where: { $0.id == id }) else { return }
+        let m = meetings[i]
+        guard let data = try? Data(contentsOf: m.url("notes.json")),
+              var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              var actions = json["actions"] as? [Any], index < actions.count else { return }
+        actions.remove(at: index)
+        json["actions"] = actions
+        guard let out = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted]) else { return }
+        try? out.write(to: m.url("notes.json"), options: .atomic)
+        // Done flags after the removed item shift down by one.
+        let done = Set(m.done.compactMap { $0 == index ? nil : ($0 > index ? $0 - 1 : $0) })
+        try? JSONEncoder().encode(Array(done).sorted()).write(to: m.url("todo.json"))
+        if var notes = m.notes { notes.actions.remove(at: index); meetings[i].notes = notes }
+        meetings[i].done = done
     }
 
     func delete(_ id: Meeting.ID) {

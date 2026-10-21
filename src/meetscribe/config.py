@@ -31,7 +31,7 @@ class Config:
     vocabulary: str = ""
 
     # Speaker separation: clustering threshold (lower = more speakers), 0 < x < 1.
-    diarization_threshold: float = 0.5
+    diarization_threshold: float = 0.7
 
     # Summary. backend = "mlx" (in-process, default) or "openai" (Ollama / LM Studio server).
     llm_backend: str = "mlx"

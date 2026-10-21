@@ -25,6 +25,11 @@ struct MeetingNotes: Codable {
     var decisions: [String]
     var actions: [ActionItem]
     var questions: [String]
+    var tracks: [String]?
+
+    /// Recorded by the app, but only the microphone had sound: the other participants were
+    /// only captured through the speakers (usually: Screen & System Audio permission missing).
+    var missingMeetingAudio: Bool { tracks?.contains("room") == true }
 }
 
 struct MeetingInfo: Codable {
@@ -60,6 +65,25 @@ struct Meeting: Identifiable, Equatable {
     static func == (a: Meeting, b: Meeting) -> Bool {
         a.id == b.id && a.notes?.title == b.notes?.title && a.error == b.error
             && a.hasTranscript == b.hasTranscript && a.done == b.done && a.hasAudio == b.hasAudio
+    }
+
+    /// Speaker labels nobody has named yet ("Speaker 2"…).
+    var unnamedSpeakers: [String] {
+        (notes?.participants ?? []).filter { $0.range(of: #"^Speaker \d+$"#, options: .regularExpression) != nil }
+    }
+
+    /// The first things each speaker said, to help tell who is who.
+    func samples(perSpeaker n: Int = 3) -> [String: [String]] {
+        guard let data = try? Data(contentsOf: url("transcript.json")),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let utts = json["utterances"] as? [[String: Any]] else { return [:] }
+        var out: [String: [String]] = [:]
+        for u in utts {
+            guard let spk = u["speaker"] as? String, let text = u["text"] as? String,
+                  text.split(separator: " ").count >= 4, (out[spk]?.count ?? 0) < n else { continue }
+            out[spk, default: []].append(text.count > 140 ? String(text.prefix(140)) + "…" : text)
+        }
+        return out
     }
 
     var title: String {

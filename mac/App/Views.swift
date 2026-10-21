@@ -109,6 +109,7 @@ struct HomeView: View {
     @Binding var route: Route
     @State private var title = ""
     @State private var confirmDiscard = false
+    @State private var deleting: Meeting?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -259,7 +260,25 @@ struct HomeView: View {
         ForEach(past) { m in
             Button { route = .meeting(m.id) } label: { MeetingRow(meeting: m) }
                 .buttonStyle(.plain)
+                .contextMenu {
+                    Button("Open") { route = .meeting(m.id) }
+                    Button("Email the notes…") { model.emailNotes(m.id) }.disabled(m.notes == nil)
+                    Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([m.folder]) }
+                    Divider()
+                    Button("Delete…", role: .destructive) { deleting = m }
+                        .disabled(model.isBusy(m.id) || m.id == model.recordingID)
+                }
         }
+        if !past.isEmpty {
+            Text("Right-click a meeting to delete it.").font(.caption2).foregroundColor(.secondary)
+        }
+        Color.clear.frame(height: 0)
+            .confirmationDialog("Delete “\(deleting?.title ?? "")”?", isPresented: Binding(
+                get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+                Button("Move to Trash", role: .destructive) { if let d = deleting { model.delete(d.id) } }
+            } message: {
+                Text("The notes, transcript and audio go to the Trash (you can still restore them from there).")
+            }
     }
 }
 
@@ -366,8 +385,12 @@ struct PermissionsCard: View {
                         model.refreshPermissions()
                     }
                 }
-                Text("After allowing Screen & System Audio Recording, quit and reopen MeetScribe.")
-                    .font(.caption).foregroundColor(.secondary)
+                HStack {
+                    Text("Already allowed? macOS applies it after a restart.")
+                        .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button("Restart MeetScribe") { model.restartApp() }.controlSize(.small)
+                }
             }
         }
     }
@@ -470,12 +493,39 @@ struct MeetingView: View {
                 }
             }
 
+            if let n = m.notes, n.missingMeetingAudio {
+                Card {
+                    Label("The meeting audio wasn't recorded", systemImage: "speaker.slash").font(.callout.weight(.medium))
+                        .foregroundColor(.orange)
+                    Text("Only your microphone was captured, so other people's voices were picked up through your speakers — speaker names may be less reliable. Check Screen & System Audio Recording for MeetScribe in System Settings.")
+                        .font(.caption).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if !m.unnamedSpeakers.isEmpty && !model.isBusy(id) && m.notes != nil {
+                Button { route = .speakers(id) } label: {
+                    HStack {
+                        Image(systemName: "person.crop.circle.badge.questionmark").foregroundColor(.accentColor)
+                        Text("\(m.unnamedSpeakers.count) speaker\(m.unnamedSpeakers.count == 1 ? "" : "s") without a name — name them")
+                            .font(.callout)
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
+                    }
+                    .padding(10)
+                    .contentShape(Rectangle())
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.accentColor.opacity(0.08)))
+                }
+                .buttonStyle(.plain)
+            }
             if let n = m.notes {
                 if !n.actions.isEmpty {
                     SectionTitle(text: "To-do")
                     ForEach(Array(n.actions.enumerated()), id: \.offset) { i, a in
                         Button { model.toggleDone(id, i) } label: { todoRow(a, done: m.done.contains(i)) }
                             .buttonStyle(.plain)
+                            .contextMenu {
+                                Button(m.done.contains(i) ? "Mark as not done" : "Mark as done") { model.toggleDone(id, i) }
+                                Button("Delete this to-do", role: .destructive) { model.deleteTodo(id, i) }
+                            }
                     }
                 }
                 bullets("Summary", n.summary)
@@ -528,6 +578,7 @@ struct SpeakersView: View {
     var id: Meeting.ID
     @Binding var route: Route
     @State private var names: [String: String] = [:]
+    @State private var samples: [String: [String]] = [:]
 
     var speakers: [String] { model.meeting(id)?.notes?.participants ?? [] }
 
@@ -537,17 +588,29 @@ struct SpeakersView: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Listen to the transcript to work out who is who, then type their names. The notes are regenerated with the names.")
+                    Text("Read what each speaker said, then type their name. MeetScribe remembers their voice for next time, and the notes are rewritten with the names. Same person split in two? Give both the same name.")
                         .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
-                    Button("Open transcript") { model.meeting(id).map { openFile($0.url("transcript.md")) } }
-                        .controlSize(.small)
                     ForEach(speakers, id: \.self) { s in
-                        HStack {
-                            Text(s).frame(width: 110, alignment: .leading)
-                            TextField("Name", text: Binding(get: { names[s] ?? "" }, set: { names[s] = $0 }))
-                                .textFieldStyle(.roundedBorder)
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text(s).font(.callout.weight(.semibold)).frame(width: 100, alignment: .leading)
+                                TextField("Name", text: Binding(get: { names[s] ?? "" }, set: { names[s] = $0 }))
+                                    .textFieldStyle(.roundedBorder)
+                                if !model.settings.myName.isEmpty && s != model.settings.myName {
+                                    Button("Me") { names[s] = model.settings.myName }.controlSize(.small)
+                                        .help("This speaker is you")
+                                }
+                            }
+                            ForEach(samples[s] ?? [], id: \.self) { line in
+                                Text("“\(line)”").font(.caption).foregroundColor(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
+                        .padding(10)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.04)))
                     }
+                    Button("Open the full transcript") { model.meeting(id).map { openFile($0.url("transcript.md")) } }
+                        .controlSize(.small)
                 }
                 .padding(14)
             }
@@ -565,7 +628,10 @@ struct SpeakersView: View {
             }
             .padding(10)
         }
-        .onAppear { NSApp.activate(ignoringOtherApps: true) }
+        .onAppear {
+            NSApp.activate(ignoringOtherApps: true)
+            samples = model.meeting(id)?.samples() ?? [:]
+        }
     }
 }
 
@@ -917,6 +983,11 @@ struct TodosView: View {
                                     .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
+                                .contextMenu {
+                                    Button(ref.done ? "Mark as not done" : "Mark as done") { model.toggleDone(id, ref.index) }
+                                    Button("Open the meeting") { route = .meeting(id) }
+                                    Button("Delete this to-do", role: .destructive) { model.deleteTodo(id, ref.index) }
+                                }
                             }
                         }
                     }

@@ -48,7 +48,7 @@ final class AppModel: ObservableObject {
     @Published var jobProgress: Double?
     /// New notes the user hasn't looked at yet: shown as "✓ Ready" in the menu bar.
     @Published var hasUnseenResult = false
-    @Published var notificationStatus = ""
+    @Published var notificationProblem: String?
     @Published var jobStarted = Date()
     /// Set by a notification click: the window opens on this meeting.
     @Published var pendingRoute: Route?
@@ -511,32 +511,22 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// How macOS currently shows our notifications, for Settings.
+    /// Why our notifications might not be seen (nil = they show normally), for Settings.
     func refreshNotificationStatus() {
         UNUserNotificationCenter.current().getNotificationSettings { s in
-            let text: String
+            var problem: String?
             switch s.authorizationStatus {
-            case .denied: text = "Turned off for MeetScribe in System Settings."
-            case .notDetermined: text = "macOS hasn't asked yet."
+            case .denied:
+                problem = "Notifications are turned off for MeetScribe in macOS, so you won't see these."
+            case .notDetermined:
+                problem = "macOS hasn't asked for permission yet."
             default:
-                switch s.alertStyle {
-                case .alert: text = "Allowed — they stay on screen until you click them."
-                case .banner: text = "Allowed — shown as banners that disappear after a few seconds."
-                default: text = "Allowed, but only listed in Notification Center (no pop-up)."
+                if s.alertStyle == .none {
+                    problem = "macOS only lists MeetScribe's notifications in Notification Center — no pop-up."
                 }
             }
-            DispatchQueue.main.async { self.notificationStatus = text }
+            DispatchQueue.main.async { self.notificationProblem = problem }
         }
-    }
-
-    func sendTestNotification() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
-        let content = UNMutableNotificationContent()
-        content.title = "MeetScribe notifications work"
-        content.body = "This is how you'll be told that your notes are ready."
-        content.sound = .default
-        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.refreshNotificationStatus() }
     }
 
     func openNotificationSettings() {

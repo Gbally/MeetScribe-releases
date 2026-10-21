@@ -1119,19 +1119,24 @@ struct NotificationsSection: View {
             Toggle("When notes are ready", isOn: $model.settings.notifyWhenReady)
             Toggle("When a call starts (“Record this call?”)", isOn: $model.settings.callReminders)
             Toggle("When the calendar meeting is over (“Stop recording?”)", isOn: $model.settings.endReminders)
-            if !model.notificationStatus.isEmpty {
-                Text("macOS: \(model.notificationStatus)").font(.caption).foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            if let problem = model.notificationProblem {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "bell.slash.fill").foregroundColor(.orange)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(problem).font(.caption).fixedSize(horizontal: false, vertical: true)
+                        Button("Turn them on…") { model.openNotificationSettings() }.controlSize(.small)
+                    }
+                }
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.1)))
             }
-            HStack {
-                Button("Send a test") { model.sendTestNotification() }
-                Button("Notification settings…") { model.openNotificationSettings() }
-            }
-            .controlSize(.small)
-            Text("Tip: in Notification settings, choose “Persistent” so they stay until you click them. When notes are ready, the menu bar icon also shows ✓ Ready.")
+            Text("When notes are ready, the menu bar icon also shows ✓ Ready.")
                 .font(.caption2).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .onAppear { model.refreshNotificationStatus() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            model.refreshNotificationStatus()
+        }
     }
 }
 

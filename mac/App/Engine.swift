@@ -107,7 +107,8 @@ enum Engine {
         let toml = """
         notes_dir = \(q(s.notesFolder.path))
         me = \(q(s.myName.isEmpty ? "Me" : s.myName))
-        language = \(q(s.language))
+        language = \(q(s.languages.joined(separator: ",")))
+        summary_language = \(q(s.notesLanguage))
         vocabulary = \(q(s.vocabulary))
         summary_style = \(q(s.summaryStyle.rawValue))
 

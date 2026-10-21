@@ -32,6 +32,17 @@ transcript, copy the notes for an email, name the speakers, etc. Every meeting s
 history list. Also: transcribe an existing audio file, launch at login, notes folder, language
 and vocabulary in Settings.
 
+- **Calendar:** the current Outlook/Exchange event (via macOS Calendar) names the meeting and
+  gives the AI the attendees; "Email" opens an Outlook draft to them with the notes.
+- **My to-dos:** every action item assigned to you, across all meetings, in one list.
+- **Known voices:** name a speaker once (⋯ → Name the speakers) and they're recognised in later
+  meetings (voiceprints in `voices.json`, never uploaded).
+- **Call reminder:** when Teams/Zoom/a browser opens the microphone, a notification offers
+  **Record**; when the calendar meeting is over, it offers **Stop & create notes**.
+- **Languages:** tick the languages your meetings use (e.g. English + French) and switches are
+  detected every few seconds; notes are written in the meeting's main language (or a fixed one).
+- **Reminders:** send your to-dos to Apple Reminders.
+
 On first launch it installs its engine into `~/Library/Application Support/MeetScribe`
 (Python via the bundled `uv`) and downloads the models (~6 GB) — see `mac/INSTALL.txt`, which
 is included in the DMG. Requirements: Apple Silicon, macOS 13+, 16 GB RAM recommended.
@@ -94,7 +105,6 @@ Each meeting gets a folder in `~/Documents/MeetingNotes/` with `notes.md`,
 
 ## Ideas / next steps
 
-- Voice enrollment: remember colleagues' voices → real names automatically
 - Live transcript while the meeting runs
-- Auto-start when a Teams call begins
-- Export notes to OneNote / Outlook tasks
+- Microsoft To Do / Planner export (needs a Microsoft Graph app registration)
+- Ask questions across all meetings

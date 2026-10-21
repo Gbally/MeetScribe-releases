@@ -15,6 +15,9 @@ recommended, and ~8 GB free disk space.
      • Microphone — your voice
      • Screen & System Audio Recording — the other participants' voices
    Then quit and reopen MeetScribe (menu ⋯ → Quit).
+5. Optional: allow Calendar access so meetings are named from Outlook. Your work calendar must be
+   in the macOS Calendar app (System Settings → Internet Accounts → Microsoft Exchange).
+6. Open ⋯ → Settings: set your name and the languages your meetings use.
 
 Using it: click the icon → Start recording. Click again → Stop & create notes.
 Notes, to-dos and transcripts appear in the same window a few minutes later, and are saved in

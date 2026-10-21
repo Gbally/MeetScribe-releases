@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 enum Route: Equatable {
-    case home, settings
+    case home, settings, todos
     case meeting(Meeting.ID)
     case speakers(Meeting.ID)
 }
@@ -18,12 +18,20 @@ struct RootView: View {
             case .settings: SettingsView(route: $route)
             case .meeting(let id): MeetingView(id: id, route: $route)
             case .speakers(let id): SpeakersView(id: id, route: $route)
+            case .todos: TodosView(route: $route)
             }
         }
         .frame(width: 400, height: 580)
         .onAppear {
             model.reload()
             model.refreshPermissions()
+            model.refreshCalendar()
+        }
+        .overlay(alignment: .bottom) {
+            if let toast = model.toast {
+                Text(toast).font(.caption).padding(.horizontal, 12).padding(.vertical, 8)
+                    .background(Capsule().fill(.regularMaterial)).shadow(radius: 3).padding(.bottom, 50)
+            }
         }
     }
 }
@@ -128,6 +136,7 @@ struct HomeView: View {
                     case .ready:
                         recordCard
                         PermissionsCard()
+                        todosButton
                     }
                     if let job = model.currentJob { jobCard(job) }
                     history
@@ -145,6 +154,10 @@ struct HomeView: View {
                     Text("Recording").font(.headline)
                     Spacer()
                     Text(formatDuration(model.elapsed)).font(.system(.title2, design: .monospaced))
+                }
+                if let e = model.recordingEvent {
+                    Label("\(e.title) · until \(e.end.formatted(date: .omitted, time: .shortened))", systemImage: "calendar")
+                        .font(.caption).foregroundColor(.secondary).lineLimit(1)
                 }
                 LevelMeter(label: "Your mic", icon: "mic.fill", level: model.micLevel, active: model.recorder?.mic != nil)
                 LevelMeter(label: "Meeting", icon: "speaker.wave.2.fill", level: model.systemLevel, active: model.recorder?.system != nil)
@@ -165,7 +178,15 @@ struct HomeView: View {
                         Button("Discard", role: .destructive) { model.stopRecording(discard: true) }
                     }
             } else {
-                TextField("Meeting name (optional — AI names it otherwise)", text: $title)
+                if let e = model.currentEvent {
+                    Label {
+                        Text("\(e.title) · \(e.timeRange)" + (e.attendees.isEmpty ? "" : " · \(e.attendees.count + 1) people"))
+                            .lineLimit(1)
+                    } icon: { Image(systemName: "calendar") }
+                    .font(.caption).foregroundColor(.secondary)
+                }
+                TextField(model.currentEvent.map { "Meeting name (default: \($0.title))" } ?? "Meeting name (optional — AI names it otherwise)",
+                          text: $title)
                     .textFieldStyle(.roundedBorder)
                 Button {
                     model.startRecording(title: title)
@@ -185,6 +206,25 @@ struct HomeView: View {
                 Text(model.settings.teamsOnly ? "Records your microphone + Microsoft Teams." : "Records your microphone + all Mac audio (Teams, browser…).")
                     .font(.caption).foregroundColor(.secondary)
             }
+        }
+    }
+
+    @ViewBuilder var todosButton: some View {
+        let open = model.myOpenTodoCount
+        if open > 0 || !model.todos(mineOnly: false).isEmpty {
+            Button { route = .todos } label: {
+                HStack {
+                    Image(systemName: "checklist").foregroundColor(.accentColor)
+                    Text("My to-dos").font(.callout.weight(.medium))
+                    Spacer()
+                    Text(open == 0 ? "all done" : "\(open) open").font(.caption).foregroundColor(.secondary)
+                    Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
+                }
+                .padding(10)
+                .contentShape(Rectangle())
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.05)))
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -359,13 +399,23 @@ struct MeetingView: View {
             if let m = model.meeting(id) {
                 Header(title: m.title, back: { route = .home }) {
                     Menu {
-                        Button("Open notes") { openFile(m.url("notes.md")) }.disabled(m.notes == nil)
-                        Button("Open transcript") { openFile(m.url("transcript.md")) }.disabled(!m.hasTranscript)
-                        Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([m.folder]) }
+                        Group {
+                            Button("Open notes") { openFile(m.url("notes.md")) }.disabled(m.notes == nil)
+                            Button("Open transcript") { openFile(m.url("transcript.md")) }.disabled(!m.hasTranscript)
+                            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([m.folder]) }
+                        }
                         Divider()
-                        Button("Name the speakers…") { route = .speakers(id) }.disabled(m.notes == nil)
-                        Button("Regenerate notes") { model.enqueue(.resummarize(id)) }.disabled(!m.hasTranscript)
-                        Button("Transcribe again") { model.enqueue(.process(id)) }.disabled(!m.hasAudio)
+                        Group {
+                            Button("Name the speakers…") { route = .speakers(id) }.disabled(m.notes == nil)
+                            Button("Email the notes…") { model.emailNotes(id) }.disabled(m.notes == nil)
+                            Button("Add my to-dos to Reminders") { model.addToReminders(id, mineOnly: true) }.disabled(m.notes == nil)
+                            Button("Add all to-dos to Reminders") { model.addToReminders(id, mineOnly: false) }.disabled(m.notes == nil)
+                        }
+                        Divider()
+                        Group {
+                            Button("Regenerate notes") { model.enqueue(.resummarize(id)) }.disabled(!m.hasTranscript)
+                            Button("Transcribe again") { model.enqueue(.process(id)) }.disabled(!m.hasAudio)
+                        }
                         Divider()
                         Button("Move to Trash…", role: .destructive) { confirmDelete = true }
                     } label: { Image(systemName: "ellipsis.circle") }
@@ -382,6 +432,7 @@ struct MeetingView: View {
                         Button { openFile(m.url("transcript.md")) } label: { Label("Transcript", systemImage: "text.alignleft") }
                         Button { openFile(m.url("notes.md")) } label: { Label("Notes", systemImage: "doc.text") }
                         Spacer()
+                        Button { model.emailNotes(id) } label: { Label("Email", systemImage: "envelope") }
                         Button {
                             model.copyNotes(id)
                             copied = true
@@ -540,15 +591,7 @@ struct SettingsView: View {
                     SummarySection()
                     Group {
                         SectionTitle(text: "Transcription")
-                        Picker("Meeting language", selection: $model.settings.language) {
-                            Text("Detect automatically").tag("")
-                            Text("English").tag("en")
-                            Text("French").tag("fr")
-                            Text("German").tag("de")
-                            Text("Spanish").tag("es")
-                            Text("Italian").tag("it")
-                            Text("Portuguese").tag("pt")
-                        }
+                        LanguagesSection()
                         VStack(alignment: .leading, spacing: 4) {
                             TextField("Names & jargon, comma-separated", text: $model.settings.vocabulary)
                                 .textFieldStyle(.roundedBorder)
@@ -565,9 +608,12 @@ struct SettingsView: View {
                         }
                         Toggle("Keep audio files after creating notes", isOn: $model.settings.keepAudio)
                         Toggle("Open MeetScribe at login", isOn: $model.launchAtLogin)
+                        Toggle("Remind me to record when a call starts", isOn: $model.settings.callReminders)
+                        CalendarRow()
 
                     }
                     StorageSection()
+                    VoicesSection()
                     Group {
                         SectionTitle(text: "Engine")
                         Text("AI models run locally. Stored in ~/Library/Application Support/MeetScribe and ~/.cache/huggingface.")
@@ -716,6 +762,168 @@ struct StorageSection: View {
             model.changeStorage(to: n, moveExisting: false)
         } else {
             pending = n
+        }
+    }
+}
+
+struct LanguagesSection: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Languages spoken in your meetings").font(.callout)
+            LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading),
+                                GridItem(.flexible(), alignment: .leading)], spacing: 4) {
+                ForEach(meetingLanguages, id: \.code) { lang in
+                    Toggle(lang.name, isOn: Binding(
+                        get: { model.settings.languages.contains(lang.code) },
+                        set: { on in
+                            var l = model.settings.languages.filter { $0 != lang.code }
+                            if on { l.append(lang.code) }
+                            model.settings.languages = meetingLanguages.map(\.code).filter(l.contains)
+                        }))
+                    .toggleStyle(.checkbox)
+                }
+            }
+            Text(languagesHelp).font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+            Picker("Notes language", selection: $model.settings.notesLanguage) {
+                Text("Same as the meeting").tag("auto")
+                ForEach(meetingLanguages, id: \.code) { Text($0.name).tag($0.name) }
+            }
+        }
+    }
+
+    var languagesHelp: String {
+        switch model.settings.languages.count {
+        case 0: return "None ticked: the language is detected automatically (one per meeting)."
+        case 1: return "Everything is transcribed as \(meetingLanguages.first { $0.code == model.settings.languages[0] }?.name ?? "that language")."
+        default: return "Meetings can switch between these languages — detected every few seconds."
+        }
+    }
+}
+
+struct CalendarRow: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle("Use my calendar for meeting names & attendees", isOn: Binding(
+                get: { model.settings.useCalendar },
+                set: { on in
+                    model.settings.useCalendar = on
+                    if on && !CalendarService.shared.eventsAllowed { model.allowCalendar() }
+                    model.refreshCalendar()
+                }))
+            if model.settings.useCalendar && !CalendarService.shared.eventsAllowed {
+                HStack {
+                    Text("Calendar access isn't allowed yet.").font(.caption).foregroundColor(.orange)
+                    Button("Allow…") { model.allowCalendar() }.controlSize(.small)
+                }
+            }
+            Text("Outlook meetings appear once your work account is added to the Calendar app (System Settings → Internet Accounts).")
+                .font(.caption2).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+struct VoicesSection: View {
+    @EnvironmentObject var model: AppModel
+    @State private var forget: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SectionTitle(text: "Known voices")
+            Text("Name the speakers of a meeting (⋯ → Name the speakers) and MeetScribe recognises them next time. Voiceprints stay on this Mac.")
+                .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+            if model.voices.isEmpty {
+                Text("No voices learned yet.").font(.caption).foregroundColor(.secondary)
+            }
+            ForEach(model.voices, id: \.name) { v in
+                HStack {
+                    Image(systemName: "person.wave.2").foregroundColor(.secondary)
+                    Text(v.name).font(.callout)
+                    Text("\(v.samples) sample\(v.samples == 1 ? "" : "s")").font(.caption2).foregroundColor(.secondary)
+                    Spacer()
+                    Button("Forget") { forget = v.name }.controlSize(.small)
+                }
+            }
+        }
+        .onAppear { model.reloadVoices() }
+        .confirmationDialog("Forget \(forget ?? "")'s voice?", isPresented: Binding(get: { forget != nil }, set: { if !$0 { forget = nil } })) {
+            Button("Forget", role: .destructive) { if let f = forget { model.forgetVoice(f) } }
+        }
+    }
+}
+
+struct TodosView: View {
+    @EnvironmentObject var model: AppModel
+    @Binding var route: Route
+    @State private var mineOnly = true
+    @State private var showDone = false
+
+    var body: some View {
+        let items = model.todos(mineOnly: mineOnly).filter { showDone || !$0.done }
+        let grouped = Dictionary(grouping: items, by: \.meeting.id)
+        let order = model.meetings.map(\.id).filter { grouped[$0] != nil }
+        VStack(spacing: 0) {
+            Header(title: "To-dos", back: { route = .home }) {
+                Toggle("Done", isOn: $showDone).toggleStyle(.checkbox).font(.caption)
+            }
+            Picker("", selection: $mineOnly) {
+                Text("Mine").tag(true)
+                Text("Everyone's").tag(false)
+            }
+            .pickerStyle(.segmented).labelsHidden().padding(.horizontal, 14).padding(.bottom, 8)
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    if items.isEmpty {
+                        Text(mineOnly ? "Nothing assigned to you\(showDone ? "" : " is open"). 🎉" : "No to-dos.")
+                            .font(.callout).foregroundColor(.secondary).padding(.top, 20)
+                        if mineOnly && model.settings.myName.isEmpty {
+                            Text("Set your name in Settings so MeetScribe knows which to-dos are yours.")
+                                .font(.caption).foregroundColor(.secondary)
+                        }
+                    }
+                    ForEach(order, id: \.self) { id in
+                        if let refs = grouped[id], let m = refs.first?.meeting {
+                            Button { route = .meeting(id) } label: {
+                                HStack {
+                                    Text(m.title).font(.caption.weight(.semibold)).lineLimit(1)
+                                    Text("· \(m.date.formatted(date: .abbreviated, time: .omitted))").font(.caption).foregroundColor(.secondary)
+                                    Spacer()
+                                    Image(systemName: "chevron.right").font(.caption2).foregroundColor(.secondary)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 6)
+                            ForEach(refs) { ref in
+                                Button { model.toggleDone(id, ref.index) } label: {
+                                    HStack(alignment: .top, spacing: 8) {
+                                        Image(systemName: ref.done ? "checkmark.circle.fill" : "circle")
+                                            .foregroundColor(ref.done ? .green : .secondary)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(ref.item.task).font(.callout).strikethrough(ref.done)
+                                                .foregroundColor(ref.done ? .secondary : .primary)
+                                                .fixedSize(horizontal: false, vertical: true)
+                                            let extra = [mineOnly ? "" : ref.item.owner, ref.item.due].filter { !$0.isEmpty }
+                                            if !extra.isEmpty {
+                                                Text(extra.joined(separator: " · ")).font(.caption).foregroundColor(.secondary)
+                                            }
+                                        }
+                                        Spacer(minLength: 0)
+                                    }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 }

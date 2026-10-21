@@ -40,6 +40,14 @@ final class AppModel: ObservableObject {
     @Published var jobStatus = ""
     @Published var movingStatus: String?
 
+    // Calendar, voices, messages
+    @Published var currentEvent: CalendarEvent?
+    @Published var recordingEvent: CalendarEvent?
+    @Published var voices: [(name: String, samples: Int)] = []
+    @Published var toast: String?
+    private var endReminderSent = false
+    let callMonitor = CallMonitor()
+
     // Permissions
     @Published var micPermission = MicCapture.permission
     @Published var screenPermission = SystemAudioCapture.hasPermission
@@ -71,7 +79,22 @@ final class AppModel: ObservableObject {
             // Finish meetings that were recorded but not processed (app quit / crashed meanwhile).
             for m in meetings where m.needsProcessing { enqueue(.process(m.id)) }
         }
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        center.setNotificationCategories([
+            UNNotificationCategory(identifier: "CALL", actions: [
+                UNNotificationAction(identifier: "RECORD", title: "Record", options: []),
+            ], intentIdentifiers: []),
+            UNNotificationCategory(identifier: "ENDED", actions: [
+                UNNotificationAction(identifier: "STOP", title: "Stop & create notes", options: []),
+            ], intentIdentifiers: []),
+        ])
+        callMonitor.isPaused = { activeRecorder != nil }
+        callMonitor.onCallStarted = { [weak self] app in
+            Task { @MainActor in self?.offerToRecord(app: app) }
+        }
+        callMonitor.start()
+        refreshCalendar()
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
             // Make sure the recording files are finalized if the app is quit mid-meeting.
             let sem = DispatchSemaphore(value: 0)
@@ -129,6 +152,10 @@ final class AppModel: ObservableObject {
                 _ = await MicCapture.requestPermission()
                 refreshPermissions()
             }
+            if settings.useCalendar && CalendarService.shared.eventsUndecided {
+                _ = await CalendarService.shared.requestEvents()
+                refreshCalendar()
+            }
         }
     }
 
@@ -153,11 +180,16 @@ final class AppModel: ObservableObject {
         rec.onNotice = { [weak self] note in
             DispatchQueue.main.async { self?.notices.append(note) }
         }
+        let event = settings.useCalendar ? CalendarService.shared.currentMeeting() : nil
+        var name = title.trimmingCharacters(in: .whitespaces)
+        if name.isEmpty, let event { name = event.title }
         Task {
             do {
                 try await rec.start(appName: settings.teamsOnly ? "Microsoft Teams" : nil)
-                writeInfo(folder, MeetingInfo(title: title.trimmingCharacters(in: .whitespaces),
-                                              started: ISO8601DateFormatter.local.string(from: Date()), duration: nil))
+                writeInfo(folder, MeetingInfo(title: name, started: ISO8601DateFormatter.local.string(from: Date()),
+                                              duration: nil, calendar: event))
+                recordingEvent = event
+                endReminderSent = false
                 recorder = rec
                 activeRecorder = rec
                 recordingID = folder.lastPathComponent
@@ -182,6 +214,7 @@ final class AppModel: ObservableObject {
         Task {
             await rec.stop()
             recordingID = nil
+            recordingEvent = nil
             if discard {
                 try? FileManager.default.trashItem(at: rec.folder, resultingItemURL: nil)
             } else {
@@ -206,6 +239,12 @@ final class AppModel: ObservableObject {
     private func tickMeters() {
         guard let rec = recorder else { return }
         elapsed = rec.elapsed
+        // The calendar says the meeting ended 5 minutes ago: offer to stop.
+        if let end = recordingEvent?.end, !endReminderSent, Date() > end.addingTimeInterval(300) {
+            endReminderSent = true
+            notify(title: "Is “\(recordingEvent?.title ?? "the meeting")” over?",
+                   body: "MeetScribe is still recording.", category: "ENDED")
+        }
         // Smooth the meters so they don't flicker.
         micLevel = max(rec.mic?.writer.takePeak() ?? 0, micLevel * 0.6)
         systemLevel = max(rec.system?.writer.takePeak() ?? 0, systemLevel * 0.6)
@@ -213,13 +252,11 @@ final class AppModel: ObservableObject {
 
     private func readInfo(_ folder: URL) -> MeetingInfo? {
         guard let data = try? Data(contentsOf: folder.appendingPathComponent("meeting.json")) else { return nil }
-        return try? JSONDecoder().decode(MeetingInfo.self, from: data)
+        return try? JSONDecoder.meetscribe.decode(MeetingInfo.self, from: data)
     }
 
     private func writeInfo(_ folder: URL, _ info: MeetingInfo) {
-        let enc = JSONEncoder()
-        enc.outputFormatting = .prettyPrinted
-        try? enc.encode(info).write(to: folder.appendingPathComponent("meeting.json"))
+        try? JSONEncoder.meetscribe.encode(info).write(to: folder.appendingPathComponent("meeting.json"))
     }
 
     // MARK: - Processing queue
@@ -351,6 +388,133 @@ final class AppModel: ObservableObject {
             content.body = title
         }
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+    }
+
+    // MARK: - Calendar, notifications
+
+    func refreshCalendar() {
+        currentEvent = settings.useCalendar ? CalendarService.shared.currentMeeting() : nil
+    }
+
+    func allowCalendar() {
+        Task {
+            if CalendarService.shared.eventsUndecided {
+                _ = await CalendarService.shared.requestEvents()
+            } else {
+                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")!)
+            }
+            refreshCalendar()
+            objectWillChange.send()
+        }
+    }
+
+    private func offerToRecord(app: String) {
+        guard settings.callReminders, phase == .ready, recorder == nil else { return }
+        let event = settings.useCalendar ? CalendarService.shared.currentMeeting() : nil
+        notify(title: event.map { "Record “\($0.title)”?" } ?? "Record this call?",
+               body: "\(app) is using the microphone. Click Record to take notes with MeetScribe.", category: "CALL")
+    }
+
+    func notify(title: String, body: String, category: String? = nil) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        if let category { content.categoryIdentifier = category }
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+    }
+
+    /// Buttons on our notifications.
+    func handleNotificationAction(_ id: String) {
+        switch id {
+        case "RECORD": startRecording(title: "")
+        case "STOP": stopRecording()
+        default: break
+        }
+    }
+
+    // MARK: - To-dos
+
+    struct TodoRef: Identifiable {
+        var meeting: Meeting
+        var index: Int
+        var item: ActionItem
+        var id: String { "\(meeting.id)#\(index)" }
+        var done: Bool { meeting.done.contains(index) }
+    }
+
+    func isMine(_ owner: String) -> Bool {
+        let o = owner.lowercased().trimmingCharacters(in: .whitespaces)
+        let me = settings.myName.lowercased().trimmingCharacters(in: .whitespaces)
+        if o == "me" || o == "moi" { return true }
+        guard !me.isEmpty, !o.isEmpty else { return false }
+        let first = me.components(separatedBy: " ").first ?? me
+        return o == me || o.contains(me) || o.components(separatedBy: CharacterSet(charactersIn: " ,&/")).contains(first)
+    }
+
+    func todos(mineOnly: Bool) -> [TodoRef] {
+        meetings.flatMap { m in
+            (m.notes?.actions ?? []).enumerated().compactMap { i, a in
+                mineOnly && !isMine(a.owner) ? nil : TodoRef(meeting: m, index: i, item: a)
+            }
+        }
+    }
+
+    var myOpenTodoCount: Int { todos(mineOnly: true).filter { !$0.done }.count }
+
+    // MARK: - Sharing
+
+    /// Opens an email draft (Outlook if installed) to the calendar attendees with the notes.
+    func emailNotes(_ id: Meeting.ID) {
+        guard let m = meeting(id) else { return }
+        var c = URLComponents()
+        c.scheme = "mailto"
+        c.path = (m.info?.calendar?.attendees ?? []).map(\.email).filter { !$0.isEmpty }.joined(separator: ",")
+        c.queryItems = [URLQueryItem(name: "subject", value: "Notes: \(m.title)"),
+                        URLQueryItem(name: "body", value: m.shareText)]
+        guard let url = c.url else { return }
+        if let outlook = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.microsoft.Outlook") {
+            NSWorkspace.shared.open([url], withApplicationAt: outlook, configuration: NSWorkspace.OpenConfiguration())
+        } else {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    func addToReminders(_ id: Meeting.ID, mineOnly: Bool) {
+        guard let m = meeting(id), let actions = m.notes?.actions else { return }
+        let items = actions.enumerated().filter { !m.done.contains($0.offset) && (!mineOnly || isMine($0.element.owner)) }.map(\.element)
+        guard !items.isEmpty else { show(mineOnly ? "No open to-dos for you in this meeting." : "No open to-dos."); return }
+        Task {
+            if let n = await CalendarService.shared.addReminders(items, meetingTitle: m.title) {
+                show("Added \(n) to-do\(n == 1 ? "" : "s") to Reminders.")
+            } else {
+                show("Reminders access is off — allow it in System Settings → Privacy & Security → Reminders.")
+            }
+        }
+    }
+
+    func show(_ message: String) {
+        toast = message
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+            if self?.toast == message { self?.toast = nil }
+        }
+    }
+
+    // MARK: - Voice library
+
+    private var voicesFile: URL { Engine.support.appendingPathComponent("voices.json") }
+
+    func reloadVoices() {
+        guard let data = try? Data(contentsOf: voicesFile),
+              let lib = try? JSONSerialization.jsonObject(with: data) as? [String: [Any]] else { voices = []; return }
+        voices = lib.map { ($0.key, $0.value.count) }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    func forgetVoice(_ name: String) {
+        guard let data = try? Data(contentsOf: voicesFile),
+              var lib = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+        lib.removeValue(forKey: name)
+        if let out = try? JSONSerialization.data(withJSONObject: lib) { try? out.write(to: voicesFile, options: .atomic) }
+        reloadVoices()
     }
 
     // MARK: - Meeting actions

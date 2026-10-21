@@ -31,6 +31,20 @@ struct MeetingInfo: Codable {
     var title: String
     var started: String
     var duration: Double?
+    var calendar: CalendarEvent?
+}
+
+extension JSONDecoder {
+    static let meetscribe: JSONDecoder = { let d = JSONDecoder(); d.dateDecodingStrategy = .iso8601; return d }()
+}
+
+extension JSONEncoder {
+    static let meetscribe: JSONEncoder = {
+        let e = JSONEncoder()
+        e.dateEncodingStrategy = .iso8601
+        e.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return e
+    }()
 }
 
 struct Meeting: Identifiable, Equatable {
@@ -70,7 +84,7 @@ struct Meeting: Identifiable, Equatable {
 
     static func load(_ folder: URL) -> Meeting? {
         let fm = FileManager.default
-        let dec = JSONDecoder()
+        let dec = JSONDecoder.meetscribe
         func read<T: Decodable>(_ name: String, _ type: T.Type) -> T? {
             guard let data = try? Data(contentsOf: folder.appendingPathComponent(name)) else { return nil }
             return try? dec.decode(type, from: data)

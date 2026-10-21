@@ -1,16 +1,42 @@
 import SwiftUI
+import UserNotifications
 
 @main
 struct MeetScribeApp: App {
-    @StateObject private var model = AppModel()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
         MenuBarExtra {
-            RootView().environmentObject(model)
+            RootView().environmentObject(delegate.model)
         } label: {
-            MenuBarLabel().environmentObject(model)
+            MenuBarLabel().environmentObject(delegate.model)
         }
         .menuBarExtraStyle(.window)
+    }
+}
+
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    let model = AppModel()
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        UNUserNotificationCenter.current().delegate = self
+    }
+
+    // Show our banners even while the app is active.
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+                                            withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound])
+    }
+
+    // "Record" / "Stop & create notes" buttons.
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                            withCompletionHandler completionHandler: @escaping () -> Void) {
+        let action = response.actionIdentifier
+        Task { @MainActor in
+            self.model.handleNotificationAction(action)
+            completionHandler()
+        }
     }
 }
 

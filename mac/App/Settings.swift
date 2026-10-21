@@ -29,7 +29,8 @@ enum SummaryStyle: String, Codable, CaseIterable {
 
 struct AppSettings: Codable, Equatable {
     var myName = NSFullUserName().components(separatedBy: " ").first ?? ""
-    var language = ""            // "" = auto, "en", "fr", …
+    var languages: [String] = [] // spoken in meetings: [] = detect automatically, ["en","fr"] = may switch
+    var notesLanguage = "auto"   // "auto" = the meeting's main language, else e.g. "English"
     var vocabulary = ""
     var summaryStyle = SummaryStyle.standard
     var teamsOnly = false        // false = all Mac audio
@@ -37,6 +38,8 @@ struct AppSettings: Codable, Equatable {
     var storage = Storage.local
     var oneDrivePath = ""        // root of the chosen OneDrive account
     var customFolderPath = ""
+    var useCalendar = true       // meeting title + attendees from the calendar
+    var callReminders = true     // "Record this meeting?" when a call starts
 
     var notesFolder: URL {
         switch storage {
@@ -58,7 +61,14 @@ struct AppSettings: Codable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = AppSettings()
         myName = try c.decodeIfPresent(String.self, forKey: .myName) ?? d.myName
-        language = try c.decodeIfPresent(String.self, forKey: .language) ?? d.language
+        if let l = try c.decodeIfPresent([String].self, forKey: .languages) {
+            languages = l
+        } else if let legacy = try c.decodeIfPresent(String.self, forKey: .language), !legacy.isEmpty {
+            languages = [legacy]
+        }
+        notesLanguage = try c.decodeIfPresent(String.self, forKey: .notesLanguage) ?? d.notesLanguage
+        useCalendar = try c.decodeIfPresent(Bool.self, forKey: .useCalendar) ?? d.useCalendar
+        callReminders = try c.decodeIfPresent(Bool.self, forKey: .callReminders) ?? d.callReminders
         vocabulary = try c.decodeIfPresent(String.self, forKey: .vocabulary) ?? d.vocabulary
         summaryStyle = (try? c.decodeIfPresent(SummaryStyle.self, forKey: .summaryStyle)) ?? d.summaryStyle
         teamsOnly = try c.decodeIfPresent(Bool.self, forKey: .teamsOnly) ?? d.teamsOnly
@@ -75,14 +85,17 @@ struct AppSettings: Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case myName, language, vocabulary, summaryStyle, teamsOnly, keepAudio, storage, oneDrivePath,
+        case myName, language, languages, notesLanguage, useCalendar, callReminders, vocabulary, summaryStyle, teamsOnly, keepAudio, storage, oneDrivePath,
              customFolderPath, notesFolderPath
     }
 
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(myName, forKey: .myName)
-        try c.encode(language, forKey: .language)
+        try c.encode(languages, forKey: .languages)
+        try c.encode(notesLanguage, forKey: .notesLanguage)
+        try c.encode(useCalendar, forKey: .useCalendar)
+        try c.encode(callReminders, forKey: .callReminders)
         try c.encode(vocabulary, forKey: .vocabulary)
         try c.encode(summaryStyle, forKey: .summaryStyle)
         try c.encode(teamsOnly, forKey: .teamsOnly)
@@ -152,3 +165,9 @@ enum CloudFolders {
         return base.appendingPathComponent("MeetingNotes", isDirectory: true)
     }
 }
+
+/// Languages offered in Settings (Whisper codes → names).
+let meetingLanguages: [(code: String, name: String)] = [
+    ("en", "English"), ("fr", "French"), ("de", "German"), ("es", "Spanish"), ("it", "Italian"),
+    ("pt", "Portuguese"), ("nl", "Dutch"), ("ja", "Japanese"), ("zh", "Chinese"),
+]

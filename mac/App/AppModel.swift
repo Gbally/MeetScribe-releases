@@ -152,7 +152,7 @@ final class AppModel: ObservableObject {
             runSetup() // app was updated: refresh the engine quietly (models are already downloaded)
         }
         let center = UNUserNotificationCenter.current()
-        center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        if !shouldWelcome { center.requestAuthorization(options: [.alert, .sound]) { _, _ in } } // else asked in the welcome
         center.setNotificationCategories([
             UNNotificationCategory(identifier: "AUTO", actions: [
                 UNNotificationAction(identifier: "STOP", title: "Stop & create notes", options: []),
@@ -261,6 +261,11 @@ final class AppModel: ObservableObject {
             try? task.run()
             NSApp.terminate(nil)
         }
+    }
+
+    /// A fresh install: show the guided setup (installs from before it existed skip it).
+    var shouldWelcome: Bool {
+        !UserDefaults.standard.bool(forKey: "welcomeDone") && !FileManager.default.fileExists(atPath: Engine.python.path)
     }
 
     func refreshPermissions() {
@@ -823,7 +828,7 @@ final class AppModel: ObservableObject {
                 self.modelDownload = d
             }
             modelDownload = nil
-            if result.ok { apply() } else { show(tr("Download failed: %@", result.errorTail)) }
+            if result.ok { Uninstaller.rememberDownload(model.repo); apply() } else { show(tr("Download failed: %@", result.errorTail)) }
             loadInstalledModels()
         }
     }

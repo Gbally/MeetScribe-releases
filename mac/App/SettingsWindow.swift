@@ -74,6 +74,24 @@ enum Windows {
         present(others[key]!)
     }
 
+    /// First launch: the guided setup. Closing it (any way) counts as done.
+    static func showWelcome(_ model: AppModel, step: Int = 0) {
+        if others["welcome"] == nil {
+            let close: () -> Void = { Windows.others["welcome"]?.close() }
+            let w = make(title: tr("Welcome to MeetScribe"), size: NSSize(width: 540, height: 600),
+                         view: WelcomeView(close: close, step: step).environmentObject(model), autosave: nil)
+            w.styleMask.remove(.resizable)
+            NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: w, queue: .main) { _ in
+                Task { @MainActor in
+                    UserDefaults.standard.set(true, forKey: "welcomeDone")
+                    Windows.others["welcome"] = nil
+                }
+            }
+            others["welcome"] = w
+        }
+        present(others["welcome"]!)
+    }
+
     /// The menu bar content in a normal window (testing / screenshots: `--preview`).
     static func showPreview(_ model: AppModel) {
         if others["preview"] == nil {
@@ -86,6 +104,7 @@ enum Windows {
     /// Re-titles open windows; their content redraws by itself (keyed by model.uiLanguage).
     static func languageChanged(_ model: AppModel) {
         settings?.title = tr("MeetScribe Settings")
+        others["welcome"]?.title = tr("Welcome to MeetScribe")
         for (id, w) in meetings { w.title = model.meeting(id)?.title ?? tr("Meeting") }
     }
 
@@ -180,6 +199,7 @@ struct SettingsWindow: View {
             RetentionSection()
             UsageStatsSection()
             EnginePane()
+            RemoveSection()
         case .voices: VoicesSection()
         case .about: AboutPane()
         }

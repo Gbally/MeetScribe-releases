@@ -24,16 +24,16 @@ STR = r'"((?:[^"\\]|\\.)*)"'
 SWIFT_PATTERNS = [
     # SwiftUI views that localize a literal title, and our own helpers.
     rf'\b(?:Text|Button|Label|Toggle|Picker|Section|TextField|LabeledContent|Menu|Link|ProgressView|'
-    rf'confirmationDialog|Caption|tr|i18n|show|permissionRow|notify|bullets|UpdateError|notice|onNotice\?|permission|other)\(\s*{STR}',
+    rf'confirmationDialog|Caption|tr|i18n|show|permissionRow|notify|bullets|UpdateError|notice|onNotice\?|permission|point|title|other)\(\s*{STR}',
     rf'\.help\(\s*{STR}',
-    rf'\b(?:text|title|label|body|message|prompt):\s*(?:Text\()?{STR}',
+    rf'\b(?:text|title|label|body|message|prompt|detail|subtitle):\s*(?:Text\()?{STR}',
 ]
 PY_PATTERN = rf'(?:\bstep\(\s*|"key":\s*){STR}'
 
 
 def extract_keys() -> tuple[set[str], list[str]]:
     keys, problems = set(), []
-    for path in sorted(p for p in (ROOT / "mac").rglob("*.swift") if p.name not in ("Telemetry.swift", "RecorderCLI.swift")):
+    for path in sorted(p for p in (ROOT / "mac").rglob("*.swift") if p.name not in ("Telemetry.swift", "RecorderCLI.swift", "Uninstall.swift")):
         text = path.read_text()
         for pattern in SWIFT_PATTERNS:
             for m in re.finditer(pattern, text):

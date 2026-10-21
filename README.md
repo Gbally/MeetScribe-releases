@@ -58,7 +58,8 @@ and vocabulary in Settings.
 
 On first launch it installs its engine into `~/Library/Application Support/MeetScribe`
 (Python via the bundled `uv`) and downloads the models (~6 GB) — see `mac/INSTALL.txt`, which
-is included in the DMG. Requirements: Apple Silicon, macOS 13+, 16 GB RAM recommended.
+is included in the DMG. A welcome window walks new users through name, languages, permissions
+and the download; Settings → Privacy and storage → Remove MeetScribe uninstalls everything. Requirements: Apple Silicon, macOS 13+, 16 GB RAM recommended.
 
 **Permissions across updates:** macOS remembers permissions per code signature. Run
 `./scripts/make_signing_identity.sh` once: it creates a fixed self-signed identity in

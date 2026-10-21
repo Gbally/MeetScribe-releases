@@ -1,7 +1,7 @@
 {
- "version": "0.2.0",
- "build": 21,
- "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.2.0/MeetScribe-0.2.0.dmg",
- "sha256": "8acf5209b29d0aa826751d97d590ae27efe9d23c291e83e61deec46c5c50eb07",
- "notes": "First public version: local meeting notes, to-dos, briefs, ask your meetings, automatic updates."
+ "version": "0.3.0",
+ "build": 28,
+ "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.3.0/MeetScribe-0.3.0.dmg",
+ "sha256": "e20ba265c4ef7b02653ae6048ef0a1e9b6116e185bc2f73177a8407082eb9c3b",
+ "notes": "New look: today's meetings as a timeline with a big record button. Settings in their own window. AI models picked for your Mac (with custom models from Hugging Face). Opens at login."
 }

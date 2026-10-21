@@ -1,7 +1,7 @@
 {
- "version": "0.3.0",
- "build": 29,
- "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.3.0/MeetScribe-0.3.0.dmg",
- "sha256": "5af20a45110a6c6889e19a5f7af18cf7eedfbdb229ea1745cb92182673c0f145",
- "notes": "New look: today's meetings as a timeline with a big record button. Settings in their own window. AI models picked for your Mac (with custom models from Hugging Face). Opens at login. Tells you when an update is available."
+ "version": "0.3.1",
+ "build": 35,
+ "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.3.1/MeetScribe-0.3.1.dmg",
+ "sha256": "ff238dd4e386d5172798298f2c2330a60c77d454719a4e7f4942cbf5eb6fa032",
+ "notes": "Anonymous usage statistics (recording length, models used \u2014 never your content; can be turned off in Settings \u2192 Privacy). Update notifications. Small fixes."
 }

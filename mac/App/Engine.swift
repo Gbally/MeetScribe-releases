@@ -109,6 +109,7 @@ enum Engine {
         me = \(q(s.myName.isEmpty ? "Me" : s.myName))
         language = \(q(s.language))
         vocabulary = \(q(s.vocabulary))
+        summary_style = \(q(s.summaryStyle.rawValue))
 
         """
         try? toml.write(to: configFile, atomically: true, encoding: .utf8)

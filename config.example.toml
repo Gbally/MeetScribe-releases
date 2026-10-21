@@ -15,3 +15,4 @@
 # llm_url = "http://localhost:11434/v1"    # Ollama; LM Studio = http://localhost:1234/v1
 # summary_language = "English"
 # max_context_tokens = 20000
+# summary_style = "standard"                # "detailed", "standard" or "brief"

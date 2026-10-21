@@ -537,6 +537,7 @@ struct SettingsView: View {
                             .textFieldStyle(.roundedBorder)
 
                     }
+                    SummarySection()
                     Group {
                         SectionTitle(text: "Transcription")
                         Picker("Meeting language", selection: $model.settings.language) {
@@ -566,17 +567,7 @@ struct SettingsView: View {
                         Toggle("Open MeetScribe at login", isOn: $model.launchAtLogin)
 
                     }
-                    Group {
-                        SectionTitle(text: "Notes folder")
-                        Text(model.settings.notesFolder.path).font(.caption).foregroundColor(.secondary)
-                            .lineLimit(2).truncationMode(.middle)
-                        HStack {
-                            Button("Change…") { model.chooseNotesFolder() }
-                            Button("Open") { NSWorkspace.shared.open(model.settings.notesFolder) }
-                        }
-                        .controlSize(.small)
-
-                    }
+                    StorageSection()
                     Group {
                         SectionTitle(text: "Engine")
                         Text("AI models run locally. Stored in ~/Library/Application Support/MeetScribe and ~/.cache/huggingface.")
@@ -594,5 +585,137 @@ struct SettingsView: View {
             }
         }
         .onAppear { NSApp.activate(ignoringOtherApps: true) }
+    }
+}
+
+struct SummarySection: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SectionTitle(text: "Notes")
+            Picker("Detail", selection: $model.settings.summaryStyle) {
+                ForEach(SummaryStyle.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            Text(model.settings.summaryStyle.help).font(.caption).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Applies to new meetings. To redo an older one: open it → ⋯ → Regenerate notes.")
+                .font(.caption2).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+struct StorageSection: View {
+    @EnvironmentObject var model: AppModel
+    @State private var pending: AppSettings?
+    @State private var accounts = CloudFolders.oneDriveAccounts
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionTitle(text: "Where notes are saved")
+            Picker("Storage", selection: Binding(get: { model.settings.storage }, set: choose)) {
+                Text("This Mac only").tag(Storage.local)
+                Text(accounts.isEmpty ? "OneDrive (not set up on this Mac)" : "OneDrive").tag(Storage.oneDrive)
+                Text("Another folder…").tag(Storage.custom)
+            }
+            .pickerStyle(.radioGroup)
+            .labelsHidden()
+            .disabled(!model.canChangeStorage)
+
+            if model.settings.storage == .oneDrive && accounts.count > 1 {
+                Picker("Account", selection: Binding(get: { model.settings.oneDrivePath }, set: { path in
+                    var n = model.settings
+                    n.oneDrivePath = path
+                    request(n)
+                })) {
+                    ForEach(accounts, id: \.self) { Text($0.name).tag($0.url.path) }
+                }
+                .disabled(!model.canChangeStorage)
+            }
+
+            Text(description).font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+            if model.settings.storage != .local && model.settings.keepAudio {
+                Label("Audio files (~230 MB per hour) are synced too — turn off “Keep audio files” to sync only the notes.",
+                      systemImage: "info.circle")
+                    .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                Text(model.settings.notesFolder.path).font(.caption2).foregroundColor(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
+                Spacer()
+                Button("Open") { NSWorkspace.shared.open(model.settings.notesFolder) }
+                if model.settings.storage == .custom {
+                    Button("Change…") { choose(.custom) }.disabled(!model.canChangeStorage)
+                }
+            }
+            .controlSize(.small)
+            if let status = model.movingStatus {
+                Label(status, systemImage: "arrow.right.doc.on.clipboard").font(.caption)
+            } else if !model.canChangeStorage {
+                Text("Can be changed when nothing is recording or processing.").font(.caption2).foregroundColor(.secondary)
+            }
+        }
+        .onAppear { accounts = CloudFolders.oneDriveAccounts }
+        .confirmationDialog(
+            "Move your \(model.meetingsInNotesFolder) existing meeting(s) to the new location?",
+            isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } })
+        ) {
+            Button("Move them") { if let p = pending { model.changeStorage(to: p, moveExisting: true) } }
+            Button("Leave them where they are") { if let p = pending { model.changeStorage(to: p, moveExisting: false) } }
+        } message: {
+            Text("Meetings left behind won't show in the history, but stay in their folder.")
+        }
+    }
+
+    var description: String {
+        let folder = model.settings.notesFolder
+        switch model.settings.storage {
+        case .local:
+            var s = "Stays on this Mac — never uploaded anywhere."
+            if !folder.path.contains("/Documents/") {
+                s += " (Your Documents folder is synced to the cloud, so notes go in your home folder instead.)"
+            }
+            return s
+        case .oneDrive:
+            let name = accounts.first { $0.url.path == model.settings.oneDrivePath }?.name ?? "OneDrive"
+            return "Synced to \(name): backed up, and available on your other devices and on the web. Your company's OneDrive rules apply."
+        case .custom:
+            return CloudFolders.syncService(for: folder).map { "This folder is synced to \($0)." } ?? "This folder isn't synced to the cloud."
+        }
+    }
+
+    func choose(_ storage: Storage) {
+        var n = model.settings
+        n.storage = storage
+        switch storage {
+        case .local:
+            break
+        case .oneDrive:
+            accounts = CloudFolders.oneDriveAccounts
+            guard let first = accounts.first else {
+                model.movingStatus = nil
+                NSApp.activate(ignoringOtherApps: true)
+                let alert = NSAlert()
+                alert.messageText = "OneDrive isn't set up on this Mac"
+                alert.informativeText = "Install the OneDrive app and sign in with your work account, then choose OneDrive again."
+                alert.runModal()
+                return
+            }
+            if !accounts.contains(where: { $0.url.path == n.oneDrivePath }) { n.oneDrivePath = first.url.path }
+        case .custom:
+            guard let url = model.pickFolder() else { return }
+            n.customFolderPath = url.path
+        }
+        request(n)
+    }
+
+    func request(_ n: AppSettings) {
+        if n.notesFolder.standardizedFileURL == model.settings.notesFolder.standardizedFileURL || model.meetingsInNotesFolder == 0 {
+            model.changeStorage(to: n, moveExisting: false)
+        } else {
+            pending = n
+        }
     }
 }

@@ -11,21 +11,42 @@ The transcript is machine-generated: it may contain recognition errors, and spea
 labelled by name or as "Speaker N". Only state what the transcript supports — never invent
 owners, dates or decisions. If something is unclear, say so."""
 
-NOTES_PROMPT = """Write the meeting notes in {language}, in Markdown. Start with one line
-"Title: <a short title for this meeting, max 6 words>", then exactly these sections:
+# How much detail the notes contain (setting `summary_style`).
+STYLES = {
+    "detailed": """Detailed notes: someone who missed the meeting should understand everything.
+- Summary: one bullet per topic discussed, each 1–3 sentences with the context, the
+  arguments, who said what, and any numbers, names or dates mentioned.
+- Decisions and open questions: include the reasoning in a few words.""",
+    "standard": """Balanced notes: the main topics and outcomes, one line each.
+- Summary: typically 3–8 bullets.""",
+    "brief": """As short as possible: a busy reader skims it in 15 seconds.
+- Summary: at most 4 bullets, each under 12 words, outcomes only.
+- Decisions, action items and questions: a few words each.""",
+}
+
+NOTES_PROMPT = """Write the meeting notes in {language}, in Markdown.
+
+Level of detail — {style}
+
+Scale everything to what was actually said: a short or trivial meeting gets 1–2 summary
+bullets. Never pad: no bullets about the transcript itself, the meeting's length, or what
+did NOT happen.
+
+Start with one line "Title: <a short title for this meeting, max 6 words>", then exactly
+these sections:
 
 ## Summary
-3–8 bullet points covering the main topics and outcomes.
+The main topics and outcomes, as bullet points.
 
 ## Decisions
 Only things the group agreed or decided (not tasks). Write "None recorded." if none.
 
 ## Action items
 A Markdown table with columns: Owner | Task | Due. Go through the transcript line by line
-and include EVERY commitment: tasks someone was asked to do, and anything a speaker says
+and include EVERY real commitment: tasks someone was asked to do, and anything a speaker says
 they will do ("I will…", "I'll…", "let me…") — including the person running the meeting.
-Use the speaker label as the owner when no name is given; use "—" for an unknown due date.
-Write "None recorded." if none.
+Don't turn the meeting's topic into a task. Use the speaker label as the owner when no name
+is given; use "—" for an unknown due date. Write "None recorded." if none.
 
 ## Open questions
 Unresolved questions or topics to follow up on (write "None." if none).
@@ -89,8 +110,12 @@ class LLM:
 def summarize(transcript: str, cfg: Config) -> str:
     llm = LLM(cfg)
     lang = cfg.summary_language
+    if cfg.summary_style not in STYLES:
+        raise SystemExit(f"summary_style must be one of: {', '.join(STYLES)}")
+    style = STYLES[cfg.summary_style]
+    max_tokens = 4000 if cfg.summary_style == "detailed" else 2500
     if llm.count_tokens(transcript) <= cfg.max_context_tokens:
-        return llm.chat(NOTES_PROMPT.format(language=lang, transcript=transcript))
+        return llm.chat(NOTES_PROMPT.format(language=lang, style=style, transcript=transcript), max_tokens=max_tokens)
 
     # Long meeting: summarize chunks, then write the final notes from the chunk notes.
     chunks, current, size = [], [], 0
@@ -110,4 +135,5 @@ def summarize(transcript: str, cfg: Config) -> str:
         print(f"   summarizing part {i}/{len(chunks)}…")
         partial.append(f"### Part {i}\n" + llm.chat(
             CHUNK_PROMPT.format(part=i, total=len(chunks), language=lang, transcript=chunk), max_tokens=1500))
-    return llm.chat(NOTES_PROMPT.format(language=lang, transcript="\n\n".join(partial)))
+    return llm.chat(NOTES_PROMPT.format(language=lang, style=style, transcript="\n\n".join(partial)),
+                    max_tokens=max_tokens)

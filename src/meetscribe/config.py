@@ -38,6 +38,8 @@ class Config:
     # For llm_backend = "openai": Ollama = http://localhost:11434/v1, LM Studio = http://localhost:1234/v1
     llm_url: str = "http://localhost:11434/v1"
     summary_language: str = "English"
+    # How much detail: "detailed" (long, full context), "standard", or "brief" (bullets only).
+    summary_style: str = "standard"
     # Transcripts longer than this (in tokens) are summarized in chunks first.
     max_context_tokens: int = 20000
 

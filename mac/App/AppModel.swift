@@ -4,18 +4,6 @@ import Foundation
 import ServiceManagement
 import UserNotifications
 
-struct AppSettings: Codable, Equatable {
-    var myName = NSFullUserName().components(separatedBy: " ").first ?? ""
-    var language = ""            // "" = auto, "en", "fr", …
-    var vocabulary = ""
-    var teamsOnly = false        // false = all Mac audio
-    var keepAudio = true
-    var notesFolderPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("MeetingNotes").path
-
-    var notesFolder: URL { URL(fileURLWithPath: notesFolderPath, isDirectory: true) }
-}
-
 enum Job: Equatable {
     case process(Meeting.ID)
     case processFile(URL)
@@ -50,10 +38,19 @@ final class AppModel: ObservableObject {
     @Published var queue: [Job] = []
     @Published var currentJob: Job?
     @Published var jobStatus = ""
+    @Published var movingStatus: String?
 
     // Permissions
     @Published var micPermission = MicCapture.permission
     @Published var screenPermission = SystemAudioCapture.hasPermission
+
+    /// Recordings live here until processed, then move to the notes folder — so a synced
+    /// folder (OneDrive…) only ever receives finished meetings, never half-written audio.
+    static let workDir: URL = {
+        let url = Engine.support.appendingPathComponent("recordings", isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }()
 
     private var meterTimer: Timer?
     private var runner: Task<Void, Never>?
@@ -88,7 +85,8 @@ final class AppModel: ObservableObject {
     }
 
     func reload() {
-        meetings = Meeting.loadAll(in: settings.notesFolder)
+        meetings = (Meeting.loadAll(in: Self.workDir) + Meeting.loadAll(in: settings.notesFolder))
+            .sorted { $0.date > $1.date }
     }
 
     func meeting(_ id: Meeting.ID) -> Meeting? { meetings.first { $0.id == id } }
@@ -146,7 +144,7 @@ final class AppModel: ObservableObject {
         notices = []
         let stamp = DateFormatter()
         stamp.dateFormat = "yyyy-MM-dd_HHmmss"
-        let folder = settings.notesFolder.appendingPathComponent(stamp.string(from: Date()))
+        let folder = Self.workDir.appendingPathComponent(stamp.string(from: Date()))
         let rec = MeetingRecorder(folder: folder)
         rec.onNotice = { [weak self] note in
             DispatchQueue.main.async { self?.notices.append(note) }
@@ -256,8 +254,11 @@ final class AppModel: ObservableObject {
             if let folder {
                 if result.ok {
                     try? FileManager.default.removeItem(at: folder.appendingPathComponent("error.txt"))
-                    if !settings.keepAudio, case .process = job {
-                        for f in ["mic.caf", "system.caf"] { try? FileManager.default.removeItem(at: folder.appendingPathComponent(f)) }
+                    if case .process = job {
+                        if !settings.keepAudio {
+                            for f in ["mic.caf", "system.caf"] { try? FileManager.default.removeItem(at: folder.appendingPathComponent(f)) }
+                        }
+                        await moveToNotesFolder(folder)
                     }
                 } else if !Task.isCancelled {
                     let msg = result.errorTail.isEmpty ? "Processing failed." : result.errorTail
@@ -273,20 +274,65 @@ final class AppModel: ObservableObject {
     }
 
     private func arguments(for job: Job) -> ([String], URL?) {
-        let root = settings.notesFolder
+        func folder(_ id: Meeting.ID) -> URL { meeting(id)?.folder ?? settings.notesFolder.appendingPathComponent(id) }
         switch job {
         case .process(let id):
-            let folder = root.appendingPathComponent(id)
-            let title = readInfo(folder)?.title ?? ""
-            return (["process", folder.path] + (title.isEmpty ? [] : ["--title", title]), folder)
+            let f = folder(id)
+            let title = readInfo(f)?.title ?? ""
+            return (["process", f.path] + (title.isEmpty ? [] : ["--title", title]), f)
         case .processFile(let url):
             return (["process", url.path], nil)
         case .rename(let id, let mapping):
-            let folder = root.appendingPathComponent(id)
-            return (["rename", folder.path] + mapping.map { "\($0.key)=\($0.value)" }, folder)
+            return (["rename", folder(id).path] + mapping.map { "\($0.key)=\($0.value)" }, folder(id))
         case .resummarize(let id):
-            let folder = root.appendingPathComponent(id)
-            return (["summarize", folder.path], folder)
+            return (["summarize", folder(id).path], folder(id))
+        }
+    }
+
+    /// A processed recording leaves the working folder for the (possibly synced) notes folder.
+    private func moveToNotesFolder(_ folder: URL) async {
+        guard folder.deletingLastPathComponent().standardizedFileURL == Self.workDir.standardizedFileURL else { return }
+        let dest = settings.notesFolder.appendingPathComponent(folder.lastPathComponent, isDirectory: true)
+        await Task.detached {
+            let fm = FileManager.default
+            try? fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if !fm.fileExists(atPath: dest.path) { try? fm.moveItem(at: folder, to: dest) }
+        }.value
+    }
+
+    // MARK: - Storage
+
+    var canChangeStorage: Bool { recorder == nil && currentJob == nil && queue.isEmpty && movingStatus == nil }
+
+    /// Number of finished meetings in the current notes folder.
+    var meetingsInNotesFolder: Int { Meeting.loadAll(in: settings.notesFolder).count }
+
+    /// Switches where notes are kept, optionally moving the existing meetings there.
+    func changeStorage(to new: AppSettings, moveExisting: Bool) {
+        let from = settings.notesFolder
+        let to = new.notesFolder
+        guard from.standardizedFileURL != to.standardizedFileURL else { settings = new; return }
+        guard moveExisting else { settings = new; return }
+        let folders = Meeting.loadAll(in: from).map(\.folder)
+        movingStatus = "Moving \(folders.count) meeting(s)…"
+        Task {
+            let failed = await Task.detached { () -> Int in
+                let fm = FileManager.default
+                try? fm.createDirectory(at: to, withIntermediateDirectories: true)
+                var failed = 0
+                for f in folders {
+                    let dest = to.appendingPathComponent(f.lastPathComponent)
+                    if fm.fileExists(atPath: dest.path) { failed += 1; continue }
+                    do { try fm.moveItem(at: f, to: dest) } catch { failed += 1 }
+                }
+                // Remove the old folder if nothing else is left in it.
+                if let rest = try? fm.contentsOfDirectory(atPath: from.path), rest.allSatisfy({ $0.hasPrefix(".") }) {
+                    try? fm.removeItem(at: from)
+                }
+                return failed
+            }.value
+            settings = new
+            movingStatus = failed > 0 ? "\(failed) meeting(s) couldn't be moved — they're still in \(from.path)." : nil
         }
     }
 
@@ -331,14 +377,15 @@ final class AppModel: ObservableObject {
         if panel.runModal() == .OK, let url = panel.url { enqueue(.processFile(url)) }
     }
 
-    func chooseNotesFolder() {
+    func pickFolder() -> URL? {
         NSApp.activate(ignoringOtherApps: true)
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
+        panel.prompt = "Use this folder"
         panel.directoryURL = settings.notesFolder
-        if panel.runModal() == .OK, let url = panel.url { settings.notesFolderPath = url.path }
+        return panel.runModal() == .OK ? panel.url : nil
     }
 
     // MARK: - Launch at login

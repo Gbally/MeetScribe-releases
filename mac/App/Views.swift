@@ -24,7 +24,6 @@ struct RootView: View {
         }
         .frame(width: 400, height: 580)
         .onAppear {
-            model.hasUnseenResult = false
             model.reload()
             model.refreshPermissions()
             model.refreshCalendar()
@@ -1130,8 +1129,6 @@ struct NotificationsSection: View {
                 .padding(8)
                 .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.1)))
             }
-            Text("When notes are ready, the menu bar icon also shows ✓ Ready.")
-                .font(.caption2).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .onAppear { model.refreshNotificationStatus() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in

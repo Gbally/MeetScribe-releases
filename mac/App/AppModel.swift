@@ -46,8 +46,6 @@ final class AppModel: ObservableObject {
     @Published var currentJob: Job?
     @Published var jobStatus = ""
     @Published var jobProgress: Double?
-    /// New notes the user hasn't looked at yet: shown as "✓ Ready" in the menu bar.
-    @Published var hasUnseenResult = false
     @Published var notificationProblem: String?
     @Published var jobStarted = Date()
     /// Set by a notification click: the window opens on this meeting.
@@ -450,7 +448,6 @@ final class AppModel: ObservableObject {
     }
 
     private func notify(job: Job, ok: Bool, folder: URL?) {
-        if ok, case .process = job { hasUnseenResult = true }
         guard settings.notifyWhenReady else { return }
         let content = UNMutableNotificationContent()
         let title = folder.flatMap { Meeting.load($0)?.title } ?? "Meeting"

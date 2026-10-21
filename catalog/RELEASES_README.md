@@ -4,6 +4,8 @@ Local meeting notes for macOS: records your meetings (Teams, Zoom, Meet…), tra
 recognises who spoke, and writes a summary with decisions and to-dos — all on your Mac, with no
 cloud service.
 
+**Website:** https://gbally.github.io/MeetScribe-releases/
+
 **Download:** the `.dmg` from the [latest release](../../releases/latest), then follow
 [INSTALL.txt](INSTALL.txt).
 

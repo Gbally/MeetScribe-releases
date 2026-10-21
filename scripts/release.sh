@@ -65,7 +65,8 @@ git -C "$WORK" fetch -q origin main 2>/dev/null && git -C "$WORK" checkout -q -B
 # 1. Page files first (a release can't be created in an empty repository).
 echo "• README, INSTALL, models.json"
 cp "$OUT/models.json" "$OUT/INSTALL.txt" "$OUT/README.md" "$WORK/"
-git -C "$WORK" add models.json INSTALL.txt README.md
+cp -R "$ROOT/website/." "$WORK/" && touch "$WORK/.nojekyll"   # the website (GitHub Pages)
+git -C "$WORK" add -A
 git -C "$WORK" diff --cached --quiet || git -C "$WORK" commit -qm "MeetScribe $VERSION: page and models"
 git -C "$WORK" push -q -u origin main
 

@@ -1,51 +1,75 @@
 #!/bin/sh
-# Publishes a new version for everyone:
-#   1. builds the signed app + DMG,
-#   2. uploads the DMG as a GitHub release in the public releases repo,
-#   3. updates latest.json (what apps check daily) and models.json there,
-#   4. tags the source repo.
+# Releases a new version in two steps:
 #
-#   ./scripts/release.sh "What's new in this version"
+#   ./scripts/release.sh "What's new"            PREPARE (local only): builds the signed DMG and
+#                                                 writes build-cache/release/ (DMG, latest.json,
+#                                                 models.json, README, INSTALL) — nothing is sent.
+#   ./scripts/release.sh --publish "What's new"  PUBLISH: GitHub release with the DMG, pushes
+#                                                 latest.json/models.json to the releases repo,
+#                                                 tags the source repo. Installed apps update
+#                                                 within a day.
 #
-# Bump `version` in pyproject.toml first, commit, then run this. Needs `gh auth login` once.
+# Bump `version` in pyproject.toml and commit first. Needs `gh auth login` once.
 set -e
 cd "$(dirname "$0")/.."
 ROOT=$(pwd)
 RELEASES_REPO=Gbally/MeetScribe-releases
 GH=$(command -v gh || echo "$HOME/development/bin/gh")
+PUBLISH=0
+[ "$1" = "--publish" ] && { PUBLISH=1; shift; }
 VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
 NOTES=${1:-"MeetScribe $VERSION"}
+OUT="$ROOT/build-cache/release"
 
-if [ -n "$(git status --porcelain)" ]; then echo "Commit your changes first."; exit 1; fi
-if "$GH" release view "v$VERSION" --repo "$RELEASES_REPO" >/dev/null 2>&1; then
-  echo "v$VERSION is already released — bump the version in pyproject.toml."; exit 1
-fi
-[ -f signing/MeetScribe-signing.keychain-db ] || [ -n "$SIGN_ID" ] || {
-  echo "No stable signing identity: updates would be refused by installed apps."; exit 1; }
-
-./scripts/build_app.sh
-DMG="dist/MeetScribe-$VERSION.dmg"
-BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" build/MeetScribe.app/Contents/Info.plist)
-SHA=$(shasum -a 256 "$DMG" | cut -d' ' -f1)
-URL="https://github.com/$RELEASES_REPO/releases/download/v$VERSION/MeetScribe-$VERSION.dmg"
-
-echo "• GitHub release v$VERSION (build $BUILD)"
-"$GH" release create "v$VERSION" "$DMG" --repo "$RELEASES_REPO" --title "MeetScribe $VERSION" --notes "$NOTES"
-
-echo "• latest.json + models.json"
-WORK="$ROOT/build-cache/releases-repo"
-rm -rf "$WORK"
-"$GH" repo clone "$RELEASES_REPO" "$WORK" -- --depth 1 -q
-python3 - "$WORK/latest.json" "$VERSION" "$BUILD" "$URL" "$SHA" "$NOTES" <<'PY'
+if [ "$PUBLISH" = 0 ]; then
+  if [ -n "$(git status --porcelain)" ]; then echo "Commit your changes first."; exit 1; fi
+  [ -f signing/MeetScribe-signing.keychain-db ] || [ -n "$SIGN_ID" ] || {
+    echo "No stable signing identity: installed apps would refuse the update."; exit 1; }
+  ./scripts/build_app.sh
+  BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" build/MeetScribe.app/Contents/Info.plist)
+  DMG="MeetScribe-$VERSION.dmg"
+  rm -rf "$OUT" && mkdir -p "$OUT"
+  cp "dist/$DMG" "$OUT/"
+  SHA=$(shasum -a 256 "$OUT/$DMG" | cut -d' ' -f1)
+  URL="https://github.com/$RELEASES_REPO/releases/download/v$VERSION/$DMG"
+  python3 - "$OUT/latest.json" "$VERSION" "$BUILD" "$URL" "$SHA" "$NOTES" <<'PY'
 import json, sys
 path, version, build, url, sha, notes = sys.argv[1:]
 json.dump({"version": version, "build": int(build), "url": url, "sha256": sha, "notes": notes},
           open(path, "w"), indent=1)
 PY
-cp catalog/models.json "$WORK/models.json"
-cp mac/INSTALL.txt "$WORK/INSTALL.txt"
-git -C "$WORK" add latest.json models.json INSTALL.txt
-git -C "$WORK" commit -qm "MeetScribe $VERSION" && git -C "$WORK" push -q
+  cp catalog/models.json "$OUT/models.json"
+  cp mac/INSTALL.txt "$OUT/INSTALL.txt"
+  cp catalog/RELEASES_README.md "$OUT/README.md"
+  printf '%s' "$NOTES" > "$OUT/notes.txt"
+  echo
+  echo "✅ Prepared MeetScribe $VERSION (build $BUILD) in build-cache/release/ — nothing published."
+  echo "   Publish with:  ./scripts/release.sh --publish"
+  exit 0
+fi
 
-git tag "v$VERSION" && git push -q origin "v$VERSION" 2>/dev/null || true
+# --- publish (uses what PREPARE produced)
+[ -f "$OUT/latest.json" ] || { echo "Run ./scripts/release.sh (prepare) first."; exit 1; }
+VERSION=$(python3 -c "import json; print(json.load(open('$OUT/latest.json'))['version'])")
+NOTES=$(cat "$OUT/notes.txt")
+if ! "$GH" repo view "$RELEASES_REPO" >/dev/null 2>&1; then
+  echo "• Creating the public repo $RELEASES_REPO"
+  "$GH" repo create "$RELEASES_REPO" --public --description "MeetScribe installers and updates"
+fi
+echo "• GitHub release v$VERSION"
+"$GH" release create "v$VERSION" "$OUT/MeetScribe-$VERSION.dmg" --repo "$RELEASES_REPO" \
+  --title "MeetScribe $VERSION" --notes "$NOTES"
+echo "• latest.json, models.json, README"
+WORK="$ROOT/build-cache/releases-repo"
+rm -rf "$WORK" && mkdir -p "$WORK"
+git -C "$WORK" init -q -b main
+git -C "$WORK" remote add origin "https://github.com/$RELEASES_REPO.git"
+git -C "$WORK" fetch -q origin main 2>/dev/null && git -C "$WORK" checkout -q -B main origin/main || true
+cp "$OUT/latest.json" "$OUT/models.json" "$OUT/INSTALL.txt" "$OUT/README.md" "$WORK/"
+git -C "$WORK" add latest.json models.json INSTALL.txt README.md
+git -C "$WORK" commit -qm "MeetScribe $VERSION"
+git -C "$WORK" push -q -u origin main
+if git remote get-url origin >/dev/null 2>&1; then
+  git tag -f "v$VERSION" && git push -q origin "v$VERSION"
+fi
 echo "✅ Released MeetScribe $VERSION — installed apps will offer the update within a day."

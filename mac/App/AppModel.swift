@@ -84,6 +84,7 @@ final class AppModel: ObservableObject {
     @Published var voices: [(name: String, samples: Int)] = []
     @Published var toast: String?
     @Published var nextEvent: CalendarEvent?     // happening now or within 30 min (for the brief card)
+    @Published var todayEvents: [CalendarEvent] = []
     @Published var catalog = ModelCatalog.load()
     @Published var installedModels: [String: Double] = [:]   // repo → GB on disk
     @Published var modelDownload: (repo: String, progress: Double?, status: String)?
@@ -564,6 +565,47 @@ final class AppModel: ObservableObject {
         currentEvent = settings.useCalendar ? CalendarService.shared.currentMeeting() : nil
         nextEvent = settings.useCalendar
             ? (currentEvent ?? CalendarService.shared.upcomingMeetings(within: 30).first) : nil
+        todayEvents = settings.useCalendar ? CalendarService.shared.todayMeetings() : []
+    }
+
+    // MARK: - Today
+
+    /// One line of the Today timeline: a calendar meeting and/or a recording.
+    struct TodayItem: Identifiable {
+        var id: String
+        var time: Date
+        var end: Date?
+        var title: String
+        var event: CalendarEvent?
+        var meeting: Meeting?
+
+        enum Phase { case done, now, later }
+        var phase: Phase {
+            if meeting != nil { return .done }
+            let now = Date()
+            if let end, time <= now.addingTimeInterval(300), end > now { return .now }
+            return time > now ? .later : .done
+        }
+    }
+
+    /// Today's calendar meetings, matched with what was recorded, plus unplanned recordings.
+    var today: [TodayItem] {
+        let cal = Calendar.current
+        let recorded = meetings.filter { cal.isDateInToday($0.date) && $0.id != recordingID }
+        var used = Set<String>()
+        var items: [TodayItem] = todayEvents.map { e in
+            let match = recorded.first { m in
+                guard !used.contains(m.id), let c = m.info?.calendar else { return false }
+                return (c.id != nil && c.id == e.id) || c.title == e.title
+            }
+            if let match { used.insert(match.id) }
+            return TodayItem(id: e.id ?? "\(e.title)\(e.start)", time: e.start, end: e.end,
+                             title: match?.title ?? e.title, event: e, meeting: match)
+        }
+        items += recorded.filter { !used.contains($0.id) }.map {
+            TodayItem(id: $0.id, time: $0.date, end: nil, title: $0.title, event: nil, meeting: $0)
+        }
+        return items.sorted { $0.time < $1.time }
     }
 
     // MARK: - Briefs

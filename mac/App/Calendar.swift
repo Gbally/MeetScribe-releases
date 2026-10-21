@@ -56,6 +56,18 @@ final class CalendarService {
         return best.map(Self.convert)
     }
 
+    /// Today's real meetings (with other people or a call link), in order.
+    func todayMeetings(_ now: Date = Date()) -> [CalendarEvent] {
+        guard eventsAllowed else { return [] }
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: now)
+        let end = cal.date(byAdding: .day, value: 1, to: start)!
+        return store.events(matching: store.predicateForEvents(withStart: start, end: end, calendars: nil))
+            .filter { !$0.isAllDay && $0.status != .canceled && (Self.isOnline($0) || ($0.attendees?.count ?? 0) > 1) }
+            .sorted { $0.startDate < $1.startDate }
+            .map(Self.convert)
+    }
+
     /// Real meetings (with other people or a call link) starting within the next `minutes`.
     func upcomingMeetings(within minutes: Double, from now: Date = Date()) -> [CalendarEvent] {
         guard eventsAllowed else { return [] }

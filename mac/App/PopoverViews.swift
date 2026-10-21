@@ -143,15 +143,16 @@ struct LevelMeter: View {
 // MARK: - Home
 
 struct HomeView: View {
+    enum Tab { case today, meetings, todos }
+
     @EnvironmentObject var model: AppModel
     @ObservedObject private var updater = AppModelHolder.updater
     @Binding var route: Route
-    @State private var title = ""
     @State private var confirmDiscard = false
     @State private var deleting: Meeting?
     @State private var template: String?
     @State private var search = ""
-    @State private var showTodos = false
+    @State private var tab: Tab = .today
 
     var body: some View {
         VStack(spacing: 0) {
@@ -163,14 +164,25 @@ struct HomeView: View {
                     case .needsSetup, .settingUp: SetupCard()
                     case .ready:
                         PermissionsCard()
-                        if !model.isRecording { briefCard }
-                        recordArea
+                        hero
                     }
                     if let job = model.currentJob { jobCard(job) }
-                    if model.phase == .ready || !model.meetings.isEmpty { lists }
+                    if model.phase == .ready || !model.meetings.isEmpty {
+                        Divider()
+                        if !search.isEmpty {
+                            searchResults
+                        } else {
+                            switch tab {
+                            case .today: todayTimeline
+                            case .meetings: meetingList
+                            case .todos: todoList
+                            }
+                        }
+                    }
                 }
                 .padding(14)
             }
+            footer
         }
     }
 
@@ -178,8 +190,10 @@ struct HomeView: View {
 
     var header: some View {
         HStack(spacing: 8) {
-            Image(systemName: "waveform").foregroundColor(.secondary)
-            Text("MeetScribe").font(.headline)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(Date().formatted(.dateTime.weekday(.wide))).font(.headline)
+                Text(Date().formatted(.dateTime.day().month(.wide))).font(.caption).foregroundColor(.secondary)
+            }
             Spacer()
             if updater.available != nil {
                 Button { Windows.showSettings(model, tab: .about) } label: {
@@ -191,8 +205,7 @@ struct HomeView: View {
                 .help("A new version of MeetScribe is available")
             }
             Button { Windows.showSettings(model) } label: { Image(systemName: "gearshape") }
-                .buttonStyle(.borderless)
-                .help("Settings")
+                .buttonStyle(.borderless).help("Settings")
             Menu {
                 Button("Transcribe an audio file…") { model.chooseAudioFile() }.disabled(model.phase != .ready)
                 Button("Open notes folder") { NSWorkspace.shared.open(model.settings.notesFolder) }
@@ -205,9 +218,9 @@ struct HomeView: View {
         .padding(.vertical, 10)
     }
 
-    // MARK: Recording
+    // MARK: Hero (record / recording)
 
-    @ViewBuilder var recordArea: some View {
+    @ViewBuilder var hero: some View {
         if model.isRecording {
             Card {
                 HStack {
@@ -240,108 +253,178 @@ struct HomeView: View {
                     }
             }
         } else {
-            VStack(alignment: .leading, spacing: 8) {
-                if let e = model.currentEvent, model.brief(for: e).isEmpty {
-                    Label("\(e.title) · \(e.timeRange)", systemImage: "calendar")
-                        .font(.caption).foregroundColor(.secondary).lineLimit(1)
-                }
+            let event = model.currentEvent
+            let brief = event.map { model.brief(for: $0) }
+            HStack(alignment: .center, spacing: 14) {
                 Button {
-                    model.startRecording(title: title, template: template)
-                    title = ""
+                    model.startRecording(title: "", template: template)
                     template = nil
                 } label: {
-                    Label(model.isStarting ? "Starting…" : "Start recording", systemImage: "record.circle")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
-                .controlSize(.large)
-                .keyboardShortcut(.defaultAction)
-                .disabled(model.isStarting)
-                HStack(spacing: 8) {
-                    TextField(model.currentEvent?.title ?? "Name (optional)", text: $title)
-                        .textFieldStyle(.roundedBorder)
-                    Picker("", selection: Binding(get: { template ?? model.settings.defaultTemplate }, set: { template = $0 })) {
-                        ForEach(meetingTemplates, id: \.id) { Text($0.name).tag($0.id) }
+                    ZStack {
+                        Circle().fill(Color.red.opacity(0.14))
+                        Circle().strokeBorder(Color.red.opacity(0.35), lineWidth: 1)
+                        if model.isStarting { ProgressView().controlSize(.small) }
+                        else { Circle().fill(Color.red).frame(width: 22, height: 22) }
                     }
-                    .labelsHidden()
-                    .fixedSize()
-                    .help("Meeting type: shapes the notes")
-                }
-                .controlSize(.small)
-                if let err = model.startError {
-                    Label(err, systemImage: "exclamationmark.triangle").font(.caption).foregroundColor(.red)
-                }
-                Text(hint).font(.caption2).foregroundColor(.secondary)
-            }
-        }
-    }
-
-    var hint: String {
-        var parts: [String] = []
-        if let hk = model.settings.hotkey { parts.append(hk.display) }
-        parts.append(model.settings.teamsOnly ? "your mic + Teams" : "your mic + all Mac audio")
-        if model.settings.autoRecord { parts.append("auto-records calls") }
-        return parts.joined(separator: " · ")
-    }
-
-    @ViewBuilder var briefCard: some View {
-        if let e = model.nextEvent, model.settings.briefs {
-            let b = model.brief(for: e)
-            if !b.isEmpty {
-                Button { route = .brief(e) } label: {
-                    HStack {
-                        Image(systemName: "calendar.badge.clock").foregroundColor(.accentColor)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(e.title).font(.callout.weight(.medium)).lineLimit(1)
-                            Text(e.start > Date() ? "Starts \(e.start.formatted(date: .omitted, time: .shortened))" : "Now")
-                                .font(.caption).foregroundColor(.secondary)
-                            + Text(b.openTodos.isEmpty ? " · notes from last time" : " · \(b.openTodos.count) open to-do\(b.openTodos.count == 1 ? "" : "s") from last time")
-                                .font(.caption).foregroundColor(.secondary)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
-                    }
-                    .padding(10)
-                    .contentShape(Rectangle())
-                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.accentColor.opacity(0.08)))
+                    .frame(width: 60, height: 60)
+                    .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
+                .keyboardShortcut(.defaultAction)
+                .disabled(model.isStarting)
+                .help("Start recording")
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(event.map { "Record \($0.title)" } ?? "Record").font(.headline).lineLimit(1)
+                    HStack(spacing: 4) {
+                        if let e = event { Text("Now · \(e.start.formatted(date: .omitted, time: .shortened)) ·") }
+                        Menu {
+                            ForEach(meetingTemplates, id: \.id) { t in Button(t.name) { template = t.id } }
+                        } label: {
+                            Text(templateName(template ?? model.settings.defaultTemplate) + " ▾").font(.caption)
+                        }
+                        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                        .help("Meeting type: shapes the notes")
+                        if let hk = model.settings.hotkey { Text("· \(hk.display)") }
+                    }
+                    .font(.caption).foregroundColor(.secondary)
+                    if let e = event, let b = brief, !b.isEmpty {
+                        Button { route = .brief(e) } label: {
+                            Text(b.openTodos.isEmpty ? "Notes from last time ›"
+                                 : "\(b.openTodos.count) open to-do\(b.openTodos.count == 1 ? "" : "s") from last time ›")
+                                .font(.caption).foregroundColor(.accentColor)
+                        }
+                        .buttonStyle(.plain)
+                    } else if model.settings.autoRecord {
+                        Text("Records calls automatically").font(.caption).foregroundColor(.secondary)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            if let err = model.startError {
+                Label(err, systemImage: "exclamationmark.triangle").font(.caption).foregroundColor(.red)
             }
         }
     }
 
-    // MARK: Meetings and to-dos
+    // MARK: Today
 
-    @ViewBuilder var lists: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass").foregroundColor(.secondary)
-            TextField("Search, or ask a question", text: $search)
-                .textFieldStyle(.plain)
-                .onSubmit { askAI() }
-            if !search.isEmpty {
-                Button { search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.secondary) }
-                    .buttonStyle(.borderless)
+    @ViewBuilder var todayTimeline: some View {
+        let items = model.today
+        if items.isEmpty {
+            if model.meetings.isEmpty {
+                Text("Press record when your next meeting starts. Your notes and to-dos will show up here.")
+                    .font(.callout).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(CalendarService.shared.eventsAllowed ? "No meetings today. Recent:" : "Recent")
+                    .font(.caption).foregroundColor(.secondary)
+                recentList
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(items) { item in timelineRow(item, last: item.id == items.last?.id) }
             }
         }
-        .padding(7)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)))
-        if !search.isEmpty && model.phase == .ready {
+    }
+
+    func timelineRow(_ item: AppModel.TodayItem, last: Bool) -> some View {
+        let phase = item.phase
+        let color: Color = phase == .now ? .red : phase == .done ? .green : .secondary
+        return HStack(alignment: .top, spacing: 10) {
+            VStack(spacing: 0) {
+                Circle().fill(color.opacity(phase == .later ? 0.4 : 1)).frame(width: 8, height: 8).padding(.top, 5)
+                if !last { Rectangle().fill(Color.primary.opacity(0.12)).frame(width: 1.5).frame(maxHeight: .infinity) }
+            }
+            .frame(width: 10)
+            Button {
+                if let m = item.meeting { route = .meeting(m.id) }
+                else if phase == .now { model.startRecording(title: item.title) }
+                else if let e = item.event, !model.brief(for: e).isEmpty { route = .brief(e) }
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.time.formatted(date: .omitted, time: .shortened)
+                         + (phase == .now ? " · now" : item.meeting == nil && phase == .done ? " · not recorded" : ""))
+                        .font(.caption).foregroundColor(phase == .now ? .red : .secondary)
+                    Text(item.title).font(.callout).lineLimit(1)
+                        .foregroundColor(item.meeting == nil && phase == .done ? .secondary : .primary)
+                    if let n = item.meeting?.notes, !n.actions.isEmpty {
+                        let mine = n.actions.filter { model.isMine($0.owner) }.count
+                        Text("\(n.actions.count) to-do\(n.actions.count == 1 ? "" : "s")" + (mine > 0 ? " · \(mine) yours" : ""))
+                            .font(.caption).foregroundColor(.secondary)
+                    } else if item.meeting.map({ model.isBusy($0.id) }) == true {
+                        Text("Creating notes…").font(.caption).foregroundColor(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, last ? 0 : 12)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder var recentList: some View {
+        let recent = Array(model.meetings.filter { $0.id != model.recordingID }.prefix(5))
+        if recent.isEmpty {
+            Text("Your meetings will appear here.").font(.callout).foregroundColor(.secondary)
+        }
+        VStack(spacing: 0) {
+            ForEach(recent) { m in
+                Button { route = .meeting(m.id) } label: { MeetingRow(meeting: m) }.buttonStyle(.plain)
+                if m.id != recent.last?.id { Divider() }
+            }
+        }
+    }
+
+    // MARK: Search, tabs
+
+    @ViewBuilder var searchResults: some View {
+        if model.phase == .ready {
             Button { askAI() } label: {
                 Label("Ask your meetings: “\(search)”", systemImage: "sparkles").font(.callout).lineLimit(1)
             }
             .buttonStyle(.borderless)
         }
-        if search.isEmpty {
-            let open = model.myOpenTodoCount
-            Picker("", selection: $showTodos) {
-                Text("Meetings").tag(false)
-                Text(open > 0 ? "To-dos · \(open)" : "To-dos").tag(true)
+        meetingList
+    }
+
+    var footer: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+                TextField("Search or ask", text: $search)
+                    .textFieldStyle(.plain)
+                    .onSubmit { askAI() }
+                if !search.isEmpty {
+                    Button { search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.secondary) }
+                        .buttonStyle(.borderless)
+                }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            .padding(7)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)))
+            .padding(.horizontal, 14)
+            .padding(.bottom, 8)
+            Divider()
+            HStack {
+                tabButton(.today, icon: "calendar", label: "Today")
+                tabButton(.meetings, icon: "list.bullet", label: "Meetings")
+                tabButton(.todos, icon: "checklist", label: model.myOpenTodoCount > 0 ? "To-dos · \(model.myOpenTodoCount)" : "To-dos")
+            }
+            .padding(.vertical, 6)
         }
-        if showTodos && search.isEmpty { todoList } else { meetingList }
+        .padding(.top, 8)
+    }
+
+    func tabButton(_ t: Tab, icon: String, label: String) -> some View {
+        Button { tab = t; search = "" } label: {
+            VStack(spacing: 2) {
+                Image(systemName: icon).font(.system(size: 15))
+                Text(label).font(.caption2)
+            }
+            .foregroundColor(tab == t && search.isEmpty ? .accentColor : .secondary)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder var meetingList: some View {

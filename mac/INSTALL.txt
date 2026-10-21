@@ -25,4 +25,5 @@ Documents/MeetingNotes.
 
 Everything runs on your Mac. Always tell participants that you are recording.
 
+MeetScribe opens at login (turn it off in Settings → General).
 Updates: MeetScribe checks once a day and offers new versions in its window (Update).

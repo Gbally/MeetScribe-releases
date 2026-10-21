@@ -123,6 +123,11 @@ final class AppModel: ObservableObject {
         } else {
             settings = AppSettings()
         }
+        // Open at login is on by default — applied once, so turning it off in Settings sticks.
+        if !UserDefaults.standard.bool(forKey: "loginItemDefaultApplied") {
+            UserDefaults.standard.set(true, forKey: "loginItemDefaultApplied")
+            if SMAppService.mainApp.status != .enabled { try? SMAppService.mainApp.register() }
+        }
         // Installs from before the catalog used Qwen3 8B + Whisper turbo: keep them (the catalog
         // may recommend something else, but never switches models by itself).
         if settings.llmModel == nil && FileManager.default.fileExists(atPath: Engine.python.path) {

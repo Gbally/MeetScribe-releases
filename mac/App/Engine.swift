@@ -128,6 +128,7 @@ enum Engine {
         summary_language = \(q(s.notesLanguage))
         vocabulary = \(q(s.vocabulary))
         summary_style = \(q(s.summaryStyle.rawValue))
+        template = \(q(s.defaultTemplate))
 
         """
         try? toml.write(to: configFile, atomically: true, encoding: .utf8)

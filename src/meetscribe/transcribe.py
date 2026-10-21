@@ -37,14 +37,18 @@ def transcribe(audio: np.ndarray, model: str, language: str = "", vocabulary: st
     if len(langs) <= 1:
         return _transcribe(audio, model, langs[0] if langs else None, vocabulary)
 
-    runs = language_runs(audio, model, langs)
+    from . import progress
+
+    progress.whisper_span(0.0, 1.0)
+    runs = language_runs(audio, model, langs)  # reports 0–10 % of the stage
     used = {lang for lang, _, _ in runs}
     if len(used) <= 1:  # the whole track is in one language: one plain pass
         return _transcribe(audio, model, next(iter(used), langs[0]), vocabulary)
 
     words: list[Word] = []
     totals: dict[str, float] = {}
-    for lang in sorted(used):
+    for i, lang in enumerate(sorted(used)):
+        progress.whisper_span(0.1 + 0.9 * i / len(used), 0.1 + 0.9 * (i + 1) / len(used))
         spans = [(s, e) for l, s, e in runs if l == lang]
         totals[lang] = sum(e - s for s, e in spans)
         print(f"   {lang}: {totals[lang] / 60:.1f} min", flush=True)
@@ -56,6 +60,7 @@ def transcribe(audio: np.ndarray, model: str, language: str = "", vocabulary: st
         w, _ = _transcribe(masked, model, lang, vocabulary)
         words += [x for x in w if any(s <= (x.start + x.end) / 2 <= e for s, e in spans)]
     words.sort(key=lambda w: w.start)
+    progress.whisper_span(0.0, 1.0)
     return words, max(totals, key=totals.get)
 
 
@@ -70,7 +75,7 @@ def _transcribe(audio, model, language, vocabulary) -> tuple[list[Word], str]:
         condition_on_previous_text=False,  # avoids repetition loops on long recordings
         hallucination_silence_threshold=2.0,
         initial_prompt=f"Vocabulary: {vocabulary}." if vocabulary else None,
-        verbose=None,
+        verbose=False,  # False (not None) enables the progress bar that progress.py listens to
     )
     lang = result.get("language") or language or ""
     words: list[Word] = []
@@ -127,9 +132,12 @@ def language_runs(audio: np.ndarray, model_path: str, allowed: list[str]) -> lis
         else:
             windows.append([s, e])
 
+    from . import progress
+
     runs: list[list] = []
     previous = None
-    for s, e in windows:
+    for k, (s, e) in enumerate(windows):
+        progress.update(0.1 * k / max(len(windows), 1))
         clip = audio[int(s * SR): int(e * SR)]
         mel = log_mel_spectrogram(clip, n_mels=model.dims.n_mels, padding=N_SAMPLES)
         _, probs = model.detect_language(pad_or_trim(mel, N_FRAMES, axis=-2).astype(mx.float16))

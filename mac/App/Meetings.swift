@@ -72,6 +72,18 @@ struct Meeting: Identifiable, Equatable {
         (notes?.participants ?? []).filter { $0.range(of: #"^Speaker \d+$"#, options: .regularExpression) != nil }
     }
 
+    struct Clip: Codable, Hashable {
+        var file: String
+        var start: Double
+        var text: String
+    }
+
+    /// Short voice samples per speaker (clips.json, made by the engine).
+    var clips: [String: [Clip]]? {
+        guard let data = try? Data(contentsOf: url("clips.json")) else { return nil }
+        return try? JSONDecoder().decode([String: [Clip]].self, from: data)
+    }
+
     /// The first things each speaker said, to help tell who is who.
     func samples(perSpeaker n: Int = 3) -> [String: [String]] {
         guard let data = try? Data(contentsOf: url("transcript.json")),

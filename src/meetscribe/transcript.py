@@ -18,6 +18,7 @@ class Utterance:
     speaker: str
     text: str
     lang: str = ""
+    track: str = ""  # which recording it came from: "meeting", "mic", "room" or "file"
 
 
 def speaker_for(word: Word, turns: list[Turn]) -> int:

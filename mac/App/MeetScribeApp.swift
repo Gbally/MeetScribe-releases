@@ -33,8 +33,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                             withCompletionHandler completionHandler: @escaping () -> Void) {
         let action = response.actionIdentifier
+        let meeting = response.notification.request.content.userInfo["meeting"] as? String
         Task { @MainActor in
-            self.model.handleNotificationAction(action)
+            self.model.handleNotificationAction(action, meeting: meeting)
             completionHandler()
         }
     }
@@ -48,7 +49,13 @@ struct MenuBarLabel: View {
         if model.isRecording {
             Text("\(Image(systemName: "record.circle.fill")) \(formatDuration(model.elapsed))")
                 .monospacedDigit()
-        } else if model.currentJob != nil || model.phase == .settingUp {
+        } else if model.currentJob != nil {
+            if let p = model.jobProgress {
+                Text("\(Image(systemName: "hourglass")) \(Int(p * 100))%").monospacedDigit()
+            } else {
+                Image(systemName: "hourglass")
+            }
+        } else if model.phase == .settingUp {
             Image(systemName: "hourglass")
         } else {
             Image(systemName: "waveform")

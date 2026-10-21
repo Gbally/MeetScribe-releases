@@ -9,6 +9,13 @@ enum Job: Equatable {
     case processFile(URL)
     case rename(Meeting.ID, [String: String])
     case resummarize(Meeting.ID)
+
+    var meetingID: Meeting.ID? {
+        switch self {
+        case .process(let id), .rename(let id, _), .resummarize(let id): return id
+        case .processFile: return nil
+        }
+    }
 }
 
 @MainActor
@@ -38,6 +45,10 @@ final class AppModel: ObservableObject {
     @Published var queue: [Job] = []
     @Published var currentJob: Job?
     @Published var jobStatus = ""
+    @Published var jobProgress: Double?
+    @Published var jobStarted = Date()
+    /// Set by a notification click: the window opens on this meeting.
+    @Published var pendingRoute: Route?
     @Published var movingStatus: String?
 
     // Calendar, voices, messages
@@ -329,12 +340,18 @@ final class AppModel: ObservableObject {
         let job = queue.removeFirst()
         currentJob = job
         jobStatus = "Starting…"
+        jobProgress = nil
+        jobStarted = Date()
         Engine.writeConfig(settings)
 
         runner = Task {
             let (args, folder) = arguments(for: job)
             let result = await Engine.meetscribe(args) { [weak self] line in
-                if line.hasPrefix("→ ") { self?.jobStatus = String(line.dropFirst(2)) }
+                if line.hasPrefix("→ ") {
+                    self?.jobStatus = String(line.dropFirst(2))
+                } else if line.hasPrefix("@@progress "), let v = Double(line.dropFirst(11)) {
+                    self?.jobProgress = max(self?.jobProgress ?? 0, v)
+                }
             }
             var finalFolder = folder
             if let folder {
@@ -355,6 +372,7 @@ final class AppModel: ObservableObject {
             notify(job: job, ok: result.ok, folder: finalFolder)
             currentJob = nil
             jobStatus = ""
+            jobProgress = nil
             runNext()
         }
     }
@@ -431,9 +449,11 @@ final class AppModel: ObservableObject {
     private func notify(job: Job, ok: Bool, folder: URL?) {
         let content = UNMutableNotificationContent()
         let title = folder.flatMap { Meeting.load($0)?.title } ?? "Meeting"
+        content.sound = .default
+        if let folder { content.userInfo = ["meeting": folder.lastPathComponent] }
         if ok {
             content.title = "Notes ready"
-            content.body = "\(title) — click the MeetScribe icon in the menu bar."
+            content.body = "\(title) — click to see the summary and to-dos."
         } else {
             content.title = "Couldn't process the meeting"
             content.body = title
@@ -474,12 +494,37 @@ final class AppModel: ObservableObject {
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
     }
 
-    /// Buttons on our notifications.
-    func handleNotificationAction(_ id: String) {
+    /// Buttons on our notifications (and clicks on "Notes ready").
+    func handleNotificationAction(_ id: String, meeting: String? = nil) {
         switch id {
         case "RECORD": startRecording(title: "")
         case "STOP": stopRecording()
-        default: break
+        default:
+            guard let meeting else { return }
+            pendingRoute = .meeting(meeting)
+            openMenuBarWindow()
+        }
+    }
+
+    /// "About 3 min left", from the progress so far.
+    var jobETA: String? {
+        guard let p = jobProgress, p > 0.05, p < 0.999 else { return nil }
+        let elapsed = Date().timeIntervalSince(jobStarted)
+        let left = elapsed * (1 - p) / p
+        if left < 50 { return "less than a minute left" }
+        return "about \(Int((left / 60).rounded(.up))) min left"
+    }
+
+    /// Opens the menu bar window programmatically (clicks our status item).
+    func openMenuBarWindow() {
+        func button(in view: NSView?) -> NSButton? {
+            guard let view else { return nil }
+            if let b = view as? NSButton, String(describing: type(of: b)).contains("StatusBar") { return b }
+            for sub in view.subviews { if let b = button(in: sub) { return b } }
+            return nil
+        }
+        for window in NSApp.windows where String(describing: type(of: window)).contains("StatusBar") {
+            if let b = button(in: window.contentView) { b.performClick(nil); return }
         }
     }
 

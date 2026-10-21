@@ -77,13 +77,24 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
 
     from .voices import embed, enroll, identify, save_session_prints, speaker_prints
 
+    from . import progress
+    from .clips import make_clips
+
     t0 = time.time()
     tracks: list[list] = []
     track_names: list[str] = []  # which audio was usable: "meeting", "mic", "room", "file"
+    audio_by_track: dict[str, np.ndarray] = {}
     languages = set()
     session_prints: dict = {}  # label → voiceprint, saved so naming a speaker teaches the library
+    progress.hook_whisper()
 
-    def diarized_track(audio, prefix: str, n: int, exclude: set[str] = frozenset(), guess_me: bool = False):
+    def tagged(utts, track):
+        for u in utts:
+            u.track = track
+        tracks.append(utts)
+        track_names.append(track)
+
+    def diarized_track(audio, prefix: str, n: int, stage: str, exclude: set[str] = frozenset(), guess_me: bool = False):
         # Diarization (+ voiceprints) runs on the CPU while Whisper uses the GPU.
         # Voices re-recorded through laptop speakers sound alike less: be stricter (fewer splits).
         threshold = max(cfg.diarization_threshold, 0.8) if guess_me else cfg.diarization_threshold
@@ -92,6 +103,7 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
             turns = diarize(audio, n, threshold)
             return turns, speaker_prints(audio, turns)
 
+        progress.start(stage)
         with ThreadPoolExecutor(1) as pool:
             fut = pool.submit(who)
             words, lang = transcribe(audio, cfg.whisper_model, cfg.language, cfg.vocabulary)
@@ -117,43 +129,59 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
             return words, group_words(words, lambda w: prefix.strip() or "Speaker")
         return words, group_words(words, lambda w: labels[speaker_for(w, turns)])
 
+    # Load everything first, so progress can be weighted by the amount of audio.
+    sys_audio = mic_audio = file_audio = None
     if audio_file:  # a single recording (e.g. exported from Teams or a phone)
         step(f"Loading {audio_file.name}")
-        audio = load_audio(audio_file)
-        step(f"Transcribing + identifying speakers ({len(audio) / 16000 / 60:.0f} min of audio)")
-        tracks.append(diarized_track(audio, "Speaker ", speakers)[1])
-        track_names.append("file")
+        file_audio = load_audio(audio_file)
     else:
-        system_words: list = []
         sys_file, mic_file = session / "system.caf", session / "mic.caf"
         if has_audio(sys_file):
-            audio = load_audio(sys_file)
-            if is_silent(audio):
+            sys_audio = load_audio(sys_file)
+            if is_silent(sys_audio):
                 print("   system track is silent — skipping")
-            else:
-                step(f"Remote participants: transcribing + identifying speakers ({len(audio) / 16000 / 60:.0f} min)")
-                system_words, system_utts = diarized_track(audio, "Speaker ", speakers, exclude={cfg.me})
-                tracks.append(system_utts)
-                track_names.append("meeting")
+                sys_audio = None
         if has_audio(mic_file):
-            audio = load_audio(mic_file)
-            if not room and not system_words:
-                # No meeting audio (permission missing, or an in-person meeting): everyone is on
-                # the mic, so separate the voices instead of labelling them all as you.
-                print("   no meeting audio — separating the voices on your microphone")
-                room = True
+            mic_audio = load_audio(mic_file)
+        if sys_audio is None and mic_audio is not None and not room:
+            # No meeting audio (permission missing, or an in-person meeting): everyone is on
+            # the mic, so separate the voices instead of labelling them all as you.
+            print("   no meeting audio — separating the voices on your microphone")
+            room = True
+
+    def work(a):  # rough seconds of processing per track (model load + Whisper ≈ 10× real time)
+        return 8 + len(a) / 16000 / 10 if a is not None else 0
+
+    total_audio = sum(len(a) for a in (sys_audio, mic_audio, file_audio) if a is not None) / 16000
+    progress.plan([("file", work(file_audio)), ("meeting", work(sys_audio)), ("mic", work(mic_audio)),
+                   ("notes", notes_work(cfg, total_audio) if summary else 0)])
+
+    if file_audio is not None:
+        step(f"Transcribing + identifying speakers ({len(file_audio) / 16000 / 60:.0f} min of audio)")
+        tagged(diarized_track(file_audio, "Speaker ", speakers, "file")[1], "file")
+        audio_by_track["file"] = file_audio
+    else:
+        system_words: list = []
+        if sys_audio is not None:
+            step(f"Remote participants: transcribing + identifying speakers ({len(sys_audio) / 16000 / 60:.0f} min)")
+            system_words, system_utts = diarized_track(sys_audio, "Speaker ", speakers, "meeting", exclude={cfg.me})
+            tagged(system_utts, "meeting")
+            audio_by_track["meeting"] = sys_audio
+        if mic_audio is not None:
+            audio = mic_audio
             if room:
                 step(f"Room microphone: transcribing + identifying speakers ({len(audio) / 16000 / 60:.0f} min)")
-                tracks.append(diarized_track(audio, "Speaker ", speakers, guess_me=True)[1])
-                track_names.append("room")
+                tagged(diarized_track(audio, "Speaker ", speakers, "mic", guess_me=True)[1], "room")
+                audio_by_track["room"] = audio
             else:
                 step(f"Your microphone: transcribing ({len(audio) / 16000 / 60:.0f} min)")
+                progress.start("mic")
                 words, lang = transcribe(audio, cfg.whisper_model, cfg.language, cfg.vocabulary)
                 languages.add(lang)
                 own = drop_echo(words, system_words)
                 print(f"   {len(own)} words ({len(words) - len(own)} dropped as speaker echo)")
-                tracks.append(group_words(own, lambda w: cfg.me))
-                track_names.append("mic")
+                tagged(group_words(own, lambda w: cfg.me), "mic")
+                audio_by_track["mic"] = audio
                 # Learn your own voice too (helps in-room meetings and imported recordings).
                 # Only here: with the meeting audio on its own track, the mic is really just you.
                 spans = [audio[int(w.start * 16000): int(w.end * 16000)] for w in own]
@@ -169,6 +197,7 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
             "duration": max(u.end for u in utterances), "created": started_at(session).isoformat(timespec="seconds")}
     save_json(utterances, session / "transcript.json", meta)
     write_transcript(session, utterances, title or "Meeting")
+    make_clips(session, utterances, audio_by_track)
     print(f"   transcript ready in {time.time() - t0:.0f}s")
 
     if summary:
@@ -176,6 +205,12 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
         write_notes(session, cfg)
     print(f"\n✅ Done in {time.time() - t0:.0f}s → {session}")
 
+
+
+def notes_work(cfg: Config, audio_seconds: float) -> float:
+    """Rough seconds the local LLM needs for the notes (reading + writing)."""
+    writing = {"brief": 30, "standard": 40, "detailed": 70}.get(cfg.summary_style, 40)
+    return writing + audio_seconds / 60 * 1.5
 
 
 def has_audio(path: Path) -> bool:
@@ -218,6 +253,9 @@ def write_notes(session: Path, cfg: Config):
     language = notes_language(cfg, main_language(utterances) or (meta.get("languages") or [""])[0])
     context = calendar_context(session)
     step(f"Writing the summary and to-do list ({language})")
+    from . import progress
+
+    progress.ensure("notes")
     t0 = time.time()
     ai_title, body = split_title(summarize(to_plain(utterances), cfg, language, context))
     speakers = list(dict.fromkeys(u.speaker for u in utterances))
@@ -317,10 +355,40 @@ def cmd_rename(args, cfg: Config):
                 print(f"Learned {new}'s voice.")
     if prints:
         save_session_prints(session, prints)
+    from .clips import rename_clips
+
+    rename_clips(session, mapping)
     write_transcript(session, utterances, meta.get("title") or "Meeting")
     print("Transcript updated.")
     if not args.no_summary:
         write_notes(session, cfg)
+
+
+def cmd_clips(args, cfg: Config):
+    """Voice clips for a meeting processed before clips existed (needs its audio files)."""
+    from .audio import load_audio
+    from .clips import make_clips
+    from .transcript import load_json
+
+    session = Path(args.folder).expanduser().resolve()
+    utterances, meta = load_json(session / "transcript.json")
+    audio = {}
+    if has_audio(session / "system.caf"):
+        audio["meeting"] = load_audio(session / "system.caf")
+    if has_audio(session / "mic.caf"):
+        audio["room" if "room" in meta.get("tracks", []) else "mic"] = load_audio(session / "mic.caf")
+    if not audio:
+        sys.exit("This meeting's audio was not kept, so there are no voice samples.")
+    for u in utterances:  # older transcripts don't say which track a line came from
+        if not u.track:
+            if "room" in audio:
+                u.track = "room"
+            elif u.speaker == cfg.me or "meeting" not in audio:
+                u.track = "mic"
+            else:
+                u.track = "meeting"
+    make_clips(session, utterances, audio)
+    print("Voice samples ready.")
 
 
 def cmd_setup(args, cfg: Config):
@@ -365,6 +433,10 @@ def main():
     sm = sub.add_parser("summarize", help="(re)write notes.md from transcript.json")
     sm.add_argument("folder")
     sm.set_defaults(func=cmd_summarize)
+
+    cl = sub.add_parser("clips", help="make voice samples of each speaker for an older meeting")
+    cl.add_argument("folder")
+    cl.set_defaults(func=cmd_clips)
 
     st = sub.add_parser("setup", help="download the speaker, speech and summary models")
     st.set_defaults(func=cmd_setup)

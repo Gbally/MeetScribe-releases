@@ -81,10 +81,10 @@ class LLM:
             from mlx_lm import load
             self._model, self._tokenizer = load(self.cfg.llm_model)
 
-    def chat(self, prompt: str, max_tokens: int = 2500) -> str:
+    def chat(self, prompt: str, max_tokens: int = 2500, on_token=None) -> str:
         messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": prompt}]
         if self.cfg.llm_backend == "mlx":
-            from mlx_lm import generate
+            from mlx_lm import stream_generate
             from mlx_lm.sample_utils import make_sampler
 
             self._load()
@@ -92,8 +92,12 @@ class LLM:
                 messages, add_generation_prompt=True, tokenize=False,
                 enable_thinking=False,  # Qwen3: answer directly (ignored by other models)
             )
-            out = generate(self._model, self._tokenizer, text, max_tokens=max_tokens,
-                           sampler=make_sampler(temp=0.7, top_p=0.8))
+            out = ""
+            for r in stream_generate(self._model, self._tokenizer, text, max_tokens=max_tokens,
+                                     sampler=make_sampler(temp=0.7, top_p=0.8)):
+                out += r.text
+                if on_token:
+                    on_token(r.generation_tokens)
         elif self.cfg.llm_backend == "openai":
             req = urllib.request.Request(
                 self.cfg.llm_url.rstrip("/") + "/chat/completions",
@@ -119,8 +123,12 @@ def summarize(transcript: str, cfg: Config, language: str = "", context: str = "
         raise SystemExit(f"summary_style must be one of: {', '.join(STYLES)}")
     style = STYLES[cfg.summary_style]
     max_tokens = 4000 if cfg.summary_style == "detailed" else 2500
+    from . import progress
+
+    expected = {"brief": 220, "standard": 380, "detailed": 800}.get(cfg.summary_style, 380)  # measured
     if llm.count_tokens(transcript) <= cfg.max_context_tokens:
-        return llm.chat(NOTES_PROMPT.format(language=lang, style=style, transcript=transcript), max_tokens=max_tokens)
+        return llm.chat(NOTES_PROMPT.format(language=lang, style=style, transcript=transcript), max_tokens=max_tokens,
+                        on_token=lambda n: progress.update(0.15 + 0.85 * min(n / expected, 0.97)))
 
     # Long meeting: summarize chunks, then write the final notes from the chunk notes.
     chunks, current, size = [], [], 0
@@ -139,6 +147,8 @@ def summarize(transcript: str, cfg: Config, language: str = "", context: str = "
     for i, chunk in enumerate(chunks, 1):
         print(f"   summarizing part {i}/{len(chunks)}…")
         partial.append(f"### Part {i}\n" + llm.chat(
-            CHUNK_PROMPT.format(part=i, total=len(chunks), language=lang, transcript=chunk), max_tokens=1500))
+            CHUNK_PROMPT.format(part=i, total=len(chunks), language=lang, transcript=chunk), max_tokens=1500,
+            on_token=lambda n, i=i: progress.update((i - 1 + min(n / 600, 0.97)) / (len(chunks) + 1))))
     return llm.chat(NOTES_PROMPT.format(language=lang, style=style, transcript="\n\n".join(partial)),
-                    max_tokens=max_tokens)
+                    max_tokens=max_tokens,
+                    on_token=lambda n: progress.update((len(chunks) + min(n / expected, 0.97)) / (len(chunks) + 1)))

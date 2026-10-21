@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import SwiftUI
 
 enum Route: Equatable {
@@ -26,12 +27,46 @@ struct RootView: View {
             model.reload()
             model.refreshPermissions()
             model.refreshCalendar()
+            takePendingRoute()
         }
+        .onChange(of: model.pendingRoute) { _ in takePendingRoute() }
         .overlay(alignment: .bottom) {
             if let toast = model.toast {
                 Text(toast).font(.caption).padding(.horizontal, 12).padding(.vertical, 8)
                     .background(Capsule().fill(.regularMaterial)).shadow(radius: 3).padding(.bottom, 50)
             }
+        }
+    }
+}
+
+extension RootView {
+    func takePendingRoute() {
+        if let r = model.pendingRoute {
+            route = r
+            model.pendingRoute = nil
+        }
+    }
+}
+
+/// Progress bar + percentage + time left for the running job.
+struct JobProgress: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let p = model.jobProgress {
+                ProgressView(value: p)
+            } else {
+                ProgressView().progressViewStyle(.linear)
+            }
+            HStack {
+                Text(model.jobStatus).lineLimit(1)
+                Spacer()
+                if let p = model.jobProgress {
+                    Text("\(Int(p * 100)) %" + (model.jobETA.map { " · \($0)" } ?? "")).monospacedDigit()
+                }
+            }
+            .font(.caption).foregroundColor(.secondary)
         }
     }
 }
@@ -231,15 +266,14 @@ struct HomeView: View {
 
     func jobCard(_ job: Job) -> some View {
         Card {
-            HStack(spacing: 10) {
-                ProgressView().controlSize(.small)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(jobTitle(job)).font(.callout.weight(.medium)).lineLimit(1)
-                    Text(model.jobStatus).font(.caption).foregroundColor(.secondary).lineLimit(2)
-                }
+            HStack {
+                Text(jobTitle(job)).font(.callout.weight(.medium)).lineLimit(1)
                 Spacer()
                 if !model.queue.isEmpty { Text("+\(model.queue.count) waiting").font(.caption2).foregroundColor(.secondary) }
             }
+            JobProgress()
+            Text("You can close this window — a notification tells you when the notes are ready.")
+                .font(.caption2).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -478,7 +512,11 @@ struct MeetingView: View {
 
             if model.isBusy(id) {
                 Card {
-                    HStack { ProgressView().controlSize(.small); Text(model.currentJob.map { _ in model.jobStatus } ?? "Waiting…").font(.callout) }
+                    if model.currentJob.map(\.meetingID) == id {
+                        JobProgress()
+                    } else {
+                        HStack { ProgressView().controlSize(.small); Text("Waiting for the meeting before it…").font(.callout) }
+                    }
                 }
             } else if let err = m.error {
                 Card {
@@ -579,17 +617,23 @@ struct SpeakersView: View {
     @Binding var route: Route
     @State private var names: [String: String] = [:]
     @State private var samples: [String: [String]] = [:]
+    @State private var clips: [String: [Meeting.Clip]] = [:]
+    @State private var preparingClips = false
+    @StateObject private var player = ClipPlayer()
 
     var speakers: [String] { model.meeting(id)?.notes?.participants ?? [] }
 
     var body: some View {
         VStack(spacing: 0) {
-            Header(title: "Name the speakers", back: { route = .meeting(id) }) { EmptyView() }
+            Header(title: "Name the speakers", back: { player.stop(); route = .meeting(id) }) { EmptyView() }
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Read what each speaker said, then type their name. MeetScribe remembers their voice for next time, and the notes are rewritten with the names. Same person split in two? Give both the same name.")
+                    Text("Listen to each speaker (▶︎), then type their name. MeetScribe remembers their voice for next time, and the notes are rewritten with the names. Same person split in two? Give both the same name.")
                         .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                    if preparingClips {
+                        HStack { ProgressView().controlSize(.small); Text("Preparing voice samples…").font(.caption) }
+                    }
                     ForEach(speakers, id: \.self) { s in
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
@@ -601,9 +645,29 @@ struct SpeakersView: View {
                                         .help("This speaker is you")
                                 }
                             }
-                            ForEach(samples[s] ?? [], id: \.self) { line in
-                                Text("“\(line)”").font(.caption).foregroundColor(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
+                            if let list = clips[s], !list.isEmpty, let m = model.meeting(id) {
+                                ForEach(list, id: \.self) { clip in
+                                    let url = m.url(clip.file)
+                                    Button { player.toggle(url) } label: {
+                                        HStack(alignment: .top, spacing: 6) {
+                                            Image(systemName: player.playing == url ? "stop.circle.fill" : "play.circle.fill")
+                                                .font(.title3).foregroundColor(.accentColor)
+                                            Text("“\(clip.text)”").font(.caption).foregroundColor(.secondary)
+                                                .fixedSize(horizontal: false, vertical: true)
+                                            Spacer(minLength: 0)
+                                        }
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            } else {
+                                ForEach(samples[s] ?? [], id: \.self) { line in
+                                    Text("“\(line)”").font(.caption).foregroundColor(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                if (samples[s] ?? []).isEmpty {
+                                    Text("Only said a few words.").font(.caption).foregroundColor(.secondary)
+                                }
                             }
                         }
                         .padding(10)
@@ -618,6 +682,7 @@ struct SpeakersView: View {
             HStack {
                 Spacer()
                 Button("Save & regenerate notes") {
+                    player.stop()
                     let mapping = names.mapValues { $0.trimmingCharacters(in: .whitespaces) }
                         .filter { !$0.value.isEmpty && $0.key != $0.value }
                     if !mapping.isEmpty { model.enqueue(.rename(id, mapping)) }
@@ -630,8 +695,52 @@ struct SpeakersView: View {
         }
         .onAppear {
             NSApp.activate(ignoringOtherApps: true)
-            samples = model.meeting(id)?.samples() ?? [:]
+            load()
         }
+        .onDisappear { player.stop() }
+    }
+
+    private func load() {
+        guard let m = model.meeting(id) else { return }
+        samples = m.samples()
+        if let c = m.clips {
+            clips = c
+        } else if m.hasAudio && m.hasTranscript && model.phase == .ready {
+            // Meetings processed before voice samples existed: make them now (a few seconds).
+            preparingClips = true
+            Engine.writeConfig(model.settings)
+            Task {
+                _ = await Engine.meetscribe(["clips", m.folder.path]) { _ in }
+                clips = model.meeting(id)?.clips ?? [:]
+                preparingClips = false
+            }
+        }
+    }
+}
+
+/// Plays one voice sample at a time.
+final class ClipPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
+    @Published var playing: URL?
+    private var player: AVAudioPlayer?
+
+    func toggle(_ url: URL) {
+        if playing == url { stop(); return }
+        stop()
+        guard let p = try? AVAudioPlayer(contentsOf: url) else { return }
+        p.delegate = self
+        p.play()
+        player = p
+        playing = url
+    }
+
+    func stop() {
+        player?.stop()
+        player = nil
+        playing = nil
+    }
+
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        DispatchQueue.main.async { self.playing = nil }
     }
 }
 

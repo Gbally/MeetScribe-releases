@@ -1,0 +1,7 @@
+{
+ "version": "0.5.0",
+ "build": 40,
+ "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.5.0/MeetScribe-0.5.0.dmg",
+ "sha256": "c2dd52cfe4149f6cadc7452521763c0848f85a0e30be5a19ee4c673462ddf214",
+ "notes": "New: a welcome window guides first-time setup (name, languages, permissions, download). New: Settings \u2192 Privacy and storage \u2192 Remove MeetScribe uninstalls the app with its engine and AI models."
+}

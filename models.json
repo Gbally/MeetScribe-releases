@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "updated": "2026-10-22",
+  "notes": [
+    {
+      "id": "qwen3-4b",
+      "repo": "mlx-community/Qwen3-4B-Instruct-2507-4bit",
+      "name": "Qwen3 4B",
+      "size_gb": 2.3,
+      "min_ram_gb": 8,
+      "recommended_ram_gb": 8,
+      "quality": 2,
+      "speed": 4,
+      "license": "Apache-2.0",
+      "tested": "2026-10-21",
+      "description": "Light and fast. Best for 8 GB Macs.",
+      "descriptions": {
+        "fr": "Léger et rapide. Idéal pour les Mac avec 8 Go.",
+        "es": "Ligero y rápido. Ideal para Mac con 8 GB.",
+        "pt": "Leve e rápido. Ideal para Macs com 8 GB.",
+        "ja": "軽くて高速。メモリ 8 GB の Mac に最適。",
+        "zh-Hans": "轻量快速。适合 8 GB 内存的 Mac。"
+      }
+    },
+    {
+      "id": "qwen3-8b",
+      "repo": "mlx-community/Qwen3-8B-4bit",
+      "name": "Qwen3 8B",
+      "size_gb": 4.6,
+      "min_ram_gb": 8,
+      "recommended_ram_gb": 16,
+      "quality": 3,
+      "speed": 3,
+      "license": "Apache-2.0",
+      "tested": "2026-10-21",
+      "description": "More precise notes. Best with 16 GB or more.",
+      "descriptions": {
+        "fr": "Notes plus précises. Idéal avec 16 Go ou plus.",
+        "es": "Notas más precisas. Ideal con 16 GB o más.",
+        "pt": "Notas mais precisas. Ideal com 16 GB ou mais.",
+        "ja": "より正確なメモ。16 GB 以上で最適。",
+        "zh-Hans": "笔记更精确。16 GB 及以上内存效果最佳。"
+      }
+    }
+  ],
+  "speech": [
+    {
+      "id": "whisper-turbo",
+      "repo": "mlx-community/whisper-large-v3-turbo",
+      "name": "Whisper large-v3 turbo",
+      "size_gb": 1.6,
+      "min_ram_gb": 8,
+      "recommended_ram_gb": 8,
+      "quality": 4,
+      "speed": 3,
+      "license": "MIT",
+      "tested": "2026-10-21",
+      "description": "99 languages, fast on Apple silicon.",
+      "descriptions": {
+        "fr": "99 langues, rapide sur Apple silicon.",
+        "es": "99 idiomas, rápido en Apple silicon.",
+        "pt": "99 idiomas, rápido no Apple silicon.",
+        "ja": "99 言語対応。Apple silicon で高速。",
+        "zh-Hans": "支持 99 种语言，在 Apple 芯片上速度快。"
+      }
+    }
+  ]
+}

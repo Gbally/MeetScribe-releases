@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds MeetNouse.app and a drag-to-install DMG in dist/.
+# Builds MeetNouce.app and a drag-to-install DMG in dist/.
 #
 #   ./scripts/build_app.sh                      ad-hoc signed (colleagues must allow it once)
 #   SIGN_ID="Developer ID Application: …" ./scripts/build_app.sh
@@ -10,14 +10,14 @@ cd "$(dirname "$0")/.."
 ROOT=$(pwd)
 VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
 BUILD=$(git rev-list --count HEAD 2>/dev/null || echo 1)
-APP=build/MeetNouse.app
+APP=build/MeetNouce.app
 UV_BIN=$(command -v uv || echo "$HOME/development/bin/uv")
 
 rm -rf build && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/engine" dist
 
 echo "• Compiling"
 swiftc -O -parse-as-library -target arm64-apple-macos13.0 \
-  mac/Shared/*.swift mac/App/*.swift -o "$APP/Contents/MacOS/MeetNouse"
+  mac/Shared/*.swift mac/App/*.swift -o "$APP/Contents/MacOS/MeetNouce"
 
 echo "• Bundling engine"
 cp "$UV_BIN" "$APP/Contents/MacOS/uv"
@@ -44,12 +44,12 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>MeetNouse</string>
+  <key>CFBundleName</key><string>MeetNouce</string>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleLocalizations</key><array><string>en</string><string>fr</string><string>es</string><string>pt</string><string>ja</string><string>zh-Hans</string></array>
-  <key>CFBundleDisplayName</key><string>MeetNouse</string>
+  <key>CFBundleDisplayName</key><string>MeetNouce</string>
   <key>CFBundleIdentifier</key><string>app.meetscribe.MeetScribe</string>
-  <key>CFBundleExecutable</key><string>MeetNouse</string>
+  <key>CFBundleExecutable</key><string>MeetNouce</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
@@ -58,13 +58,13 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSUIElement</key><true/>
   <key>LSArchitecturePriority</key><array><string>arm64</string></array>
   <key>MSReleasesRepo</key><string>Gbally/MeetScribe-releases</string>
-  <key>NSMicrophoneUsageDescription</key><string>MeetNouse records your voice during meetings to create a transcript. Audio stays on this Mac.</string>
-  <key>NSAudioCaptureUsageDescription</key><string>MeetNouse records the meeting audio (the other participants) to create a transcript. Audio stays on this Mac.</string>
-  <key>NSCalendarsUsageDescription</key><string>MeetNouse reads the current meeting's title and attendees to name the notes and email them. Nothing leaves this Mac.</string>
-  <key>NSCalendarsFullAccessUsageDescription</key><string>MeetNouse reads the current meeting's title and attendees to name the notes and email them. Nothing leaves this Mac.</string>
-  <key>NSRemindersUsageDescription</key><string>MeetNouse can add your meeting to-dos to Reminders.</string>
-  <key>NSRemindersFullAccessUsageDescription</key><string>MeetNouse can add your meeting to-dos to Reminders.</string>
-  <key>NSScreenCaptureUsageDescription</key><string>MeetNouse only records the meeting audio, never your screen. Audio stays on this Mac.</string>
+  <key>NSMicrophoneUsageDescription</key><string>MeetNouce records your voice during meetings to create a transcript. Audio stays on this Mac.</string>
+  <key>NSAudioCaptureUsageDescription</key><string>MeetNouce records the meeting audio (the other participants) to create a transcript. Audio stays on this Mac.</string>
+  <key>NSCalendarsUsageDescription</key><string>MeetNouce reads the current meeting's title and attendees to name the notes and email them. Nothing leaves this Mac.</string>
+  <key>NSCalendarsFullAccessUsageDescription</key><string>MeetNouce reads the current meeting's title and attendees to name the notes and email them. Nothing leaves this Mac.</string>
+  <key>NSRemindersUsageDescription</key><string>MeetNouce can add your meeting to-dos to Reminders.</string>
+  <key>NSRemindersFullAccessUsageDescription</key><string>MeetNouce can add your meeting to-dos to Reminders.</string>
+  <key>NSScreenCaptureUsageDescription</key><string>MeetNouce only records the meeting audio, never your screen. Audio stays on this Mac.</string>
 </dict>
 </plist>
 PLIST
@@ -95,13 +95,13 @@ cp -R "$APP" "$STAGE/" && ln -s /Applications "$STAGE/Applications"
 cp -R "$APP" "$STAGE/MeetScribe.app" && chflags hidden "$STAGE/MeetScribe.app"
 cp mac/INSTALL.txt "$STAGE/How to install.txt"
 mkdir -p "$STAGE/Licenses" && cp LICENSE THIRD_PARTY_NOTICES.md PRIVACY.md "$STAGE/Licenses/"
-DMG="dist/MeetNouse-$VERSION.dmg"
+DMG="dist/MeetNouce-$VERSION.dmg"
 rm -f "$DMG"
-hdiutil create -quiet -volname MeetNouse -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+hdiutil create -quiet -volname MeetNouce -srcfolder "$STAGE" -ov -format UDZO "$DMG"
 [ -n "$SIGN_ID" ] && codesign --sign "$SIGN_ID" "$DMG"
 # Don't let macOS launch the build copies instead of the installed app.
 LSR=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 "$LSR" -u "$APP" 2>/dev/null || true
-"$LSR" -u "$STAGE/MeetNouse.app" 2>/dev/null || true
+"$LSR" -u "$STAGE/MeetNouce.app" 2>/dev/null || true
 "$LSR" -u "$STAGE/MeetScribe.app" 2>/dev/null || true
 echo "✅ $ROOT/$DMG ($(du -h "$DMG" | cut -f1))"

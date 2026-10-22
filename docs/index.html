@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MeetNouse — meeting notes that stay on your Mac</title>
-<meta name="description" content="MeetNouse records your Teams, Zoom or Meet calls, transcribes them, recognises who spoke, and writes a summary with decisions and to-dos — all on your Mac.">
+<title>MeetNouce — meeting notes that stay on your Mac</title>
+<meta name="description" content="MeetNouce records your Teams, Zoom or Meet calls, transcribes them, recognises who spoke, and writes a summary with decisions and to-dos — all on your Mac.">
 <link rel="icon" href="img/icon.png">
-<meta property="og:title" content="MeetNouse — meeting notes that stay on your Mac">
+<meta property="og:title" content="MeetNouce — meeting notes that stay on your Mac">
 <meta property="og:description" content="Local AI meeting notes for macOS: transcript, speakers, summary and to-dos. Free, private, no account.">
 <meta property="og:image" content="img/meeting.png">
 <style>
@@ -92,7 +92,7 @@
 
 <nav>
   <div class="wrap">
-    <a class="brand" href="#"><img src="img/icon.png" alt="">MeetNouse</a>
+    <a class="brand" href="#"><img src="img/icon.png" alt="">MeetNouce</a>
     <div class="links">
       <a href="#features">Features</a>
       <a href="#privacy">Privacy</a>
@@ -106,7 +106,7 @@
 <header class="hero">
   <div class="wrap">
     <h1>Meeting notes that<br><span>stay on your Mac.</span></h1>
-    <p class="lead">MeetNouse records your Teams, Zoom or Meet calls, works out who said what, and hands you a
+    <p class="lead">MeetNouce records your Teams, Zoom or Meet calls, works out who said what, and hands you a
       summary, the decisions and a to-do list — all with AI that runs on your Mac. No account, nothing uploaded.</p>
     <div class="actions">
     <a class="btn dl" href="https://github.com/Gbally/MeetScribe-releases/releases/latest">
@@ -118,7 +118,7 @@
     <div class="meta">Free and open source · macOS 13 or later · Apple silicon (M1 or newer) · 8 GB memory or more</div>
     <div class="meta">English · Français · Español · Português · 日本語 · 中文</div>
     <div class="shots">
-      <img class="a" src="img/home.png" alt="MeetNouse menu bar window: a record button and today's meetings">
+      <img class="a" src="img/home.png" alt="MeetNouce menu bar window: a record button and today's meetings">
       <img class="b" src="img/meeting.png" alt="Meeting notes with to-dos, due dates, summary and decisions">
     </div>
   </div>
@@ -169,12 +169,12 @@
 <section id="install">
   <div class="wrap">
     <h2>Install in a few minutes</h2>
-    <p class="sub">MeetNouse updates itself after that.</p>
+    <p class="sub">MeetNouce updates itself after that.</p>
     <div class="steps">
-      <div class="card"><h3>Download</h3><p>Open the <code>.dmg</code> and drag MeetNouse into Applications.</p></div>
+      <div class="card"><h3>Download</h3><p>Open the <code>.dmg</code> and drag MeetNouce into Applications.</p></div>
       <div class="card"><h3>Open it</h3><p>If macOS can't verify the developer: System Settings → Privacy &amp; Security → <b>Open Anyway</b>.</p></div>
       <div class="card"><h3>Follow the welcome</h3><p>Your name, your meeting languages, and the AI models picked for your Mac (4–6 GB, downloaded once).</p></div>
-      <div class="card"><h3>Allow access</h3><p>Microphone, and Screen &amp; System Audio Recording to hear the other participants. Restart MeetNouse once.</p></div>
+      <div class="card"><h3>Allow access</h3><p>Microphone, and Screen &amp; System Audio Recording to hear the other participants. Restart MeetNouce once.</p></div>
     </div>
     <div class="cta" style="margin-top:44px">
       <a class="btn dl" href="https://github.com/Gbally/MeetScribe-releases/releases/latest"><span class="dl-text">Download for Mac</span></a>
@@ -186,7 +186,7 @@
 <footer>
   <div class="wrap">
     <div class="row">
-      <div>MeetNouse <span id="version"></span> · © 2026 Gbally · free and open source under the <a href="https://github.com/Gbally/MeetScribe-releases/blob/main/LICENSE">MIT License</a>, provided as is, without warranty.</div>
+      <div>MeetNouce <span id="version"></span> · © 2026 Gbally · free and open source under the <a href="https://github.com/Gbally/MeetScribe-releases/blob/main/LICENSE">MIT License</a>, provided as is, without warranty.</div>
     </div>
     <div class="row">
       <div class="links">
@@ -208,7 +208,7 @@
     .then(r => r.ok ? r.json() : Promise.reject())
     .then(info => {
       document.querySelectorAll("a.dl").forEach(a => { a.href = info.url; });
-      const label = "Download MeetNouse " + info.version;
+      const label = "Download MeetNouce " + info.version;
       document.getElementById("dl-label").textContent = label;
       document.querySelectorAll(".dl-text").forEach(s => { s.textContent = label; });
       document.getElementById("version").textContent = info.version;

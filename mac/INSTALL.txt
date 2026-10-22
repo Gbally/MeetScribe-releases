@@ -1,18 +1,18 @@
-Installing MeetNouse
+Installing MeetNouce
 =====================
 
 Requires a Mac with Apple Silicon (M1 or newer), macOS 13 or later, 8 GB memory or more,
-and ~8 GB free disk space. MeetNouse picks AI models that fit your Mac (Settings → AI models).
+and ~8 GB free disk space. MeetNouce picks AI models that fit your Mac (Settings → AI models).
 
-1. Drag MeetNouse into the Applications folder.
-2. Open MeetNouse from Applications.
+1. Drag MeetNouce into the Applications folder.
+2. Open MeetNouce from Applications.
    If macOS says it "can't be opened" / "cannot verify the developer":
-     System Settings → Privacy & Security → scroll down → "Open Anyway" next to MeetNouse.
+     System Settings → Privacy & Security → scroll down → "Open Anyway" next to MeetNouce.
    (Only needed once.)
 3. A welcome window guides you through the rest: your name and languages, the permissions
    (Microphone, Screen & System Audio Recording, and optionally Calendar and Notifications),
    and the AI models download (4–6 GB depending on your Mac, 10–20 minutes, once).
-   After allowing Screen & System Audio Recording, restart MeetNouse when it offers to.
+   After allowing Screen & System Audio Recording, restart MeetNouce when it offers to.
    For Outlook meeting names, your work calendar must be in the macOS Calendar app
    (System Settings → Internet Accounts → Microsoft Exchange).
 
@@ -23,7 +23,7 @@ Documents/MeetingNotes.
 Everything runs on your Mac: no account, no tracking, nothing about your meetings is sent anywhere.
 Always tell participants that you are recording.
 
-MeetNouse opens at login (turn it off in Settings → General).
-Updates: MeetNouse checks once a day and offers new versions in its window (Update).
-Uninstall: Settings → Privacy and storage → Remove MeetNouse. It deletes the engine and AI
+MeetNouce opens at login (turn it off in Settings → General).
+Updates: MeetNouce checks once a day and offers new versions in its window (Update).
+Uninstall: Settings → Privacy and storage → Remove MeetNouce. It deletes the engine and AI
 models (several GB outside the app) too — dragging the app to the Trash would leave them behind.

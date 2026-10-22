@@ -178,7 +178,7 @@ def check_model(repo: str, kind: str) -> dict:
             return {"compatible": False, "architecture": "whisper",
                     "reason": "This Whisper model isn't in MLX format. Use a version from mlx-community instead.", "key": "This Whisper model isn't in MLX format. Use a version from mlx-community instead.", "args": []}
         return {"compatible": False, "architecture": arch,
-                "reason": "MeetNouse's speech engine only runs Whisper models in MLX format.", "key": "MeetNouse's speech engine only runs Whisper models in MLX format.", "args": []}
+                "reason": "MeetNouce's speech engine only runs Whisper models in MLX format.", "key": "MeetNouce's speech engine only runs Whisper models in MLX format.", "args": []}
 
     # Notes: an architecture mlx-lm knows, plus a tokenizer.
     if arch in ("whisper", "wav2vec2", "hubert") or "n_mels" in cfg:
@@ -188,8 +188,8 @@ def check_model(repo: str, kind: str) -> dict:
     module = MODEL_REMAPPING.get(arch, arch).replace("-", "_")
     if not module or importlib.util.find_spec(f"mlx_lm.models.{module}") is None:
         return {"compatible": False, "architecture": arch,
-                "reason": f"MeetNouse's notes engine can't run the “{arch or 'unknown'}” architecture.",
-                "key": "MeetNouse's notes engine can't run the “%@” architecture.", "args": [arch or "unknown"]}
+                "reason": f"MeetNouce's notes engine can't run the “{arch or 'unknown'}” architecture.",
+                "key": "MeetNouce's notes engine can't run the “%@” architecture.", "args": [arch or "unknown"]}
     if not ({"tokenizer.json", "tokenizer.model", "tokenizer_config.json"} & files):
         return {"compatible": False, "architecture": arch, "reason": "The model has no tokenizer files.", "key": "The model has no tokenizer files.", "args": []}
     if not any(f.endswith(".safetensors") for f in files):

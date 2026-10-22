@@ -156,8 +156,8 @@ struct CustomModelCheck: Equatable {
 
     /// Plain-language risks of using this model.
     func warnings(speech: Bool, hw: Hardware) -> [String] {
-        var w = [speech ? tr("Not tested with MeetNouse: transcripts may be less accurate or slower.")
-                        : tr("Not tested with MeetNouse: notes may come out in the wrong format, slowly, or not at all.")]
+        var w = [speech ? tr("Not tested with MeetNouce: transcripts may be less accurate or slower.")
+                        : tr("Not tested with MeetNouce: notes may come out in the wrong format, slowly, or not at all.")]
         if compatible == nil {
             if !isMLX { w.append(tr("It isn't in MLX format (made for Apple silicon) — it may not load. Look for a version from “mlx-community”.")) }
             if speech && pipeline != "automatic-speech-recognition" { w.append(tr("It doesn't look like a speech-to-text model.")) }

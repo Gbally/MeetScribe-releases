@@ -1,7 +1,7 @@
 # Privacy
 
-MeetNouse records, transcribes and summarises your meetings **on your Mac**. Audio, transcripts,
-notes, meeting titles, names and voiceprints are never sent anywhere by MeetNouse.
+MeetNouce records, transcribes and summarises your meetings **on your Mac**. Audio, transcripts,
+notes, meeting titles, names and voiceprints are never sent anywhere by MeetNouce.
 
 ## What stays on your Mac
 
@@ -10,14 +10,14 @@ notes, meeting titles, names and voiceprints are never sent anywhere by MeetNous
 | Recordings (`mic.caf`, `system.caf`) and voice samples | the notes folder (default `~/Documents/MeetingNotes`) | deleted after 7 days by default (Settings → Privacy and storage) |
 | Transcripts and notes | the notes folder | until you delete them |
 | Known voices (`voices.json`) | `~/Library/Application Support/MeetScribe` | until you forget them (Settings → Voices) |
-| Settings | the app's preferences | until you remove MeetNouse |
+| Settings | the app's preferences | until you remove MeetNouce |
 
 If you choose a OneDrive (or other synced) folder for your notes, your own sync client uploads
-them to your own account — MeetNouse itself doesn't.
+them to your own account — MeetNouce itself doesn't.
 
 ## What goes over the network
 
-- **No analytics, no tracking.** MeetNouse has no usage statistics, crash reporting or
+- **No analytics, no tracking.** MeetNouce has no usage statistics, crash reporting or
   identifiers of any kind. (Versions 0.3.1 to 0.5.1 sent optional anonymous usage counts; they
   were removed in 0.5.2.)
 - **Updates and model list**: once a day the app reads `latest.json` and `models.json` from this
@@ -36,7 +36,7 @@ locally), Reminders (only when you export to-dos), Notifications.
 
 ## Removing everything
 
-Settings → Privacy and storage → **Remove MeetNouse** deletes the engine, the AI models, the
+Settings → Privacy and storage → **Remove MeetNouce** deletes the engine, the AI models, the
 settings and learned voices, and moves the app (and, if you tick it, your notes) to the Trash.
 
 Questions: [open an issue](https://github.com/Gbally/MeetScribe-releases/issues).

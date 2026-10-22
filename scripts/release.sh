@@ -16,7 +16,7 @@ GH=$(command -v gh || echo "$HOME/development/bin/gh")
 PUBLISH=0
 [ "$1" = "--publish" ] && { PUBLISH=1; shift; }
 VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
-NOTES=${1:-"MeetNouse $VERSION"}
+NOTES=${1:-"MeetNouce $VERSION"}
 OUT="$ROOT/build-cache/release"
 
 if [ "$PUBLISH" = 0 ]; then
@@ -24,8 +24,8 @@ if [ "$PUBLISH" = 0 ]; then
   [ -f signing/MeetScribe-signing.keychain-db ] || [ -n "$SIGN_ID" ] || {
     echo "No stable signing identity: installed apps would refuse the update."; exit 1; }
   ./scripts/build_app.sh
-  BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" build/MeetNouse.app/Contents/Info.plist)
-  DMG="MeetNouse-$VERSION.dmg"
+  BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" build/MeetNouce.app/Contents/Info.plist)
+  DMG="MeetNouce-$VERSION.dmg"
   rm -rf "$OUT" && mkdir -p "$OUT"
   cp "dist/$DMG" "$OUT/"
   SHA=$(shasum -a 256 "$OUT/$DMG" | cut -d' ' -f1)
@@ -38,7 +38,7 @@ json.dump({"version": version, "build": int(build), "url": url, "sha256": sha, "
 PY
   printf '%s' "$NOTES" > "$OUT/notes.txt"
   echo
-  echo "✅ Prepared MeetNouse $VERSION (build $BUILD) in build-cache/release/ — nothing published."
+  echo "✅ Prepared MeetNouce $VERSION (build $BUILD) in build-cache/release/ — nothing published."
   echo "   Publish with:  ./scripts/release.sh --publish"
   exit 0
 fi
@@ -56,18 +56,18 @@ git push -q origin main
 # 2. The release with the installer.
 SHA=$(python3 -c "import json; print(json.load(open('$OUT/latest.json'))['sha256'])")
 if "$GH" release view "v$VERSION" --repo "$RELEASES_REPO" >/dev/null 2>&1; then
-  REMOTE=$("$GH" api "repos/$RELEASES_REPO/releases/tags/v$VERSION" --jq '.assets[] | select(.name=="MeetNouse-'"$VERSION"'.dmg") | .digest' 2>/dev/null)
+  REMOTE=$("$GH" api "repos/$RELEASES_REPO/releases/tags/v$VERSION" --jq '.assets[] | select(.name=="MeetNouce-'"$VERSION"'.dmg") | .digest' 2>/dev/null)
   if [ "$REMOTE" = "sha256:$SHA" ]; then
     echo "• Release v$VERSION already has this installer"
   else
     # Re-prepared after publishing: the installer must match latest.json or updates fail.
     echo "• Release v$VERSION exists with a different installer — replacing it"
-    "$GH" release upload "v$VERSION" "$OUT/MeetNouse-$VERSION.dmg" --clobber --repo "$RELEASES_REPO"
+    "$GH" release upload "v$VERSION" "$OUT/MeetNouce-$VERSION.dmg" --clobber --repo "$RELEASES_REPO"
   fi
 else
   echo "• GitHub release v$VERSION"
-  "$GH" release create "v$VERSION" "$OUT/MeetNouse-$VERSION.dmg" --repo "$RELEASES_REPO" \
-    --target main --title "MeetNouse $VERSION" --notes "$NOTES"
+  "$GH" release create "v$VERSION" "$OUT/MeetNouce-$VERSION.dmg" --repo "$RELEASES_REPO" \
+    --target main --title "MeetNouce $VERSION" --notes "$NOTES"
 fi
 git fetch -q --tags origin
 
@@ -76,6 +76,6 @@ echo "• latest.json, models.json"
 cp "$OUT/latest.json" latest.json
 cp catalog/models.json models.json
 git add latest.json models.json
-git diff --cached --quiet || git commit -qm "MeetNouse $VERSION"
+git diff --cached --quiet || git commit -qm "MeetNouce $VERSION"
 git push -q origin main
-echo "✅ Released MeetNouse $VERSION — installed apps will offer the update within a day."
+echo "✅ Released MeetNouce $VERSION — installed apps will offer the update within a day."

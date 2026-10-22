@@ -23,7 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().delegate = self
     }
 
-    /// `open -a MeetNouse --args --settings models` opens Settings on that tab (for testing).
+    /// `open -a MeetNouce --args --settings models` opens Settings on that tab (for testing).
     func applicationDidFinishLaunching(_ notification: Notification) {
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--settings") {

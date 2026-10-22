@@ -1,4 +1,4 @@
-// MeetNouse's black-and-tan shiba (a nod to Minousse): pointed ears with pink insides, tan
+// MeetNouce's black-and-tan shiba (a nod to Minousse): pointed ears with pink insides, tan
 // eyebrow dots and mask, big shiny eyes, a cream muzzle. Drawn from paths so it is crisp at any
 // size; shared by the menu bar icon, the animated record button (ShibaView) and the app icon
 // (build_app.sh runs scripts/make_icon.swift together with this file).
@@ -261,7 +261,7 @@ enum DogFace {
             return true
         }
         image.isTemplate = true
-        image.accessibilityDescription = "MeetNouse"
+        image.accessibilityDescription = "MeetNouce"
         return image
     }()
 }

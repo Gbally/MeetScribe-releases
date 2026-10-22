@@ -55,7 +55,7 @@ final class Updater: ObservableObject {
         guard let info = available, UserDefaults.standard.integer(forKey: "announcedBuild") < info.build else { return }
         UserDefaults.standard.set(info.build, forKey: "announcedBuild")
         let content = UNMutableNotificationContent()
-        content.title = tr("MeetNouse %@ is available", info.version)
+        content.title = tr("MeetNouce %@ is available", info.version)
         content.body = (info.notes.map { $0 + " " } ?? "") + tr("Click to install.")
         content.userInfo = ["action": "update"]
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "update-\(info.build)", content: content, trigger: nil))
@@ -88,7 +88,7 @@ final class Updater: ObservableObject {
         let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         guard digest == sha256.lowercased() else { throw UpdateError(tr("The download is damaged (checksum mismatch).")) }
 
-        let work = FileManager.default.temporaryDirectory.appendingPathComponent("MeetNouseUpdate-\(UUID().uuidString)")
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("MeetNouceUpdate-\(UUID().uuidString)")
         let mount = work.appendingPathComponent("mnt")
         try FileManager.default.createDirectory(at: mount, withIntermediateDirectories: true)
         let dmg = work.appendingPathComponent("update.dmg")
@@ -96,10 +96,10 @@ final class Updater: ObservableObject {
         try run("/usr/bin/hdiutil", ["attach", "-nobrowse", "-readonly", "-mountpoint", mount.path, dmg.path])
         defer { try? run("/usr/bin/hdiutil", ["detach", mount.path, "-force"]) }
 
-        let newApp = mount.appendingPathComponent("MeetNouse.app")
-        guard FileManager.default.fileExists(atPath: newApp.path) else { throw UpdateError(tr("The update doesn't contain MeetNouse.")) }
+        let newApp = mount.appendingPathComponent("MeetNouce.app")
+        guard FileManager.default.fileExists(atPath: newApp.path) else { throw UpdateError(tr("The update doesn't contain MeetNouce.")) }
         try verifySameSigner(newApp)
-        let staged = work.appendingPathComponent("MeetNouse.app")
+        let staged = work.appendingPathComponent("MeetNouce.app")
         try run("/usr/bin/ditto", [newApp.path, staged.path])
         return staged
     }
@@ -118,19 +118,19 @@ final class Updater: ObservableObject {
         }
         let status = SecStaticCodeCheckValidity(newCode, SecCSFlags(rawValue: kSecCSCheckAllArchitectures), requirement)
         guard status == errSecSuccess else {
-            throw UpdateError(tr("The update isn't signed by the MeetNouse developer — not installed."))
+            throw UpdateError(tr("The update isn't signed by the MeetNouce developer — not installed."))
         }
     }
 
     /// Replaces the running app once it has quit, then opens the new one. An install still named
-    /// MeetScribe.app (before the rename) becomes MeetNouse.app.
+    /// MeetScribe.app (before the rename) becomes MeetNouce.app.
     private static func swapAndRelaunch(with staged: URL) throws {
         let old = Bundle.main.bundleURL
-        let current = old.deletingLastPathComponent().appendingPathComponent("MeetNouse.app")
+        let current = old.deletingLastPathComponent().appendingPathComponent("MeetNouce.app")
         guard FileManager.default.isWritableFile(atPath: current.deletingLastPathComponent().path) else {
             // No permission to write /Applications (managed Mac): let the user drag it in.
             NSWorkspace.shared.activateFileViewerSelecting([staged])
-            throw UpdateError(tr("Drag the new MeetNouse from the Finder window into Applications (replace the old one)."))
+            throw UpdateError(tr("Drag the new MeetNouce from the Finder window into Applications (replace the old one)."))
         }
         let script = """
         while kill -0 \(ProcessInfo.processInfo.processIdentifier) 2>/dev/null; do sleep 0.2; done

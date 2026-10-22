@@ -1,7 +1,7 @@
 {
- "version": "0.5.3",
- "build": 60,
- "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.5.3/MeetScribe-0.5.3.dmg",
- "sha256": "5f40be9280f090d7ce1d33adb014c12622bc17fe1ff881452ae1b0df897f0dc0",
- "notes": "Fix: deleting a model or removing MeetScribe now frees all the disk space (several GB were left behind)."
+ "version": "0.5.4",
+ "build": 62,
+ "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.5.4/MeetScribe-0.5.4.dmg",
+ "sha256": "d74766769dc73586ec532dc53687019c144c6798c94ab1432c635084477b8826",
+ "notes": "Much faster notes (only speech is transcribed; mixed English/French meetings especially), and no more dozens of phantom speakers."
 }

@@ -1,7 +1,7 @@
 {
- "version": "0.5.1",
- "build": 56,
- "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.5.1/MeetScribe-0.5.1.dmg",
- "sha256": "4ec5fe13c238db2f71dcee61be68408c696f3012ce034f54748651eb83f20ced",
- "notes": "New: Settings \u2192 About links to the source code on GitHub \u2014 star it, report a problem, read the license and privacy details."
+ "version": "0.5.2",
+ "build": 58,
+ "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.5.2/MeetScribe-0.5.2.dmg",
+ "sha256": "b933c71ccfa6a7760a1f9be1673ebac5ab63ec8e9a8ac76e5c5227fdc3192155",
+ "notes": "Privacy: MeetScribe no longer sends any usage statistics \u2014 no analytics, no tracking. The random install id is deleted."
 }

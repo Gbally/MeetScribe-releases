@@ -17,17 +17,9 @@ them to your own account — MeetScribe itself doesn't.
 
 ## What goes over the network
 
-- **Anonymous usage statistics** (on by default, turn off in Settings → Privacy and storage →
-  Usage statistics). Sent to the developer's [Zenhook](https://zenhook.dev) workspace, only to
-  see how the app is used and what breaks:
-  - with every event: a random install id (not linked to you), the app version, the Mac's chip and
-    memory, the macOS version;
-  - a new install, an update, an uninstall (with the number of meetings);
-  - each recording: its length, processing time, meeting type, whether meeting audio was
-    captured, the number of speakers and to-dos, the AI model used;
-  - a change of AI model (the model names), and the kind of error when processing fails.
-
-  Never audio, transcripts, notes, titles, names, email addresses or calendar data.
+- **No analytics, no tracking.** MeetScribe has no usage statistics, crash reporting or
+  identifiers of any kind. (Versions 0.3.1 to 0.5.1 sent optional anonymous usage counts; they
+  were removed in 0.5.2.)
 - **Updates and model list**: once a day the app reads `latest.json` and `models.json` from this
   GitHub repository.
 - **First setup and model downloads**: the engine (Python and its packages) comes from the Python

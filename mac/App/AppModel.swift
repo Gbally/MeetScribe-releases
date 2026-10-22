@@ -142,11 +142,8 @@ final class AppModel: ObservableObject {
             settings.llmModel = "mlx-community/Qwen3-8B-4bit"
             settings.whisperModel = settings.whisperModel ?? "mlx-community/whisper-large-v3-turbo"
         }
-        // Usage pings (anonymous; Settings → Privacy): updates, and installs set up before pings existed.
-        let lastVersion = UserDefaults.standard.string(forKey: "lastVersion")
-        if let lastVersion, lastVersion != Engine.appVersion { Telemetry.updated(from: lastVersion) }
-        UserDefaults.standard.set(Engine.appVersion, forKey: "lastVersion")
-        if phase == .ready { announceInstallOnce() }
+        // Leftovers of the usage statistics removed in 0.5.2 (random install id etc.).
+        for key in ["installID", "telemetryEnabled", "installAnnounced", "lastVersion"] { UserDefaults.standard.removeObject(forKey: key) }
         reload()
         if phase == .needsSetup && FileManager.default.fileExists(atPath: Engine.python.path) {
             runSetup() // app was updated: refresh the engine quietly (models are already downloaded)
@@ -302,7 +299,6 @@ final class AppModel: ObservableObject {
             Engine.markInstalled()
             phase = .ready
             setupStatus = ""
-            announceInstallOnce()
             resumedUnprocessed = false
             resumeUnprocessed()
             askForScreenAudioIfNeeded()
@@ -472,7 +468,6 @@ final class AppModel: ObservableObject {
                 }
             }
             var finalFolder = folder
-            let processingTime = Date().timeIntervalSince(jobStarted)
             if let folder {
                 if result.ok {
                     try? FileManager.default.removeItem(at: folder.appendingPathComponent("error.txt"))
@@ -483,15 +478,6 @@ final class AppModel: ObservableObject {
                 } else if !Task.isCancelled {
                     let msg = result.errorTail.isEmpty ? tr("Processing failed.") : result.errorTail
                     try? msg.write(to: folder.appendingPathComponent("error.txt"), atomically: true, encoding: .utf8)
-                }
-            }
-            if case .process = job {
-                if result.ok, let m = finalFolder.flatMap(Meeting.load), let n = m.notes {
-                    Telemetry.recording(duration: m.duration ?? n.duration, processing: processingTime,
-                                        template: n.template ?? "general", meetingAudio: n.tracks?.contains("meeting") ?? false,
-                                        speakers: n.participants.count, todos: n.actions.count, model: notesModel)
-                } else if !result.ok && !Task.isCancelled {
-                    Telemetry.failed("Processing", error: result.errorTail)
                 }
             }
             reload()
@@ -770,12 +756,6 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func announceInstallOnce() {
-        guard !UserDefaults.standard.bool(forKey: "installAnnounced") else { return }
-        UserDefaults.standard.set(true, forKey: "installAnnounced")
-        Telemetry.installed(notesModel: notesModel, speechModel: speechModel)
-    }
-
     // MARK: - AI models
 
     private var lastCatalogRefresh = Date()
@@ -812,10 +792,8 @@ final class AppModel: ObservableObject {
     func useModel(_ model: CatalogModel, speech: Bool) {
         let apply = { [weak self] in
             guard let self else { return }
-            let old = speech ? self.speechModel : self.notesModel
             if speech { self.settings.whisperModel = model.repo } else { self.settings.llmModel = model.repo }
             Engine.writeConfig(self.settings)
-            if old != model.repo { Telemetry.modelChanged(speech: speech, from: old, to: model.repo, custom: model.id == "custom") }
         }
         if installedModels[model.repo] != nil { apply(); return }
         guard modelDownload == nil else { return }

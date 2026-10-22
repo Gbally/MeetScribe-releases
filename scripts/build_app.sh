@@ -12,10 +12,6 @@ VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
 BUILD=$(git rev-list --count HEAD 2>/dev/null || echo 1)
 APP=build/MeetScribe.app
 UV_BIN=$(command -v uv || echo "$HOME/development/bin/uv")
-# Zenhook token for usage pings: kept out of git, in zenhook_token.txt (empty = no pings).
-ZENHOOK_TOKEN=""
-[ -f zenhook_token.txt ] && ZENHOOK_TOKEN=$(tr -d '[:space:]' < zenhook_token.txt)
-[ -z "$ZENHOOK_TOKEN" ] && echo "  (no zenhook_token.txt: usage pings disabled in this build)"
 
 rm -rf build && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/engine" dist
 
@@ -60,7 +56,6 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSUIElement</key><true/>
   <key>LSArchitecturePriority</key><array><string>arm64</string></array>
   <key>MSReleasesRepo</key><string>Gbally/MeetScribe-releases</string>
-  <key>MSZenhookToken</key><string>$ZENHOOK_TOKEN</string>
   <key>NSMicrophoneUsageDescription</key><string>MeetScribe records your voice during meetings to create a transcript. Audio stays on this Mac.</string>
   <key>NSAudioCaptureUsageDescription</key><string>MeetScribe records the meeting audio (the other participants) to create a transcript. Audio stays on this Mac.</string>
   <key>NSCalendarsUsageDescription</key><string>MeetScribe reads the current meeting's title and attendees to name the notes and email them. Nothing leaves this Mac.</string>

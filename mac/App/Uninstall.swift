@@ -53,8 +53,6 @@ enum Uninstaller {
         let models = modelFolders(model)
         let notes = model.settings.notesFolder
         Engine.log("uninstall (notes: \(removeNotes))")
-        Telemetry.send(title: "Uninstalled", level: "warning", emoji: "🗑️",
-                       fields: ["Meetings": "\(model.meetings.count)", "Notes removed": removeNotes ? "yes" : "no"])
 
         try? SMAppService.mainApp.unregister()
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
@@ -71,7 +69,6 @@ enum Uninstaller {
         if let domain = Bundle.main.bundleIdentifier { UserDefaults.standard.removePersistentDomain(forName: domain) }
         try? fm.trashItem(at: Bundle.main.bundleURL, resultingItemURL: nil)
 
-        // Let the usage ping leave before quitting.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { NSApp.terminate(nil) }
+        NSApp.terminate(nil)
     }
 }

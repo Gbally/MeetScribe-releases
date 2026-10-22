@@ -20,8 +20,8 @@ Using it: click the icon → Start recording. Click again → Stop & create note
 Notes, to-dos and transcripts appear in the same window a few minutes later, and are saved in
 Documents/MeetingNotes.
 
-Everything runs on your Mac. Only anonymous usage statistics (e.g. a recording's length, never
-its content) are sent; turn them off in Settings → Privacy and storage. Always tell participants that you are recording.
+Everything runs on your Mac: no account, no tracking, nothing about your meetings is sent anywhere.
+Always tell participants that you are recording.
 
 MeetScribe opens at login (turn it off in Settings → General).
 Updates: MeetScribe checks once a day and offers new versions in its window (Update).

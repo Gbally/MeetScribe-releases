@@ -75,9 +75,9 @@ recording, and follow your company's rules.
 
 ## Privacy
 
-Audio, transcripts and notes never leave your Mac. Anonymous usage statistics (e.g. a
-recording's length — never its content) are sent unless you turn them off. Everything that
-touches the network is listed in [PRIVACY.md](PRIVACY.md).
+Audio, transcripts and notes never leave your Mac, and there are no analytics or tracking of
+any kind. The only network traffic is the update check, the one-time engine and model
+downloads, and email drafts if you choose a web mail — see [PRIVACY.md](PRIVACY.md).
 
 ## How it works
 

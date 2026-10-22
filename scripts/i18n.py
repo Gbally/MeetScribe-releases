@@ -33,7 +33,7 @@ PY_PATTERN = rf'(?:\bstep\(\s*|"key":\s*){STR}'
 
 def extract_keys() -> tuple[set[str], list[str]]:
     keys, problems = set(), []
-    for path in sorted(p for p in (ROOT / "mac").rglob("*.swift") if p.name not in ("Telemetry.swift", "RecorderCLI.swift", "Uninstall.swift")):
+    for path in sorted(p for p in (ROOT / "mac").rglob("*.swift") if p.name not in ("RecorderCLI.swift", "Uninstall.swift")):
         text = path.read_text()
         for pattern in SWIFT_PATTERNS:
             for m in re.finditer(pattern, text):

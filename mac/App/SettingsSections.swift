@@ -289,7 +289,7 @@ struct RemoveSection: View {
             }
         }
         .task {
-            let urls = [Engine.support] + Uninstaller.modelFolders(model)
+            let urls = [Engine.support] + Uninstaller.modelFiles(model)
             engineBytes = await Task.detached(priority: .utility) { Uninstaller.size(of: urls) }.value
         }
     }

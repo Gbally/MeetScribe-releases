@@ -115,6 +115,20 @@ def download_model(repo: str) -> None:
     step("Ready")
 
 
+def _linked_blobs(repo_paths) -> set[Path]:
+    """Weight files outside the repo folders that their blobs/ entries link to. Recent Hugging Face
+    versions keep them in a shared folder, and deleting a model only removes the links."""
+    out = set()
+    for repo_path in repo_paths:
+        blobs = Path(repo_path) / "blobs"
+        for link in blobs.iterdir() if blobs.is_dir() else []:
+            if link.is_symlink():
+                target = link.resolve()
+                if target.exists() and Path(repo_path).resolve() not in target.parents:
+                    out.add(target)
+    return out
+
+
 def delete_model(repo: str) -> float:
     """Remove a downloaded model from the Hugging Face cache; returns GB freed."""
     from huggingface_hub import scan_cache_dir
@@ -122,9 +136,14 @@ def delete_model(repo: str) -> float:
     cache = scan_cache_dir()
     for r in cache.repos:
         if r.repo_id == repo:
+            shared = _linked_blobs([r.repo_path])
             strategy = cache.delete_revisions(*[rev.commit_hash for rev in r.revisions])
             strategy.execute()
-            return strategy.expected_freed_size / 1e9
+            # Shared weight files nothing links to any more.
+            still_used = _linked_blobs([o.repo_path for o in cache.repos if o.repo_id != repo])
+            for target in shared - still_used:
+                target.unlink(missing_ok=True)
+            return r.size_on_disk / 1e9
     return 0.0
 
 

@@ -23,25 +23,49 @@ enum Uninstaller {
     }
 
     /// Only the models MeetScribe uses — never other repos someone has in their Hugging Face cache.
+    /// Recent Hugging Face versions keep the weights in a shared `blobs/` folder that each model's
+    /// files link to, so those count too (unless another model still links to them).
     @MainActor
-    static func modelFolders(_ model: AppModel) -> [URL] {
+    static func modelFiles(_ model: AppModel) -> [URL] {
         var repos = Set((model.catalog.notes + model.catalog.speech).map(\.repo))
         repos.formUnion([model.settings.llmModel, model.settings.whisperModel].compactMap { $0 })
         repos.formUnion(UserDefaults.standard.stringArray(forKey: "downloadedRepos") ?? [])
-        return repos.map { hfCache.appendingPathComponent("models--" + $0.replacingOccurrences(of: "/", with: "--")) }
+        let folders = repos.map { hfCache.appendingPathComponent("models--" + $0.replacingOccurrences(of: "/", with: "--")) }
             .filter { FileManager.default.fileExists(atPath: $0.path) }
+        let others = ((try? FileManager.default.contentsOfDirectory(at: hfCache, includingPropertiesForKeys: nil)) ?? [])
+            .filter { $0.lastPathComponent.hasPrefix("models--") && !folders.map(\.lastPathComponent).contains($0.lastPathComponent) }
+        let stillUsed = linkedBlobs(in: others)
+        return folders + linkedBlobs(in: folders).subtracting(stillUsed).sorted { $0.path < $1.path }
+    }
+
+    /// Weight files outside the model folders that their `blobs/` entries link to.
+    private static func linkedBlobs(in folders: [URL]) -> Set<URL> {
+        var out = Set<URL>()
+        for folder in folders {
+            let blobs = folder.appendingPathComponent("blobs")
+            for link in (try? FileManager.default.contentsOfDirectory(at: blobs, includingPropertiesForKeys: nil)) ?? [] {
+                guard (try? link.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true else { continue }
+                let target = link.resolvingSymlinksInPath()
+                if !target.path.hasPrefix(folder.path + "/"), FileManager.default.fileExists(atPath: target.path) {
+                    out.insert(target)
+                }
+            }
+        }
+        return out
     }
 
     static func size(of urls: [URL]) -> Int64 {
         var total: Int64 = 0
-        for url in urls {
-            let keys: [URLResourceKey] = [.totalFileAllocatedSizeKey, .isRegularFileKey]
-            guard let e = FileManager.default.enumerator(at: url, includingPropertiesForKeys: keys) else { continue }
-            for case let f as URL in e {
-                if let v = try? f.resourceValues(forKeys: Set(keys)), v.isRegularFile == true {
-                    total += Int64(v.totalFileAllocatedSize ?? 0)
-                }
+        let keys: [URLResourceKey] = [.totalFileAllocatedSizeKey, .isRegularFileKey]
+        func add(_ f: URL) {
+            if let v = try? f.resourceValues(forKeys: Set(keys)), v.isRegularFile == true {
+                total += Int64(v.totalFileAllocatedSize ?? 0)
             }
+        }
+        for url in urls {
+            if (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true { add(url); continue }
+            guard let e = FileManager.default.enumerator(at: url, includingPropertiesForKeys: keys) else { continue }
+            for case let f as URL in e { add(f) }
         }
         return total
     }
@@ -50,7 +74,7 @@ enum Uninstaller {
     @MainActor
     static func run(_ model: AppModel, removeNotes: Bool) {
         let fm = FileManager.default
-        let models = modelFolders(model)
+        let models = modelFiles(model)
         let notes = model.settings.notesFolder
         Engine.log("uninstall (notes: \(removeNotes))")
 

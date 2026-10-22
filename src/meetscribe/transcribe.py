@@ -9,6 +9,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .audio import condense
+
 SR = 16_000
 
 # Phrases Whisper tends to invent on silence / music.
@@ -31,8 +33,40 @@ def parse_languages(setting: str) -> list[str]:
     return [l.strip().lower() for l in setting.split(",") if l.strip()]
 
 
-def transcribe(audio: np.ndarray, model: str, language: str = "", vocabulary: str = "") -> tuple[list[Word], str]:
-    """Returns the words and the main language code."""
+def transcribe(audio: np.ndarray, model: str, language: str = "", vocabulary: str = "",
+               own_mic: bool = False) -> tuple[list[Word], str]:
+    """Returns the words and the main language code. Only the stretches with speech go through
+    Whisper: in a call, each track is silent while the others talk (often two thirds of the
+    time), so they are cut out first and the word timings put back on the original timeline.
+    `own_mic`: the track is your microphone, where your voice is by far the loudest — the
+    meeting's voices leaking from the speakers can be cut out too."""
+    pieces = speech_pieces(audio, relative=0.12 if own_mic else 0.04)
+    kept = sum(e - s for s, e in pieces)
+    if not pieces or kept > 0.85 * len(audio) / SR:
+        return _transcribe_all(audio, model, language, vocabulary)
+    print(f"   {kept / 60:.1f} of {len(audio) / SR / 60:.1f} min have speech", flush=True)
+    short, original = condense(audio, pieces)
+    words, lang = _transcribe_all(short, model, language, vocabulary)
+    for w in words:
+        w.start, w.end = original(w.start, w.end)
+    return words, lang
+
+
+def speech_pieces(audio: np.ndarray, relative: float = 0.04) -> list[tuple[float, float]]:
+    """Stretches worth transcribing: speech with a little margin, close ones joined. Lenient on
+    purpose (a quiet participant must not be cut out); only clear silence is dropped."""
+    total = len(audio) / SR
+    out: list[list[float]] = []
+    for s, e in speech_regions(audio, relative=relative):
+        s, e = max(0.0, s - 0.3), min(total, e + 0.3)
+        if out and s - out[-1][1] < 1.0:
+            out[-1][1] = e
+        else:
+            out.append([s, e])
+    return [(s, e) for s, e in out]
+
+
+def _transcribe_all(audio: np.ndarray, model: str, language: str, vocabulary: str) -> tuple[list[Word], str]:
     langs = parse_languages(language)
     if len(langs) <= 1:
         return _transcribe(audio, model, langs[0] if langs else None, vocabulary)
@@ -52,13 +86,13 @@ def transcribe(audio: np.ndarray, model: str, language: str = "", vocabulary: st
         spans = [(s, e) for l, s, e in runs if l == lang]
         totals[lang] = sum(e - s for s, e in spans)
         print(f"   {lang}: {totals[lang] / 60:.1f} min", flush=True)
-        # Silence everything in other languages so timestamps stay aligned, then keep only
-        # the words that fall inside this language's stretches.
-        masked = np.zeros_like(audio)
-        for s, e in spans:
-            masked[int(s * SR): int(e * SR)] = audio[int(s * SR): int(e * SR)]
-        w, _ = _transcribe(masked, model, lang, vocabulary)
-        words += [x for x in w if any(s <= (x.start + x.end) / 2 <= e for s, e in spans)]
+        # Only this language's stretches go through Whisper (not the whole track with the
+        # rest silenced); the word timings are put back on the track's timeline.
+        short, original = condense(audio, spans)
+        w, _ = _transcribe(short, model, lang, vocabulary)
+        for x in w:
+            x.start, x.end = original(x.start, x.end)
+        words += w
     words.sort(key=lambda w: w.start)
     progress.whisper_span(0.0, 1.0)
     return words, max(totals, key=totals.get)
@@ -90,14 +124,15 @@ def _transcribe(audio, model, language, vocabulary) -> tuple[list[Word], str]:
     return words, lang
 
 
-def speech_regions(audio: np.ndarray, min_gap: float = 0.4) -> list[tuple[float, float]]:
-    """Simple energy-based voice activity detection → [(start, end)] in seconds."""
+def speech_regions(audio: np.ndarray, min_gap: float = 0.4, relative: float = 0.08) -> list[tuple[float, float]]:
+    """Simple energy-based voice activity detection → [(start, end)] in seconds. A frame is
+    speech when it is louder than `relative` × the track's loud level (95th percentile)."""
     hop = int(0.03 * SR)
     n = len(audio) // hop
     if n == 0:
         return []
     rms = np.sqrt(np.mean(audio[: n * hop].reshape(n, hop) ** 2, axis=1))
-    threshold = max(0.004, 0.08 * float(np.percentile(rms, 95)))
+    threshold = max(0.004, relative * float(np.percentile(rms, 95)))
     speech = rms > threshold
     regions, start, last = [], None, -1e9
     for i, s in enumerate(speech):

@@ -414,6 +414,8 @@ struct AboutPane: View {
 
     init() { _updater = ObservedObject(wrappedValue: AppModelHolder.updater) }
 
+    static let repo = URL(string: "https://github.com/Gbally/MeetScribe-releases")!
+
     var body: some View {
         Section {
             LabeledContent("Version", value: Engine.appVersion)
@@ -438,9 +440,30 @@ struct AboutPane: View {
             }
             if let page = Releases.pageURL { Link("Release notes", destination: page) }
         }
+        Section("Open source") {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "star.fill").font(.title2).foregroundColor(.yellow)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("MeetScribe is free and open source").font(.callout.weight(.medium))
+                    Caption("Like it? A star on GitHub helps other people find it.")
+                }
+                Spacer()
+                Button("Star on GitHub") { NSWorkspace.shared.open(Self.repo) }.buttonStyle(.borderedProminent)
+            }
+            LabeledContent("Source code") { Link(destination: Self.repo) { Text(verbatim: "github.com/Gbally/MeetScribe-releases") } }
+            LabeledContent("Bugs and ideas") { Link("Report a problem…", destination: Self.repo.appendingPathComponent("issues/new")) }
+            LabeledContent("License") {
+                HStack(spacing: 6) {
+                    Link(destination: Self.repo.appendingPathComponent("blob/main/LICENSE")) { Text(verbatim: "MIT") }
+                    Text(verbatim: "·").foregroundColor(.secondary)
+                    Link("Privacy", destination: Self.repo.appendingPathComponent("blob/main/PRIVACY.md"))
+                    Text(verbatim: "·").foregroundColor(.secondary)
+                    Link("Third-party licenses", destination: Self.repo.appendingPathComponent("blob/main/THIRD_PARTY_NOTICES.md"))
+                }
+            }
+        }
         Section("Credits") {
             Caption("Speech: OpenAI Whisper (MIT), via MLX. Notes: Qwen (Apache 2.0), via MLX. Speaker separation: pyannote segmentation (MIT) and NVIDIA TitaNet (CC BY 4.0), via sherpa-onnx.")
-            Link("Source code, license and privacy", destination: URL(string: "https://github.com/Gbally/MeetScribe-releases")!)
         }
     }
 }

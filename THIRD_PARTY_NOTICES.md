@@ -1,6 +1,6 @@
 # Third-party notices
 
-MeetScribe itself is released under the [MIT License](LICENSE). It builds on the projects below,
+MeetNouse itself is released under the [MIT License](LICENSE). It builds on the projects below,
 which keep their own licenses. Only `uv` ships inside the app; the rest is downloaded on first
 setup (the Python engine) or when a model is chosen (the AI models).
 

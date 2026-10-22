@@ -3,6 +3,7 @@
 // running app, swaps itself and relaunches.
 
 import AppKit
+import ServiceManagement
 import CryptoKit
 import Foundation
 import Security
@@ -54,7 +55,7 @@ final class Updater: ObservableObject {
         guard let info = available, UserDefaults.standard.integer(forKey: "announcedBuild") < info.build else { return }
         UserDefaults.standard.set(info.build, forKey: "announcedBuild")
         let content = UNMutableNotificationContent()
-        content.title = tr("MeetScribe %@ is available", info.version)
+        content.title = tr("MeetNouse %@ is available", info.version)
         content.body = (info.notes.map { $0 + " " } ?? "") + tr("Click to install.")
         content.userInfo = ["action": "update"]
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "update-\(info.build)", content: content, trigger: nil))
@@ -87,7 +88,7 @@ final class Updater: ObservableObject {
         let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         guard digest == sha256.lowercased() else { throw UpdateError(tr("The download is damaged (checksum mismatch).")) }
 
-        let work = FileManager.default.temporaryDirectory.appendingPathComponent("MeetScribeUpdate-\(UUID().uuidString)")
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("MeetNouseUpdate-\(UUID().uuidString)")
         let mount = work.appendingPathComponent("mnt")
         try FileManager.default.createDirectory(at: mount, withIntermediateDirectories: true)
         let dmg = work.appendingPathComponent("update.dmg")
@@ -95,10 +96,10 @@ final class Updater: ObservableObject {
         try run("/usr/bin/hdiutil", ["attach", "-nobrowse", "-readonly", "-mountpoint", mount.path, dmg.path])
         defer { try? run("/usr/bin/hdiutil", ["detach", mount.path, "-force"]) }
 
-        let newApp = mount.appendingPathComponent("MeetScribe.app")
-        guard FileManager.default.fileExists(atPath: newApp.path) else { throw UpdateError(tr("The update doesn't contain MeetScribe.")) }
+        let newApp = mount.appendingPathComponent("MeetNouse.app")
+        guard FileManager.default.fileExists(atPath: newApp.path) else { throw UpdateError(tr("The update doesn't contain MeetNouse.")) }
         try verifySameSigner(newApp)
-        let staged = work.appendingPathComponent("MeetScribe.app")
+        let staged = work.appendingPathComponent("MeetNouse.app")
         try run("/usr/bin/ditto", [newApp.path, staged.path])
         return staged
     }
@@ -117,22 +118,28 @@ final class Updater: ObservableObject {
         }
         let status = SecStaticCodeCheckValidity(newCode, SecCSFlags(rawValue: kSecCSCheckAllArchitectures), requirement)
         guard status == errSecSuccess else {
-            throw UpdateError(tr("The update isn't signed by the MeetScribe developer — not installed."))
+            throw UpdateError(tr("The update isn't signed by the MeetNouse developer — not installed."))
         }
     }
 
-    /// Replaces the running app once it has quit, then opens the new one.
+    /// Replaces the running app once it has quit, then opens the new one. An install still named
+    /// MeetScribe.app (before the rename) becomes MeetNouse.app.
     private static func swapAndRelaunch(with staged: URL) throws {
-        let current = Bundle.main.bundleURL
+        let old = Bundle.main.bundleURL
+        let current = old.deletingLastPathComponent().appendingPathComponent("MeetNouse.app")
         guard FileManager.default.isWritableFile(atPath: current.deletingLastPathComponent().path) else {
             // No permission to write /Applications (managed Mac): let the user drag it in.
             NSWorkspace.shared.activateFileViewerSelecting([staged])
-            throw UpdateError(tr("Drag the new MeetScribe from the Finder window into Applications (replace the old one)."))
+            throw UpdateError(tr("Drag the new MeetNouse from the Finder window into Applications (replace the old one)."))
         }
         let script = """
         while kill -0 \(ProcessInfo.processInfo.processIdentifier) 2>/dev/null; do sleep 0.2; done
-        rm -rf "\(current.path)" && /usr/bin/ditto "\(staged.path)" "\(current.path)" && /usr/bin/open "\(current.path)"
+        rm -rf "\(old.path)" "\(current.path)" && /usr/bin/ditto "\(staged.path)" "\(current.path)" && /usr/bin/open "\(current.path)"
         """
+        // A moved app loses its login item: register it again on the next launch.
+        if old != current && SMAppService.mainApp.status == .enabled {
+            UserDefaults.standard.set(true, forKey: "restoreLoginItem")
+        }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/sh")
         p.arguments = ["-c", script]

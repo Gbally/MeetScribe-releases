@@ -118,7 +118,7 @@ struct MeetingView: View {
                 Card {
                     Label("The meeting audio wasn't recorded", systemImage: "speaker.slash").font(.callout.weight(.medium))
                         .foregroundColor(.orange)
-                    Text("Only your microphone was captured, so other people's voices were picked up through your speakers — speaker names may be less reliable. Check Screen & System Audio Recording for MeetScribe in System Settings.")
+                    Text("Only your microphone was captured, so other people's voices were picked up through your speakers — speaker names may be less reliable. Check Screen & System Audio Recording for MeetNouse in System Settings.")
                         .font(.caption).fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -264,7 +264,7 @@ struct SpeakersView: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Listen to each speaker (▶︎), then type their name. MeetScribe remembers their voice for next time, and the notes are rewritten with the names. Same person split in two? Give both the same name.")
+                    Text("Listen to each speaker (▶︎), then type their name. MeetNouse remembers their voice for next time, and the notes are rewritten with the names. Same person split in two? Give both the same name.")
                         .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
                     if preparingClips {
                         HStack { ProgressView().controlSize(.small); Text("Preparing voice samples…").font(.caption) }
@@ -414,7 +414,7 @@ struct TodosView: View {
                              : tr("No to-dos."))
                             .font(.callout).foregroundColor(.secondary).padding(.top, 20)
                         if mineOnly && model.settings.myName.isEmpty {
-                            Text("Set your name in Settings so MeetScribe knows which to-dos are yours.")
+                            Text("Set your name in Settings so MeetNouse knows which to-dos are yours.")
                                 .font(.caption).foregroundColor(.secondary)
                         }
                     }

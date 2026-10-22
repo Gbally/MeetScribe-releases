@@ -1,5 +1,5 @@
 #!/bin/sh
-# Creates a stable code-signing identity for MeetScribe builds, in its own keychain file
+# Creates a stable code-signing identity for MeetNouse builds, in its own keychain file
 # (signing/MeetScribe-signing.keychain-db) — the login keychain is not touched.
 #
 # Why: macOS remembers permissions (microphone, screen audio, calendar, Documents) per code

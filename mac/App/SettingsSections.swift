@@ -176,7 +176,7 @@ struct VoicesSection: View {
 
     var body: some View {
         Section("Known voices") {
-            Text("Name the speakers of a meeting (⋯ → Name the speakers) and MeetScribe recognises them next time. Voiceprints stay on this Mac.")
+            Text("Name the speakers of a meeting (⋯ → Name the speakers) and MeetNouse recognises them next time. Voiceprints stay on this Mac.")
                 .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
             if model.voices.isEmpty {
                 Text("No voices learned yet.").font(.caption).foregroundColor(.secondary)
@@ -268,24 +268,24 @@ struct RemoveSection: View {
     @State private var confirm = false
 
     var body: some View {
-        Section("Remove MeetScribe") {
-            Text(engineBytes.map { tr("The engine and AI models use %@ outside the app. Dragging MeetScribe to the Trash leaves them behind — this removes everything.",
+        Section("Remove MeetNouse") {
+            Text(engineBytes.map { tr("The engine and AI models use %@ outside the app. Dragging MeetNouse to the Trash leaves them behind — this removes everything.",
                                       ByteCountFormatter.string(fromByteCount: $0, countStyle: .file)) }
                  ?? tr("Measuring the engine and AI models…"))
                 .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
             Toggle("Also move my meeting notes to the Trash", isOn: $removeNotes)
             Caption(removeNotes ? "Notes, transcripts and recordings go to the Trash — you can still restore them from there."
-                                : "Your notes stay in their folder, readable without MeetScribe.")
+                                : "Your notes stay in their folder, readable without MeetNouse.")
             LabeledContent("Uninstall") {
-                Button("Remove MeetScribe…", role: .destructive) { confirm = true }
+                Button("Remove MeetNouse…", role: .destructive) { confirm = true }
                     .disabled(model.isRecording || model.currentJob != nil || model.phase == .settingUp)
             }
-            .confirmationDialog("Remove MeetScribe from this Mac?", isPresented: $confirm) {
-                Button("Remove MeetScribe", role: .destructive) { Uninstaller.run(model, removeNotes: removeNotes) }
+            .confirmationDialog("Remove MeetNouse from this Mac?", isPresented: $confirm) {
+                Button("Remove MeetNouse", role: .destructive) { Uninstaller.run(model, removeNotes: removeNotes) }
             } message: {
                 Text(removeNotes
-                     ? tr("Deletes the engine, the AI models, your settings and learned voices, and moves the app and your notes to the Trash. MeetScribe then quits.")
-                     : tr("Deletes the engine, the AI models, your settings and learned voices, and moves the app to the Trash. Your notes are kept. MeetScribe then quits."))
+                     ? tr("Deletes the engine, the AI models, your settings and learned voices, and moves the app and your notes to the Trash. MeetNouse then quits.")
+                     : tr("Deletes the engine, the AI models, your settings and learned voices, and moves the app to the Trash. Your notes are kept. MeetNouse then quits."))
             }
         }
         .task {

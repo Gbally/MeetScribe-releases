@@ -204,7 +204,7 @@ struct HomeView: View {
                         .background(Capsule().fill(Color.accentColor.opacity(0.12)))
                 }
                 .buttonStyle(.plain)
-                .help("A new version of MeetScribe is available")
+                .help("A new version of MeetNouse is available")
             }
             Button { Windows.showSettings(model) } label: { Image(systemName: "gearshape") }
                 .buttonStyle(.borderless).help("Settings")
@@ -212,7 +212,7 @@ struct HomeView: View {
                 Button("Transcribe an audio file…") { model.chooseAudioFile() }.disabled(model.phase != .ready)
                 Button("Open notes folder") { NSWorkspace.shared.open(model.settings.notesFolder) }
                 Divider()
-                Button("Quit MeetScribe") { NSApp.terminate(nil) }
+                Button("Quit MeetNouse") { NSApp.terminate(nil) }
             } label: { Image(systemName: "ellipsis.circle") }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
         }
@@ -576,7 +576,7 @@ struct SetupCard: View {
     var body: some View {
         Card {
             Label("One-time setup", systemImage: "arrow.down.circle").font(.headline)
-            Text("MeetScribe runs its AI entirely on this Mac — your meetings never leave it. It first needs to download its engine and models (4–6 GB, 10–20 minutes).")
+            Text("MeetNouse runs its AI entirely on this Mac — your meetings never leave it. It first needs to download its engine and models (4–6 GB, 10–20 minutes).")
                 .font(.callout).fixedSize(horizontal: false, vertical: true)
             if model.phase == .settingUp {
                 if let p = model.setupProgress {
@@ -628,7 +628,7 @@ struct PermissionsCard: View {
                     Text("Already allowed? macOS applies it after a restart.")
                         .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
                     Spacer()
-                    Button("Restart MeetScribe") { model.restartApp() }.controlSize(.small)
+                    Button("Restart MeetNouse") { model.restartApp() }.controlSize(.small)
                 }
             }
         }

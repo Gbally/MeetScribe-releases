@@ -42,7 +42,7 @@ enum Windows {
     static func showSettings(_ model: AppModel, tab: SettingsTab? = nil) {
         if let tab { model.settingsTab = tab }
         if settings == nil {
-            let w = make(title: tr("MeetScribe Settings"), size: NSSize(width: 780, height: 540),
+            let w = make(title: tr("MeetNouse Settings"), size: NSSize(width: 780, height: 540),
                          view: SettingsWindow().environmentObject(model), autosave: "Settings")
             // Closing it forgets temporary state (e.g. a custom model check); reopening starts fresh.
             NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: w, queue: .main) { _ in
@@ -78,7 +78,7 @@ enum Windows {
     static func showWelcome(_ model: AppModel, step: Int = 0) {
         if others["welcome"] == nil {
             let close: () -> Void = { Windows.others["welcome"]?.close() }
-            let w = make(title: tr("Welcome to MeetScribe"), size: NSSize(width: 540, height: 600),
+            let w = make(title: tr("Welcome to MeetNouse"), size: NSSize(width: 540, height: 600),
                          view: WelcomeView(close: close, step: step).environmentObject(model), autosave: nil)
             w.styleMask.remove(.resizable)
             NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: w, queue: .main) { _ in
@@ -95,7 +95,7 @@ enum Windows {
     /// The menu bar content in a normal window (testing / screenshots: `--preview`).
     static func showPreview(_ model: AppModel) {
         if others["preview"] == nil {
-            others["preview"] = make(title: "MeetScribe", size: NSSize(width: 380, height: 580),
+            others["preview"] = make(title: "MeetNouse", size: NSSize(width: 380, height: 580),
                                      view: RootView().environmentObject(model), autosave: nil)
         }
         present(others["preview"]!)
@@ -103,8 +103,8 @@ enum Windows {
 
     /// Re-titles open windows; their content redraws by itself (keyed by model.uiLanguage).
     static func languageChanged(_ model: AppModel) {
-        settings?.title = tr("MeetScribe Settings")
-        others["welcome"]?.title = tr("Welcome to MeetScribe")
+        settings?.title = tr("MeetNouse Settings")
+        others["welcome"]?.title = tr("Welcome to MeetNouse")
         for (id, w) in meetings { w.title = model.meeting(id)?.title ?? tr("Meeting") }
     }
 
@@ -231,7 +231,7 @@ struct GeneralPane: View {
         }
         Section("Shortcut and startup") {
             LabeledContent("Start / stop recording") { HotkeyField(hotkey: $model.settings.hotkey) }
-            Toggle("Open MeetScribe at login", isOn: $model.launchAtLogin)
+            Toggle("Open MeetNouse at login", isOn: $model.launchAtLogin)
         }
         EmailSection()
     }
@@ -288,7 +288,7 @@ struct ModelsPane: View {
         Section {
             LabeledContent("This Mac", value: hw.localizedSummary)
         } footer: {
-            Caption(tr("Models run on this Mac only. Recommendations come from a list of models tested with MeetScribe (updated %@).",
+            Caption(tr("Models run on this Mac only. Recommendations come from a list of models tested with MeetNouse (updated %@).",
                        model.catalog.updated.isEmpty ? "—" : model.catalog.updated))
         }
         if let d = model.modelDownload {
@@ -333,7 +333,7 @@ struct ModelsPane: View {
                         Tag(text: "Custom", color: .orange)
                         Tag(text: "In use", color: .green)
                     }
-                    Caption(repo + " · " + tr("not tested with MeetScribe"))
+                    Caption(repo + " · " + tr("not tested with MeetNouse"))
                 }
                 Spacer()
                 if let rec = ModelCatalog.recommended(list, for: hw) {
@@ -433,7 +433,7 @@ struct AboutPane: View {
             }
             switch updater.state {
             case .downloading: ProgressView("Downloading the update…").progressViewStyle(.linear)
-            case .installing: Caption("Installing — MeetScribe will restart.")
+            case .installing: Caption("Installing — MeetNouse will restart.")
             case .failed(let msg): Text(msg).font(.caption).foregroundColor(.red)
             default: EmptyView()
             }
@@ -443,7 +443,7 @@ struct AboutPane: View {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: "star.fill").font(.title2).foregroundColor(.yellow)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("MeetScribe is free and open source").font(.callout.weight(.medium))
+                    Text("MeetNouse is free and open source").font(.callout.weight(.medium))
                     Caption("Like it? A star on GitHub helps other people find it.")
                 }
                 Spacer()
@@ -519,7 +519,7 @@ struct CustomModelSection: View {
                 } else {
                     LabeledContent(c.repo, value: String(format: "%.1f GB", c.sizeGB))
                     if c.compatible == false {
-                        Label(tr("MeetScribe can't run it: %@", c.compatibilityReason), systemImage: "xmark.octagon.fill")
+                        Label(tr("MeetNouse can't run it: %@", c.compatibilityReason), systemImage: "xmark.octagon.fill")
                             .font(.caption).foregroundColor(.red).fixedSize(horizontal: false, vertical: true)
                     } else {
                         if c.compatible == true {
@@ -544,14 +544,14 @@ struct CustomModelSection: View {
         } header: {
             Text("Custom model")
         } footer: {
-            Caption("For experiments: any model from Hugging Face. MeetScribe checks it can run it; you can go back to the recommended model at any time.")
+            Caption("For experiments: any model from Hugging Face. MeetNouse checks it can run it; you can go back to the recommended model at any time.")
         }
         .confirmationDialog(tr("Use %@?", check?.repo ?? tr("this model")), isPresented: $confirm) {
             Button("Download and use") {
                 if let c = checks[speech] { model.useModel(c.asCatalogModel(), speech: speech) }
             }
         } message: {
-            Text("It isn't tested with MeetScribe. If results look wrong or processing fails, switch back to the recommended model here.")
+            Text("It isn't tested with MeetNouse. If results look wrong or processing fails, switch back to the recommended model here.")
         }
     }
 

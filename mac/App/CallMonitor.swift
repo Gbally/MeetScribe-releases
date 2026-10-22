@@ -1,6 +1,6 @@
 // Notices when a call starts and ends: another app (Teams, Zoom, a browser…) opens or releases
 // the microphone. Uses CoreAudio's per-process audio objects (macOS 14+), which say which
-// process is using an input — so MeetScribe's own recording doesn't count. Needs no permission
+// process is using an input — so MeetNouse's own recording doesn't count. Needs no permission
 // and never touches the audio. On older macOS, falls back to "some app is using a mic".
 
 import AppKit

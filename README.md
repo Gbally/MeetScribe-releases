@@ -1,6 +1,6 @@
 <p align="center"><img src="docs/img/icon.png" width="96" alt=""></p>
 
-<h1 align="center">MeetScribe</h1>
+<h1 align="center">MeetNouse</h1>
 
 <p align="center"><b>Meeting notes that stay on your Mac.</b><br>
 Records your Teams, Zoom or Meet calls, works out who said what, and writes a summary, the decisions
@@ -15,9 +15,14 @@ and a to-do list — with AI that runs entirely on your Mac. Free, open source, 
 
 <p align="center"><img src="docs/img/meeting.png" width="640" alt="Meeting notes: to-dos with due dates, summary and decisions"></p>
 
+## Why the dog?
+
+MeetNouse is a nod to Minousse — the nickname we give our dogs. Like a good dog, it listens
+carefully and never leaves the house.
+
 ## Why
 
-Meeting assistants usually send your calls to a cloud service. MeetScribe doesn't: speech
+Meeting assistants usually send your calls to a cloud service. MeetNouse doesn't: speech
 recognition (Whisper), speaker separation and the notes (Qwen) all run on your Mac's Apple silicon.
 Your recordings, transcripts and notes are plain files in a folder you choose.
 
@@ -56,7 +61,7 @@ Your recordings, transcripts and notes are plain files in a folder you choose.
 - **Many languages** — 99 spoken languages, even switching mid-meeting; the app itself is in
   English, French, Spanish, Portuguese, Japanese and Chinese.
 - **Updates itself**, picks AI models that fit your Mac's memory, and removes itself cleanly
-  (Settings → Privacy and storage → Remove MeetScribe).
+  (Settings → Privacy and storage → Remove MeetNouse).
 
 ## Install
 
@@ -64,7 +69,7 @@ Requirements: a Mac with Apple silicon (M1 or newer), macOS 13 or later, 8 GB me
 (16 GB recommended), ~8 GB free disk space.
 
 1. Download the `.dmg` from the [latest release](https://github.com/Gbally/MeetScribe-releases/releases/latest)
-   and drag MeetScribe into Applications.
+   and drag MeetNouse into Applications.
 2. Open it. The first time, macOS may say it can't verify the developer (the app isn't notarized
    yet): System Settings → Privacy & Security → **Open Anyway**.
 3. A welcome window takes you through your name, languages, permissions and the AI models
@@ -104,7 +109,7 @@ Needs the Xcode command line tools (`xcode-select --install`) and [uv](https://g
 
 ```sh
 ./scripts/make_signing_identity.sh   # once: a stable self-signed identity (keeps permissions across builds)
-./scripts/build_app.sh               # → build/MeetScribe.app + dist/MeetScribe-<version>.dmg
+./scripts/build_app.sh               # → build/MeetNouse.app + dist/MeetNouse-<version>.dmg
 ```
 
 **Permissions across updates:** macOS remembers permissions per code signature. Run
@@ -115,7 +120,7 @@ so permissions survive updates. Without it, builds are ad-hoc signed and every u
 **Signing:** without a Developer ID the app is self-signed, so on another Mac macOS blocks the first
 open (System Settings → Privacy & Security → Open Anyway). For a warning-free install, build
 with an Apple Developer ID (`SIGN_ID="Developer ID Application: …" ./scripts/build_app.sh`)
-and notarize the DMG (`xcrun notarytool submit dist/MeetScribe-*.dmg --wait`, then
+and notarize the DMG (`xcrun notarytool submit dist/MeetNouse-*.dmg --wait`, then
 `xcrun stapler staple`) — or have IT deploy it via MDM.
 
 ### Releasing (maintainer)
@@ -141,7 +146,7 @@ cp config.example.toml config.toml   # then set `me = "Your Name"`
 ```
 
 Handy alias (add to `~/.zshrc`):
-`alias meetscribe=/path/to/MeetScribe/.venv/bin/meetscribe`
+`alias meetscribe=/path/to/MeetNouse/.venv/bin/meetscribe`
 
 **Permissions:** the first `meetscribe record` needs your terminal app (Terminal / iTerm)
 allowed in System Settings → Privacy & Security → **Microphone** and **Screen & System
@@ -225,5 +230,5 @@ Pull requests welcome — please keep `python3 scripts/i18n.py extract` clean.
 
 ## License
 
-[MIT](LICENSE) © 2026 Gbally. MeetScribe builds on Whisper, Qwen, pyannote, NVIDIA TitaNet, MLX,
+[MIT](LICENSE) © 2026 Gbally. MeetNouse builds on Whisper, Qwen, pyannote, NVIDIA TitaNet, MLX,
 sherpa-onnx and more — see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

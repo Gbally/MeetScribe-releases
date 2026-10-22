@@ -131,6 +131,10 @@ final class AppModel: ObservableObject {
         } else {
             settings = AppSettings()
         }
+        if UserDefaults.standard.bool(forKey: "restoreLoginItem") { // app was renamed by an update
+            UserDefaults.standard.removeObject(forKey: "restoreLoginItem")
+            try? SMAppService.mainApp.register()
+        }
         // Open at login is on by default — applied once, so turning it off in Settings sticks.
         if !UserDefaults.standard.bool(forKey: "loginItemDefaultApplied") {
             UserDefaults.standard.set(true, forKey: "loginItemDefaultApplied")
@@ -237,7 +241,7 @@ final class AppModel: ObservableObject {
 
     func meeting(_ id: Meeting.ID) -> Meeting? { meetings.first { $0.id == id } }
 
-    /// Shows macOS's "record screen & system audio" request (and adds MeetScribe to the list in
+    /// Shows macOS's "record screen & system audio" request (and adds MeetNouse to the list in
     /// System Settings) without waiting for the first recording to fail.
     private func askForScreenAudioIfNeeded() {
         guard !SystemAudioCapture.hasPermission else { return }
@@ -409,7 +413,7 @@ final class AppModel: ObservableObject {
         if settings.endReminders, let end = recordingEvent?.end, !endReminderSent, Date() > end.addingTimeInterval(300) {
             endReminderSent = true
             notify(title: tr("Is “%@” over?", recordingEvent?.title ?? tr("the meeting")),
-                   body: tr("MeetScribe is still recording."), category: "ENDED")
+                   body: tr("MeetNouse is still recording."), category: "ENDED")
         }
         // Smooth the meters so they don't flicker.
         micLevel = max(rec.mic?.writer.takePeak() ?? 0, micLevel * 0.6)
@@ -866,7 +870,7 @@ final class AppModel: ObservableObject {
         guard settings.callReminders else { return }
         let event = settings.useCalendar ? CalendarService.shared.currentMeeting() : nil
         notify(title: event.map { tr("Record “%@”?", $0.title) } ?? tr("Record this call?"),
-               body: tr("%@ is using the microphone. Click Record to take notes with MeetScribe.", app), category: "CALL")
+               body: tr("%@ is using the microphone. Click Record to take notes with MeetNouse.", app), category: "CALL")
     }
 
     func notify(title: String, body: String, category: String? = nil) {
@@ -898,12 +902,12 @@ final class AppModel: ObservableObject {
             var problem: String?
             switch s.authorizationStatus {
             case .denied:
-                problem = tr("Notifications are turned off for MeetScribe in macOS, so you won't see these.")
+                problem = tr("Notifications are turned off for MeetNouse in macOS, so you won't see these.")
             case .notDetermined:
                 problem = tr("macOS hasn't asked for permission yet.")
             default:
                 if s.alertStyle == .none {
-                    problem = tr("macOS only lists MeetScribe's notifications in Notification Center — no pop-up.")
+                    problem = tr("macOS only lists MeetNouse's notifications in Notification Center — no pop-up.")
                 }
             }
             DispatchQueue.main.async { self.notificationProblem = problem }

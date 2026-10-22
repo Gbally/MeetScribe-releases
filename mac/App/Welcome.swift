@@ -67,7 +67,7 @@ struct WelcomeView: View {
 
     @ViewBuilder var intro: some View {
         Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 72, height: 72)
-        Text("Welcome to MeetScribe").font(.largeTitle.weight(.semibold))
+        Text("Welcome to MeetNouse").font(.largeTitle.weight(.semibold))
         Text("Meeting notes that never leave your Mac.").font(.title3).foregroundColor(.secondary)
         VStack(alignment: .leading, spacing: 12) {
             point("Records Teams, Zoom and Meet calls — your voice and the other participants'.", icon: "waveform")
@@ -80,13 +80,13 @@ struct WelcomeView: View {
             ForEach(AppLanguage.supported, id: \.code) { Text(verbatim: $0.name).tag($0.code) }
         }
         .frame(maxWidth: 360)
-        Text(tr("Next, MeetScribe downloads its AI models, picked for this Mac (%@): %@. It takes 10–20 minutes — you can finish the setup meanwhile.",
+        Text(tr("Next, MeetNouse downloads its AI models, picked for this Mac (%@): %@. It takes 10–20 minutes — you can finish the setup meanwhile.",
                 Hardware.current.chip + ", \(Hardware.current.memoryGB) GB", modelSummary))
             .font(.callout).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder var about: some View {
-        title("About you", subtitle: "So MeetScribe knows which voice is yours and which to-dos are for you.")
+        title("About you", subtitle: "So MeetNouse knows which voice is yours and which to-dos are for you.")
         TextField("Your name", text: $model.settings.myName).textFieldStyle(.roundedBorder).frame(maxWidth: 300)
         Caption("As colleagues say it in meetings — usually your first name.")
         Divider()
@@ -100,7 +100,7 @@ struct WelcomeView: View {
     }
 
     @ViewBuilder var permissions: some View {
-        title("Permissions", subtitle: "macOS asks you once for each. MeetScribe only listens while you record.")
+        title("Permissions", subtitle: "macOS asks you once for each. MeetNouse only listens while you record.")
         permission("Microphone", detail: "To record your voice.", icon: "mic.fill",
                    state: model.micPermission == .authorized ? .allowed : model.micPermission == .notDetermined ? .ask : .denied) {
             Task {
@@ -109,13 +109,13 @@ struct WelcomeView: View {
                 model.refreshPermissions()
             }
         }
-        permission("Screen & System Audio Recording", detail: "To hear the other participants. MeetScribe records sound only, never the screen.", icon: "speaker.wave.2.fill",
+        permission("Screen & System Audio Recording", detail: "To hear the other participants. MeetNouse records sound only, never the screen.", icon: "speaker.wave.2.fill",
                    state: model.screenPermission ? .allowed : screenAsked ? .denied : .ask) {
             screenAsked = true
             if !CGRequestScreenCaptureAccess() { openPrivacy("Privacy_ScreenCapture") }
         }
         if screenAsked && !model.screenPermission {
-            Caption("Turned it on in System Settings? macOS applies it after MeetScribe restarts — a button appears in the menu bar window once the download is done.")
+            Caption("Turned it on in System Settings? macOS applies it after MeetNouse restarts — a button appears in the menu bar window once the download is done.")
         }
         permission("Calendar (optional)", detail: "Names meetings and their attendees, and reminds you of open to-dos before the next one.", icon: "calendar",
                    state: CalendarService.shared.eventsAllowed ? .allowed : CalendarService.shared.eventsUndecided ? .ask : .denied) {
@@ -136,9 +136,9 @@ struct WelcomeView: View {
     }
 
     @ViewBuilder var ready: some View {
-        title("You're all set", subtitle: "MeetScribe lives in the menu bar, at the top right of the screen.")
+        title("You're all set", subtitle: "MeetNouse lives in the menu bar, at the top right of the screen.")
         HStack(spacing: 10) {
-            Image(systemName: "waveform").font(.title2).frame(width: 40, height: 40)
+            Image(nsImage: DogFace.menuBarImage).frame(width: 40, height: 40)
                 .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.06)))
             Text("Click this icon in the menu bar, then the red button when a meeting starts. Your notes appear there when it ends.")
                 .font(.callout).fixedSize(horizontal: false, vertical: true)
@@ -146,7 +146,7 @@ struct WelcomeView: View {
         Form {
             LabeledContent("Start / stop recording") { HotkeyField(hotkey: $model.settings.hotkey) }
             Toggle("Record calls automatically", isOn: $model.settings.autoRecord)
-            Toggle("Open MeetScribe at login", isOn: $model.launchAtLogin)
+            Toggle("Open MeetNouse at login", isOn: $model.launchAtLogin)
         }
         .formStyle(.grouped)
         .scrollDisabled(true)

@@ -1,4 +1,4 @@
-// Removes MeetScribe from this Mac: the engine + models it downloaded (outside the app, several
+// Removes MeetNouse from this Mac: the engine + models it downloaded (outside the app, several
 // GB), its settings, the login item, and the app itself. Meeting notes are only removed when the
 // user asks — and then go to the Trash, never deleted outright.
 
@@ -15,14 +15,14 @@ enum Uninstaller {
         return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".cache/huggingface/hub")
     }
 
-    /// Models downloaded through MeetScribe outside the catalog (custom Hugging Face links).
+    /// Models downloaded through MeetNouse outside the catalog (custom Hugging Face links).
     static func rememberDownload(_ repo: String) {
         var repos = UserDefaults.standard.stringArray(forKey: "downloadedRepos") ?? []
         if !repos.contains(repo) { repos.append(repo) }
         UserDefaults.standard.set(repos, forKey: "downloadedRepos")
     }
 
-    /// Only the models MeetScribe uses — never other repos someone has in their Hugging Face cache.
+    /// Only the models MeetNouse uses — never other repos someone has in their Hugging Face cache.
     /// Recent Hugging Face versions keep the weights in a shared `blobs/` folder that each model's
     /// files link to, so those count too (unless another model still links to them).
     @MainActor

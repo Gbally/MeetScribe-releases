@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds MeetScribe.app and a drag-to-install DMG in dist/.
+# Builds MeetNouse.app and a drag-to-install DMG in dist/.
 #
 #   ./scripts/build_app.sh                      ad-hoc signed (colleagues must allow it once)
 #   SIGN_ID="Developer ID Application: …" ./scripts/build_app.sh
@@ -10,14 +10,14 @@ cd "$(dirname "$0")/.."
 ROOT=$(pwd)
 VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
 BUILD=$(git rev-list --count HEAD 2>/dev/null || echo 1)
-APP=build/MeetScribe.app
+APP=build/MeetNouse.app
 UV_BIN=$(command -v uv || echo "$HOME/development/bin/uv")
 
 rm -rf build && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/engine" dist
 
 echo "• Compiling"
 swiftc -O -parse-as-library -target arm64-apple-macos13.0 \
-  mac/Shared/*.swift mac/App/*.swift -o "$APP/Contents/MacOS/MeetScribe"
+  mac/Shared/*.swift mac/App/*.swift -o "$APP/Contents/MacOS/MeetNouse"
 
 echo "• Bundling engine"
 cp "$UV_BIN" "$APP/Contents/MacOS/uv"
@@ -26,9 +26,11 @@ cp LICENSE THIRD_PARTY_NOTICES.md "$APP/Contents/Resources/"
 find "$APP/Contents/Resources/engine" -name __pycache__ -prune -exec rm -rf {} +
 
 echo "• Icon"
-if [ ! -f build-cache/AppIcon.icns ]; then
-  mkdir -p build-cache
-  swift scripts/make_icon.swift build-cache/AppIcon.iconset
+if [ ! -f build-cache/AppIcon.icns ] || [ scripts/make_icon.swift -nt build-cache/AppIcon.icns ] \
+   || [ mac/App/DogFace.swift -nt build-cache/AppIcon.icns ]; then
+  mkdir -p build-cache && rm -rf build-cache/AppIcon.iconset
+  cat mac/App/DogFace.swift scripts/make_icon.swift > build-cache/make_icon.swift
+  swift build-cache/make_icon.swift build-cache/AppIcon.iconset
   iconutil -c icns build-cache/AppIcon.iconset -o build-cache/AppIcon.icns
 fi
 cp build-cache/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
@@ -42,12 +44,12 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>MeetScribe</string>
+  <key>CFBundleName</key><string>MeetNouse</string>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleLocalizations</key><array><string>en</string><string>fr</string><string>es</string><string>pt</string><string>ja</string><string>zh-Hans</string></array>
-  <key>CFBundleDisplayName</key><string>MeetScribe</string>
+  <key>CFBundleDisplayName</key><string>MeetNouse</string>
   <key>CFBundleIdentifier</key><string>app.meetscribe.MeetScribe</string>
-  <key>CFBundleExecutable</key><string>MeetScribe</string>
+  <key>CFBundleExecutable</key><string>MeetNouse</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
@@ -56,13 +58,13 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSUIElement</key><true/>
   <key>LSArchitecturePriority</key><array><string>arm64</string></array>
   <key>MSReleasesRepo</key><string>Gbally/MeetScribe-releases</string>
-  <key>NSMicrophoneUsageDescription</key><string>MeetScribe records your voice during meetings to create a transcript. Audio stays on this Mac.</string>
-  <key>NSAudioCaptureUsageDescription</key><string>MeetScribe records the meeting audio (the other participants) to create a transcript. Audio stays on this Mac.</string>
-  <key>NSCalendarsUsageDescription</key><string>MeetScribe reads the current meeting's title and attendees to name the notes and email them. Nothing leaves this Mac.</string>
-  <key>NSCalendarsFullAccessUsageDescription</key><string>MeetScribe reads the current meeting's title and attendees to name the notes and email them. Nothing leaves this Mac.</string>
-  <key>NSRemindersUsageDescription</key><string>MeetScribe can add your meeting to-dos to Reminders.</string>
-  <key>NSRemindersFullAccessUsageDescription</key><string>MeetScribe can add your meeting to-dos to Reminders.</string>
-  <key>NSScreenCaptureUsageDescription</key><string>MeetScribe only records the meeting audio, never your screen. Audio stays on this Mac.</string>
+  <key>NSMicrophoneUsageDescription</key><string>MeetNouse records your voice during meetings to create a transcript. Audio stays on this Mac.</string>
+  <key>NSAudioCaptureUsageDescription</key><string>MeetNouse records the meeting audio (the other participants) to create a transcript. Audio stays on this Mac.</string>
+  <key>NSCalendarsUsageDescription</key><string>MeetNouse reads the current meeting's title and attendees to name the notes and email them. Nothing leaves this Mac.</string>
+  <key>NSCalendarsFullAccessUsageDescription</key><string>MeetNouse reads the current meeting's title and attendees to name the notes and email them. Nothing leaves this Mac.</string>
+  <key>NSRemindersUsageDescription</key><string>MeetNouse can add your meeting to-dos to Reminders.</string>
+  <key>NSRemindersFullAccessUsageDescription</key><string>MeetNouse can add your meeting to-dos to Reminders.</string>
+  <key>NSScreenCaptureUsageDescription</key><string>MeetNouse only records the meeting audio, never your screen. Audio stays on this Mac.</string>
 </dict>
 </plist>
 PLIST
@@ -89,14 +91,17 @@ codesign -dr - "$APP" 2>&1 | sed -n 's/^designated => /  identity: /p'
 echo "• DMG"
 STAGE=build/dmg && mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/" && ln -s /Applications "$STAGE/Applications"
+# Versions up to 0.5.2 (named MeetScribe) look for MeetScribe.app in the update: a hidden copy.
+cp -R "$APP" "$STAGE/MeetScribe.app" && chflags hidden "$STAGE/MeetScribe.app"
 cp mac/INSTALL.txt "$STAGE/How to install.txt"
 mkdir -p "$STAGE/Licenses" && cp LICENSE THIRD_PARTY_NOTICES.md PRIVACY.md "$STAGE/Licenses/"
-DMG="dist/MeetScribe-$VERSION.dmg"
+DMG="dist/MeetNouse-$VERSION.dmg"
 rm -f "$DMG"
-hdiutil create -quiet -volname MeetScribe -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+hdiutil create -quiet -volname MeetNouse -srcfolder "$STAGE" -ov -format UDZO "$DMG"
 [ -n "$SIGN_ID" ] && codesign --sign "$SIGN_ID" "$DMG"
 # Don't let macOS launch the build copies instead of the installed app.
 LSR=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 "$LSR" -u "$APP" 2>/dev/null || true
+"$LSR" -u "$STAGE/MeetNouse.app" 2>/dev/null || true
 "$LSR" -u "$STAGE/MeetScribe.app" 2>/dev/null || true
 echo "✅ $ROOT/$DMG ($(du -h "$DMG" | cut -f1))"

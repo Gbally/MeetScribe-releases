@@ -23,7 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().delegate = self
     }
 
-    /// `open -a MeetScribe --args --settings models` opens Settings on that tab (for testing).
+    /// `open -a MeetNouse --args --settings models` opens Settings on that tab (for testing).
     func applicationDidFinishLaunching(_ notification: Notification) {
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--settings") {
@@ -68,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 }
 
-/// The menu bar icon: waveform when idle, ● + timer while recording, hourglass while processing.
+/// The menu bar icon: the dog when idle, ● + timer while recording, hourglass while processing.
 struct MenuBarLabel: View {
     @EnvironmentObject var model: AppModel
 
@@ -85,7 +85,7 @@ struct MenuBarLabel: View {
         } else if model.phase == .settingUp {
             Image(systemName: "hourglass")
         } else {
-            Image(systemName: "waveform")
+            Image(nsImage: DogFace.menuBarImage)
         }
     }
 }

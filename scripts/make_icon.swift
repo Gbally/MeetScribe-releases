@@ -1,4 +1,5 @@
-// Draws the app icon (waveform on a gradient) → AppIcon.iconset PNGs.  Usage: swift make_icon.swift <out.iconset>
+// Draws the app icon (the shiba face on a gradient) → AppIcon.iconset PNGs. Run by build_app.sh,
+// compiled together with mac/App/DogFace.swift.
 import AppKit
 
 let out = URL(fileURLWithPath: CommandLine.arguments[1])
@@ -16,14 +17,8 @@ func render(_ px: Int) -> Data {
     let path = NSBezierPath(roundedRect: rect, xRadius: rect.width * 0.225, yRadius: rect.width * 0.225)
     NSGradient(colors: [NSColor(calibratedRed: 0.36, green: 0.27, blue: 0.95, alpha: 1),
                         NSColor(calibratedRed: 0.10, green: 0.62, blue: 0.95, alpha: 1)])!.draw(in: path, angle: -60)
-    let config = NSImage.SymbolConfiguration(pointSize: s * 0.42, weight: .semibold)
-    if let sym = NSImage(systemSymbolName: "waveform", accessibilityDescription: nil)?.withSymbolConfiguration(config) {
-        let tinted = NSImage(size: sym.size, flipped: false) { r in
-            sym.draw(in: r); NSColor.white.set(); r.fill(using: .sourceAtop); return true
-        }
-        let sz = tinted.size
-        tinted.draw(in: NSRect(x: (s - sz.width) / 2, y: (s - sz.height) / 2, width: sz.width, height: sz.height))
-    }
+    let face = s * 0.64
+    DogFace.drawColored(in: NSRect(x: (s - face) / 2, y: (s - face) / 2 - s * 0.01, width: face, height: face))
     NSGraphicsContext.restoreGraphicsState()
     return rep.representation(using: .png, properties: [:])!
 }

@@ -60,7 +60,7 @@ final class TrackWriter {
             let ch = pcm.floatChannelData![0]
             for i in 0..<Int(pcm.frameLength) { peak = max(peak, abs(ch[i])) }
         } catch {
-            NSLog("MeetScribe: write error (\(url.lastPathComponent)): \(error.localizedDescription)")
+            NSLog("MeetNouse: write error (\(url.lastPathComponent)): \(error.localizedDescription)")
         }
     }
 
@@ -189,7 +189,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
     func stream(_ stream: SCStream, didStopWithError error: Error) {
         guard !stopped else { return }
-        NSLog("MeetScribe: system audio stopped: \(error.localizedDescription)")
+        NSLog("MeetNouse: system audio stopped: \(error.localizedDescription)")
         guard restarts < 20 else {
             onNotice?(tr("Mac audio capture stopped: %@", error.localizedDescription))
             return
@@ -226,7 +226,7 @@ final class MicCapture {
             forName: .AVAudioEngineConfigurationChange, object: nil, queue: .main
         ) { [weak self] _ in
             guard let self, !self.stopped else { return }
-            NSLog("MeetScribe: audio device changed — restarting microphone")
+            NSLog("MeetNouse: audio device changed — restarting microphone")
             self.engine.inputNode.removeTap(onBus: 0)
             self.engine.stop()
             self.engine = AVAudioEngine()

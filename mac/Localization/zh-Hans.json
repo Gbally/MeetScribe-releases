@@ -335,6 +335,7 @@
  "Show in Finder": "在访达中显示",
  "So MeetScribe knows which voice is yours and which to-dos are for you.": "让 MeetScribe 知道哪个声音是你的,哪些待办是给你的。",
  "Something went wrong.": "出了点问题。",
+ "Source code, license and privacy": "源代码、许可证和隐私",
  "Sources": "来源",
  "Speech model": "语音模型",
  "Speech: OpenAI Whisper (MIT), via MLX. Notes: Qwen (Apache 2.0), via MLX. Speaker separation: pyannote segmentation (MIT) and NVIDIA TitaNet (CC BY 4.0), via sherpa-onnx.": "语音：OpenAI Whisper（MIT），基于 MLX。笔记：Qwen（Apache 2.0），基于 MLX。说话人分离：pyannote segmentation（MIT）与 NVIDIA TitaNet（CC BY 4.0），基于 sherpa-onnx。",

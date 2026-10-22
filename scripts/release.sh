@@ -1,13 +1,11 @@
 #!/bin/sh
 # Releases a new version in two steps:
 #
-#   ./scripts/release.sh "What's new"            PREPARE (local only): builds the signed DMG and
-#                                                 writes build-cache/release/ (DMG, latest.json,
-#                                                 models.json, README, INSTALL) — nothing is sent.
-#   ./scripts/release.sh --publish "What's new"  PUBLISH: GitHub release with the DMG, pushes
-#                                                 latest.json/models.json to the releases repo,
-#                                                 tags the source repo. Installed apps update
-#                                                 within a day.
+#   ./scripts/release.sh "What's new"   PREPARE (local only): builds the signed DMG and writes
+#                                        build-cache/release/ (DMG, latest.json) — nothing is sent.
+#   ./scripts/release.sh --publish      PUBLISH: pushes main, creates the GitHub release with the
+#                                        DMG, then commits latest.json + models.json at the repo root
+#                                        and pushes them. Installed apps update within a day.
 #
 # Bump `version` in pyproject.toml and commit first. Needs `gh auth login` once.
 set -e
@@ -38,9 +36,6 @@ path, version, build, url, sha, notes = sys.argv[1:]
 json.dump({"version": version, "build": int(build), "url": url, "sha256": sha, "notes": notes},
           open(path, "w"), indent=1)
 PY
-  cp catalog/models.json "$OUT/models.json"
-  cp mac/INSTALL.txt "$OUT/INSTALL.txt"
-  cp catalog/RELEASES_README.md "$OUT/README.md"
   printf '%s' "$NOTES" > "$OUT/notes.txt"
   echo
   echo "✅ Prepared MeetScribe $VERSION (build $BUILD) in build-cache/release/ — nothing published."
@@ -52,27 +47,13 @@ fi
 [ -f "$OUT/latest.json" ] || { echo "Run ./scripts/release.sh (prepare) first."; exit 1; }
 VERSION=$(python3 -c "import json; print(json.load(open('$OUT/latest.json'))['version'])")
 NOTES=$(cat "$OUT/notes.txt")
-if ! "$GH" repo view "$RELEASES_REPO" >/dev/null 2>&1; then
-  echo "• Creating the public repo $RELEASES_REPO"
-  "$GH" repo create "$RELEASES_REPO" --public --description "MeetScribe installers and updates"
-fi
-WORK="$ROOT/build-cache/releases-repo"
-rm -rf "$WORK" && mkdir -p "$WORK"
-git -C "$WORK" init -q -b main
-git -C "$WORK" remote add origin "https://github.com/$RELEASES_REPO.git"
-git -C "$WORK" config user.name "$(git config user.name)"
-git -C "$WORK" config user.email "$(git config user.email)"
-git -C "$WORK" fetch -q origin main 2>/dev/null && git -C "$WORK" checkout -q -B main origin/main || true
+[ "$(git rev-parse --abbrev-ref HEAD)" = main ] || { echo "Publish from the main branch."; exit 1; }
 
-# 1. Page files first (a release can't be created in an empty repository).
-echo "• README, INSTALL, models.json"
-cp "$OUT/models.json" "$OUT/INSTALL.txt" "$OUT/README.md" "$WORK/"
-cp -R "$ROOT/website/." "$WORK/" && touch "$WORK/.nojekyll"   # the website (GitHub Pages)
-git -C "$WORK" add -A
-git -C "$WORK" diff --cached --quiet || git -C "$WORK" commit -qm "MeetScribe $VERSION: page and models"
-git -C "$WORK" push -q -u origin main
+# 1. The code the release is built from.
+echo "• Pushing main"
+git push -q origin main
 
-# 2. The release with the installer (skipped if it already exists).
+# 2. The release with the installer.
 SHA=$(python3 -c "import json; print(json.load(open('$OUT/latest.json'))['sha256'])")
 if "$GH" release view "v$VERSION" --repo "$RELEASES_REPO" >/dev/null 2>&1; then
   REMOTE=$("$GH" api "repos/$RELEASES_REPO/releases/tags/v$VERSION" --jq '.assets[] | select(.name=="MeetScribe-'"$VERSION"'.dmg") | .digest' 2>/dev/null)
@@ -88,14 +69,13 @@ else
   "$GH" release create "v$VERSION" "$OUT/MeetScribe-$VERSION.dmg" --repo "$RELEASES_REPO" \
     --target main --title "MeetScribe $VERSION" --notes "$NOTES"
 fi
+git fetch -q --tags origin
 
-# 3. Last: latest.json, so apps only see an update once its download exists.
-echo "• latest.json"
-cp "$OUT/latest.json" "$WORK/"
-git -C "$WORK" add latest.json
-git -C "$WORK" diff --cached --quiet || git -C "$WORK" commit -qm "MeetScribe $VERSION"
-git -C "$WORK" push -q origin main
-if git remote get-url origin >/dev/null 2>&1; then
-  git tag -f "v$VERSION" && git push -q --force origin "v$VERSION"
-fi
+# 3. Last: latest.json (and the model list), so apps only see an update once its download exists.
+echo "• latest.json, models.json"
+cp "$OUT/latest.json" latest.json
+cp catalog/models.json models.json
+git add latest.json models.json
+git diff --cached --quiet || git commit -qm "MeetScribe $VERSION"
+git push -q origin main
 echo "✅ Released MeetScribe $VERSION — installed apps will offer the update within a day."

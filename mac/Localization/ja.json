@@ -335,6 +335,7 @@
  "Show in Finder": "Finder で表示",
  "So MeetScribe knows which voice is yours and which to-dos are for you.": "どの声があなたのもので、どのToDoがあなた宛てかをMeetScribeが判断するためです。",
  "Something went wrong.": "問題が発生しました。",
+ "Source code, license and privacy": "ソースコード、ライセンス、プライバシー",
  "Sources": "出典",
  "Speech model": "音声モデル",
  "Speech: OpenAI Whisper (MIT), via MLX. Notes: Qwen (Apache 2.0), via MLX. Speaker separation: pyannote segmentation (MIT) and NVIDIA TitaNet (CC BY 4.0), via sherpa-onnx.": "音声：OpenAI Whisper（MIT）、MLX 経由。メモ：Qwen（Apache 2.0）、MLX 経由。話者分離：pyannote segmentation（MIT）と NVIDIA TitaNet（CC BY 4.0）、sherpa-onnx 経由。",

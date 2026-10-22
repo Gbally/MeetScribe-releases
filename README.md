@@ -1,37 +1,35 @@
-# MeetScribe
+<p align="center"><img src="docs/img/icon.png" width="96" alt=""></p>
 
-Local meeting recorder → speaker-labelled transcript → AI notes (summary, decisions,
-action items). Everything runs on your Mac; no audio or text leaves the machine.
+<h1 align="center">MeetScribe</h1>
 
-```
-Teams audio (ScreenCaptureKit) ─┐                 ┌─ Whisper large-v3-turbo (MLX, GPU)
-                                ├─ 2 tracks ──────┤
-Your microphone (AVAudioEngine) ┘                 └─ speaker separation (sherpa-onnx, CPU)
-                                                          │
-                     transcript.md ◄── merge + echo removal ┘
-                     notes.md      ◄── Qwen3-8B (MLX) summary / decisions / action items
-```
+<p align="center"><b>Meeting notes that stay on your Mac.</b><br>
+Records your Teams, Zoom or Meet calls, works out who said what, and writes a summary, the decisions
+and a to-do list — with AI that runs entirely on your Mac. Free, open source, no account.</p>
 
-Your mic and the meeting audio are recorded **separately**, so everything you say is
-labelled with your name for free, and speaker separation only has to tell the remote
-people apart (`Speaker 1`, `Speaker 2`, …). If you're not wearing headphones, the remote
-voices picked up by your mic are detected and removed.
+<p align="center">
+  <a href="https://github.com/Gbally/MeetScribe-releases/releases/latest"><b>Download for Mac</b></a> ·
+  <a href="https://gbally.github.io/MeetScribe-releases/">Website</a> ·
+  <a href="PRIVACY.md">Privacy</a> ·
+  <a href="mac/INSTALL.txt">Install guide</a>
+</p>
 
-## Menu bar app (recommended)
+<p align="center"><img src="docs/img/meeting.png" width="640" alt="Meeting notes: to-dos with due dates, summary and decisions"></p>
 
-Build the installer, then share `dist/MeetScribe-<version>.dmg` with colleagues:
+## Why
 
-```sh
-./scripts/build_app.sh        # → build/MeetScribe.app + dist/MeetScribe-<version>.dmg (~16 MB)
-```
+Meeting assistants usually send your calls to a cloud service. MeetScribe doesn't: speech
+recognition (Whisper), speaker separation and the notes (Qwen) all run on your Mac's Apple silicon.
+Your recordings, transcripts and notes are plain files in a folder you choose.
 
-The app is a waveform icon in the menu bar. Click it → **Start recording** (● + timer in the
-menu bar) → click again → **Stop & create notes**. A few minutes later the window shows the
-to-do list (tick items off), summary, decisions and open questions, with buttons to open the
-transcript, copy the notes for an email, name the speakers, etc. Every meeting stays in the
-history list. Also: transcribe an existing audio file, launch at login, notes folder, language
-and vocabulary in Settings.
+## Features
 
+- **Records any call** — Teams, Zoom, Meet, Webex: your microphone and the meeting audio as two
+  tracks, from the menu bar, a keyboard shortcut (⌃⌥R by default), or automatically when a call
+  starts.
+- **Knows who spoke** — your voice is labelled with your name; the other voices are separated,
+  and once you name a colleague they're recognised in later meetings.
+- **Notes you can use** — summary, decisions, open questions and to-dos with owners and real due
+  dates ("next Friday" → a date), shaped by the meeting type (1:1, stand-up, client call…).
 - **Calendar:** the current Outlook/Exchange event (via macOS Calendar) names the meeting and
   gives the AI the attendees; "Email" opens an Outlook draft to them with the notes.
 - **My to-dos:** every action item assigned to you, across all meetings, in one list.
@@ -55,11 +53,59 @@ and vocabulary in Settings.
 - **Shortcut:** start/stop from anywhere (default ⌃⌥R, changeable in Settings).
 - **Edit:** rename a meeting, fix/add/delete to-dos (notes.md is rebuilt with `meetscribe render`).
 - **Privacy:** audio (and voice samples) deleted after 7 days by default; notes are kept.
+- **Many languages** — 99 spoken languages, even switching mid-meeting; the app itself is in
+  English, French, Spanish, Portuguese, Japanese and Chinese.
+- **Updates itself**, picks AI models that fit your Mac's memory, and removes itself cleanly
+  (Settings → Privacy and storage → Remove MeetScribe).
 
-On first launch it installs its engine into `~/Library/Application Support/MeetScribe`
-(Python via the bundled `uv`) and downloads the models (~6 GB) — see `mac/INSTALL.txt`, which
-is included in the DMG. A welcome window walks new users through name, languages, permissions
-and the download; Settings → Privacy and storage → Remove MeetScribe uninstalls everything. Requirements: Apple Silicon, macOS 13+, 16 GB RAM recommended.
+## Install
+
+Requirements: a Mac with Apple silicon (M1 or newer), macOS 13 or later, 8 GB memory or more
+(16 GB recommended), ~8 GB free disk space.
+
+1. Download the `.dmg` from the [latest release](https://github.com/Gbally/MeetScribe-releases/releases/latest)
+   and drag MeetScribe into Applications.
+2. Open it. The first time, macOS may say it can't verify the developer (the app isn't notarized
+   yet): System Settings → Privacy & Security → **Open Anyway**.
+3. A welcome window takes you through your name, languages, permissions and the AI models
+   download (4–6 GB, once).
+
+Details in [INSTALL.txt](mac/INSTALL.txt). Always tell the other participants that you're
+recording, and follow your company's rules.
+
+## Privacy
+
+Audio, transcripts and notes never leave your Mac. Anonymous usage statistics (e.g. a
+recording's length — never its content) are sent unless you turn them off. Everything that
+touches the network is listed in [PRIVACY.md](PRIVACY.md).
+
+## How it works
+
+```
+Meeting audio (ScreenCaptureKit) ─┐                 ┌─ Whisper large-v3-turbo (MLX, GPU)
+                                  ├─ 2 tracks ──────┤
+Your microphone (AVAudioEngine)   ┘                 └─ speaker separation (sherpa-onnx, CPU)
+                                                            │
+                       transcript.md ◄── merge + echo removal ┘
+                       notes.md      ◄── Qwen3 (MLX): summary, decisions, to-dos
+```
+
+Your mic and the meeting audio are recorded **separately**, so everything you say is labelled with
+your name, and speaker separation only has to tell the remote people apart. Without headphones,
+the remote voices picked up by your mic are detected and removed.
+
+The app is a SwiftUI menu bar app (`mac/`); the processing is a Python engine (`src/meetscribe/`)
+that the app installs on first launch into `~/Library/Application Support/MeetScribe` with the
+bundled [uv](https://github.com/astral-sh/uv).
+
+## Build from source
+
+Needs the Xcode command line tools (`xcode-select --install`) and [uv](https://github.com/astral-sh/uv).
+
+```sh
+./scripts/make_signing_identity.sh   # once: a stable self-signed identity (keeps permissions across builds)
+./scripts/build_app.sh               # → build/MeetScribe.app + dist/MeetScribe-<version>.dmg
+```
 
 **Permissions across updates:** macOS remembers permissions per code signature. Run
 `./scripts/make_signing_identity.sh` once: it creates a fixed self-signed identity in
@@ -72,6 +118,19 @@ with an Apple Developer ID (`SIGN_ID="Developer ID Application: …" ./scripts/b
 and notarize the DMG (`xcrun notarytool submit dist/MeetScribe-*.dmg --wait`, then
 `xcrun stapler staple`) — or have IT deploy it via MDM.
 
+### Releasing (maintainer)
+
+Bump `version` in `pyproject.toml`, commit, then:
+
+```sh
+./scripts/release.sh "What's new"            # prepare: builds and checks, nothing is sent
+./scripts/release.sh --publish               # GitHub release with the DMG, then latest.json
+./scripts/publish_catalog.sh                 # new tested models only (models.json), no new version
+```
+
+Installed apps read `latest.json` and `models.json` at the root of this repository — keep them
+there. The website is `docs/` (GitHub Pages).
+
 ## Command line (for development)
 
 ### Setup (once)
@@ -82,7 +141,7 @@ cp config.example.toml config.toml   # then set `me = "Your Name"`
 ```
 
 Handy alias (add to `~/.zshrc`):
-`alias meetscribe=~/Documents/MeetingScribe/.venv/bin/meetscribe`
+`alias meetscribe=/path/to/MeetScribe/.venv/bin/meetscribe`
 
 **Permissions:** the first `meetscribe record` needs your terminal app (Terminal / iTerm)
 allowed in System Settings → Privacy & Security → **Microphone** and **Screen & System
@@ -137,8 +196,34 @@ Mac's language (anything else → English); Settings → General → Language fo
 - `src/meetscribe/` — `audio` (decode), `transcribe` (Whisper), `diarize` (speakers),
   `transcript` (merge, echo removal, output), `summarize` (LLM notes), `cli`
 
-## Ideas / next steps
+## Translations
 
-- Live transcript while the meeting runs
-- Microsoft To Do / Planner export (needs a Microsoft Graph app registration)
-- Automatic updates for colleagues
+The app follows the Mac's language (anything not translated → English); Settings → General →
+Language forces one.
+
+- Texts live in `mac/Localization/<lang>.json` (English text → translation). Placeholders are
+  `%@` (or `%1$@`, `%2$@` to reorder them).
+- After changing UI texts: `python3 scripts/i18n.py extract` adds new texts to every language file
+  (empty = not translated yet) and lists what's left.
+- **Add a language:** copy `en.json` to `<code>.json`, translate the values, add the code to
+  `AppLanguage.supported` (`mac/Shared/Localization.swift`), `LANGS` in `scripts/i18n.py` and
+  `CFBundleLocalizations` in `scripts/build_app.sh`. Native-speaker reviews are very welcome.
+
+## Repository layout
+
+- `mac/App/` — the menu bar app (SwiftUI); `mac/Shared/` — audio capture; `mac/CLI/` — command-line recorder
+- `src/meetscribe/` — the engine: `transcribe` (Whisper), `diarize` (speakers), `transcript` (merge,
+  echo removal), `summarize` (notes), `ask`, `dates`, `cli`
+- `scripts/` — build, release, translations; `catalog/models.json` — tested models
+- `docs/` — the website; `eval/` — model comparison on sample transcripts
+- `latest.json`, `models.json` — read by installed apps for updates
+
+## Contributing
+
+Bug reports and ideas: [open an issue](https://github.com/Gbally/MeetScribe-releases/issues).
+Pull requests welcome — please keep `python3 scripts/i18n.py extract` clean.
+
+## License
+
+[MIT](LICENSE) © 2026 Gbally. MeetScribe builds on Whisper, Qwen, pyannote, NVIDIA TitaNet, MLX,
+sherpa-onnx and more — see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

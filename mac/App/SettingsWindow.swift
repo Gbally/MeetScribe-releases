@@ -440,6 +440,7 @@ struct AboutPane: View {
         }
         Section("Credits") {
             Caption("Speech: OpenAI Whisper (MIT), via MLX. Notes: Qwen (Apache 2.0), via MLX. Speaker separation: pyannote segmentation (MIT) and NVIDIA TitaNet (CC BY 4.0), via sherpa-onnx.")
+            Link("Source code, license and privacy", destination: URL(string: "https://github.com/Gbally/MeetScribe-releases")!)
         }
     }
 }

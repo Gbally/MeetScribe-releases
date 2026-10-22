@@ -335,6 +335,7 @@
  "Show in Finder": "Afficher dans le Finder",
  "So MeetScribe knows which voice is yours and which to-dos are for you.": "Pour que MeetScribe sache quelle voix est la vôtre et quelles tâches vous concernent.",
  "Something went wrong.": "Une erreur s'est produite.",
+ "Source code, license and privacy": "Code source, licence et confidentialité",
  "Sources": "Sources",
  "Speech model": "Modèle vocal",
  "Speech: OpenAI Whisper (MIT), via MLX. Notes: Qwen (Apache 2.0), via MLX. Speaker separation: pyannote segmentation (MIT) and NVIDIA TitaNet (CC BY 4.0), via sherpa-onnx.": "Voix : OpenAI Whisper (MIT), via MLX. Notes : Qwen (Apache 2.0), via MLX. Séparation des voix : pyannote segmentation (MIT) et NVIDIA TitaNet (CC BY 4.0), via sherpa-onnx.",

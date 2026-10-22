@@ -226,7 +226,8 @@ struct HomeView: View {
         if model.isRecording {
             Card {
                 HStack {
-                    Circle().fill(Color.red).frame(width: 10, height: 10)
+                    ShibaView(mode: .listening(since: model.headsetSince ?? Date()))
+                        .frame(width: 64, height: 64)
                     Text("Recording now").font(.headline)
                     Spacer()
                     Text(formatDuration(model.elapsed)).font(.system(.title2, design: .monospaced))
@@ -263,12 +264,12 @@ struct HomeView: View {
                     template = nil
                 } label: {
                     ZStack {
-                        Circle().fill(Color.red.opacity(0.14))
+                        Circle().fill(Color.red.opacity(0.10))
                         Circle().strokeBorder(Color.red.opacity(0.35), lineWidth: 1)
-                        if model.isStarting { ProgressView().controlSize(.small) }
-                        else { Circle().fill(Color.red).frame(width: 22, height: 22) }
+                        if let since = model.headsetSince { ShibaView(mode: .listening(since: since)).padding(4) }
+                        else { ShibaView(mode: .waiting).padding(4) }
                     }
-                    .frame(width: 60, height: 60)
+                    .frame(width: 72, height: 72)
                     .contentShape(Circle())
                 }
                 .buttonStyle(.plain)

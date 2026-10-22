@@ -92,6 +92,14 @@ enum Windows {
         present(others["welcome"]!)
     }
 
+    /// The shiba animation on a loop: waiting, then the headset going on (testing: `--shiba`).
+    static func showShibaDemo() {
+        if others["shiba"] == nil {
+            others["shiba"] = make(title: "Shiba", size: NSSize(width: 520, height: 300), view: ShibaDemo(), autosave: nil)
+        }
+        present(others["shiba"]!)
+    }
+
     /// The menu bar content in a normal window (testing / screenshots: `--preview`).
     static func showPreview(_ model: AppModel) {
         if others["preview"] == nil {
@@ -568,3 +576,25 @@ struct CustomModelSection: View {
     }
 }
 
+
+/// Loops waiting (4 s) → listening (6 s), at the two sizes used in the app.
+struct ShibaDemo: View {
+    @State private var since: Date?
+
+    var body: some View {
+        HStack(spacing: 40) {
+            ForEach([72.0, 160.0], id: \.self) { size in
+                ShibaView(mode: since.map { .listening(since: $0) } ?? .waiting).frame(width: size, height: size)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task {
+            while !Task.isCancelled {
+                since = nil
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                since = Date()
+                try? await Task.sleep(nanoseconds: 6_000_000_000)
+            }
+        }
+    }
+}

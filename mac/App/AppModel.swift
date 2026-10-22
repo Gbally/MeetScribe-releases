@@ -61,6 +61,8 @@ final class AppModel: ObservableObject {
     @Published var recorder: MeetingRecorder?
     @Published var recordingID: Meeting.ID?
     @Published var elapsed: Double = 0
+    /// When the record button was pressed: the shiba's headset animation starts from there.
+    @Published var headsetSince: Date?
     @Published var micLevel: Float = 0
     @Published var systemLevel: Float = 0
     @Published var notices: [String] = []
@@ -335,6 +337,7 @@ final class AppModel: ObservableObject {
         guard recorder == nil, !isStarting else { return }
         autoStarted = auto
         isStarting = true
+        headsetSince = Date()
         startError = nil
         notices = []
         let stamp = DateFormatter()
@@ -365,6 +368,7 @@ final class AppModel: ObservableObject {
                 reload()
             } catch {
                 startError = error.localizedDescription
+                headsetSince = nil
                 try? FileManager.default.removeItem(at: folder)
                 if auto { notify(title: tr("Couldn't start recording"), body: error.localizedDescription) }
             }
@@ -376,6 +380,7 @@ final class AppModel: ObservableObject {
     func stopRecording(discard: Bool = false) {
         guard let rec = recorder else { return }
         recorder = nil
+        headsetSince = nil
         activeRecorder = nil
         meterTimer?.invalidate()
         let id = rec.folder.lastPathComponent

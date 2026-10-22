@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             Windows.showSettings(model, tab: tab)
         }
         if args.contains("--preview") { Windows.showPreview(model) }
+        if args.contains("--shiba") { Windows.showShibaDemo() }
         // Testing: --welcome [page]
         if let i = args.firstIndex(of: "--welcome") {
             Windows.showWelcome(model, step: i + 1 < args.count ? Int(args[i + 1]) ?? 0 : 0)

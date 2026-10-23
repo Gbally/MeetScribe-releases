@@ -20,12 +20,13 @@ def split_title(md: str) -> tuple[str, str]:
 
 
 def _bullets(lines: list[str]) -> list[str]:
-    out = []
+    out, seen = [], set()
     for line in lines:
         m = re.match(r"^\s*(?:[-*•]|\d+[.)])\s+(.*)$", line)
         text = (m.group(1) if m else line).strip()
         text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
-        if text and not EMPTY.match(text) and not text.startswith("|"):
+        if text and not EMPTY.match(text) and not text.startswith("|") and text.lower() not in seen:
+            seen.add(text.lower())  # a line repeated (a model stuck in a loop) is kept once
             out.append(text)
     return out
 

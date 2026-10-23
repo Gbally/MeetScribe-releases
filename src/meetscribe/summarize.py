@@ -63,6 +63,9 @@ another language — translate those; lines tagged e.g. "(FR)" were spoken in th
 
 Level of detail — {style}
 
+Keep facts exact: never add a year, date, number or detail that wasn't said (write "June",
+not "June 2025", unless the year was said).
+
 Scale everything to what was actually said: a short or trivial meeting gets 1–2 summary
 bullets. Never pad: no bullets about the transcript itself, the meeting's length, or what
 did NOT happen.
@@ -74,7 +77,11 @@ these sections (the action items are listed separately — don't write them):
 {summary_how}
 {extra_sections}
 ## Decisions
-Only things the group agreed or decided (not tasks). Write "None recorded." if none.
+What the group agreed or decided, each written as the decision itself ("Unreal stays as a
+fallback", "The final choice is made on 20 November"). A decision is never a task: no "X will…"
+or "X to…", no owner, no deadline for someone's work — those are action items, listed
+separately. Look for agreements, choices, rules and options dropped or kept. Write "None
+recorded." only if nothing at all was decided.
 
 ## Open questions
 Unresolved questions or topics to follow up on (write "None." if none).
@@ -131,11 +138,14 @@ class LLM:
             from mlx_lm import load
             self._model, self._tokenizer = load(self.cfg.llm_model)
 
-    def chat(self, prompt: str, max_tokens: int = 2500, on_token=None) -> str:
+    def chat(self, prompt: str, max_tokens: int = 2500, on_token=None, prose: bool = False) -> str:
+        """`prose`: free text (the notes), where a mild repetition penalty stops the loops small
+        models sometimes fall into (one line repeated until the length limit). Not for the JSON
+        extraction, whose keys repeat on every line by design."""
         messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": prompt}]
         if self.cfg.llm_backend == "mlx":
             from mlx_lm import stream_generate
-            from mlx_lm.sample_utils import make_sampler
+            from mlx_lm.sample_utils import make_logits_processors, make_sampler
 
             self._load()
             text = self._tokenizer.apply_chat_template(
@@ -144,8 +154,9 @@ class LLM:
             )
             out = ""
             try:
+                penalty = make_logits_processors(repetition_penalty=1.08, repetition_context_size=256) if prose else None
                 tokens = stream_generate(self._model, self._tokenizer, text, max_tokens=max_tokens,
-                                         sampler=make_sampler(temp=TEMPERATURE, top_p=0.8))
+                                         sampler=make_sampler(temp=TEMPERATURE, top_p=0.8), logits_processors=penalty)
                 for r in tokens:
                     out += r.text
                     if on_token:
@@ -369,7 +380,7 @@ def _summarize(transcript: str, cfg: Config, language: str, context: str, templa
         actions = merge_actions(check_actions(raw, transcript, meeting))
         body = llm.chat(NOTES_PROMPT.format(language=lang, style=style, extra_sections=extra, transcript=transcript,
                                             actions=_actions_context(actions), summary_how=_summary_how(transcript)),
-                        max_tokens=max_tokens,
+                        max_tokens=max_tokens, prose=True,
                         on_token=lambda n: progress.update(0.5 + 0.5 * min(n / expected, 0.97)))
         return _with_actions(body, actions)
 
@@ -390,7 +401,7 @@ def _summarize(transcript: str, cfg: Config, language: str, context: str, templa
     for i, chunk in enumerate(chunks, 1):
         print(f"   summarizing part {i}/{len(chunks)}…")
         partial.append(f"### Part {i}\n" + llm.chat(
-            CHUNK_PROMPT.format(part=i, total=len(chunks), language=lang, transcript=chunk), max_tokens=1500,
+            CHUNK_PROMPT.format(part=i, total=len(chunks), language=lang, transcript=chunk), max_tokens=1500, prose=True,
             on_token=lambda n, i=i: progress.update((i - 1 + min(n / 600, 0.97)) / (len(chunks) + 1))))
     actions = []
     for chunk in chunks:  # commitments are checked against the real transcript, part by part
@@ -399,7 +410,7 @@ def _summarize(transcript: str, cfg: Config, language: str, context: str, templa
     actions = merge_actions(actions)
     body = llm.chat(NOTES_PROMPT.format(language=lang, style=style, extra_sections=extra, transcript="\n\n".join(partial),
                                         actions=_actions_context(actions), summary_how=_summary_how(transcript)),
-                    max_tokens=max_tokens,
+                    max_tokens=max_tokens, prose=True,
                     on_token=lambda n: progress.update((len(chunks) + min(n / expected, 0.97)) / (len(chunks) + 1)))
     return _with_actions(body, actions)
 
@@ -440,8 +451,26 @@ def _actions_context(actions: list[dict]) -> str:
     return ""  # listing them made small models leave out the decisions — the notes stand alone
 
 
+def _drop_task_decisions(body: str, actions: list[dict]) -> str:
+    """Removes "decisions" that are really tasks ("Sarah to contact W4…", "Marc will build…"):
+    small models file commitments under Decisions too, though they are listed as action items."""
+    owners = {a["owner"].split()[0].lower() for a in actions if a.get("owner")}
+    out, in_decisions = [], False
+    for line in body.splitlines():
+        if re.match(r"^#{1,4}\s", line):
+            in_decisions = "decision" in line.lower()
+        m = re.match(r"^\s*[-*•]\s+\**([A-Za-zÀ-ÿ]+)\**\s+(to|will|shall|must|va|doit)\b", line)
+        if in_decisions and m and m[1].lower() in owners:
+            continue
+        out.append(line)
+    text = "\n".join(out)
+    # A Decisions section left empty by the cleanup says so.
+    return re.sub(r"(^#{1,4}\s*Decisions\s*\n)(\s*)(?=^#{1,4}\s|\Z)", r"\1None recorded.\n\n", text, flags=re.M | re.I)
+
+
 def _with_actions(body: str, actions: list[dict]) -> str:
     """The notes with the checked action items placed before the open questions."""
+    body = _drop_task_decisions(body, actions)
     table = "## Action items\n" + actions_table(actions) + "\n"
     m = re.search(r"^#{1,4}\s*open questions", body, re.I | re.M)
     return body[:m.start()] + table + "\n" + body[m.start():] if m else body.rstrip() + "\n\n" + table

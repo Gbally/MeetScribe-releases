@@ -1,7 +1,7 @@
 {
- "version": "0.5.4",
- "build": 62,
- "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.5.4/MeetScribe-0.5.4.dmg",
- "sha256": "d74766769dc73586ec532dc53687019c144c6798c94ab1432c635084477b8826",
- "notes": "Much faster notes (only speech is transcribed; mixed English/French meetings especially), and no more dozens of phantom speakers."
+ "version": "0.5.6",
+ "build": 66,
+ "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.5.6/MeetScribe-0.5.6.dmg",
+ "sha256": "73d902e186f72af209dd4c0955e5bb996f03244c522726019e9d8507a98e90b0",
+ "notes": "Much more useful notes: summary by topic with key figures and risks, an options table for workshops, reliable action items (each with when it was said, no invented deadlines), speakers named from the calendar, names and jargon applied to the whole meeting, and faster mixed-language meetings."
 }

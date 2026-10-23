@@ -30,6 +30,21 @@ def _bullets(lines: list[str]) -> list[str]:
     return out
 
 
+def _table_rows(lines: list[str]) -> list[str]:
+    """A Markdown table in a section (e.g. Options compared) → one line per row:
+    "Unity — For: … — Against: … — Status: …"."""
+    rows = [[c.strip() for c in l.strip().strip("|").split("|")] for l in lines
+            if l.strip().startswith("|") and not set(l.strip()) <= set("|-: ")]
+    if len(rows) < 2:
+        return []
+    header, out = rows[0], []
+    for r in rows[1:]:
+        cells = [f"{h}: {c}" if i and h else c for i, (h, c) in enumerate(zip(header, r)) if c and not EMPTY.match(c)]
+        if cells:
+            out.append(" — ".join(cells))
+    return out
+
+
 def _actions(lines: list[str]) -> list[dict]:
     out = []
     for line in lines:
@@ -71,7 +86,7 @@ def parse_notes(md: str) -> dict:
         return []
 
     base = ("summary", "decision", "action", "to-do", "todo", "question")
-    extra = [{"title": title_case(k), "items": _bullets(v)} for k, v in sections.items()
+    extra = [{"title": title_case(k), "items": _table_rows(v) + _bullets(v)} for k, v in sections.items()
              if not any(n in k for n in base)]
     return {
         "summary": _bullets(get("summary")),

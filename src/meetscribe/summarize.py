@@ -25,8 +25,12 @@ STYLES = {
 }
 
 # Meeting types: extra sections (title, instructions) inserted after the Summary.
+KEY_FIGURES = ("Key figures and dates", "Every number, amount, quantity and date that matters, as "
+                "\"figure — what it refers to\" (e.g. \"€5,000 — training budget\", \"20 Nov — final decision\").")
+RISKS = ("Risks", "Risks, concerns and dependencies raised, with who raised them.")
+
 TEMPLATES = {
-    "general": ("General", []),
+    "general": ("General", [KEY_FIGURES, RISKS]),
     "one_on_one": ("1:1", [
         ("Feedback", "Feedback given or received, in either direction, as bullets."),
         ("Growth & wellbeing", "Career goals, workload, morale or support discussed (only if discussed)."),
@@ -46,7 +50,11 @@ TEMPLATES = {
         ("Concerns", "Gaps or concerns, with evidence. No judgements beyond what was said."),
     ]),
     "workshop": ("Workshop / brainstorm", [
-        ("Ideas", "Every idea raised, grouped by theme, with who proposed it if clear."),
+        ("Options compared", "When options were compared: a Markdown table with columns Option | For | Against | "
+                             "Status, one row per option, Status being chosen, still open, fallback or rejected."),
+        ("Ideas", "Every idea or proposal raised, one per line, as \"idea — proposed by NAME — kept / parked / "
+                  "rejected\" (say which, from what was decided)."),
+        KEY_FIGURES,
     ]),
 }
 
@@ -63,7 +71,7 @@ Start with one line "Title: <a short title for this meeting, max 6 words>", then
 these sections (the action items are listed separately — don't write them):
 
 ## Summary
-The main topics and outcomes, as bullet points.
+{summary_how}
 {extra_sections}
 ## Decisions
 Only things the group agreed or decided (not tasks). Write "None recorded." if none.
@@ -90,7 +98,7 @@ Answer with one JSON object per line and nothing else:
 - due: the deadline exactly as said for THIS task ("Friday the 31st", "le 14 novembre"), or ""
   when no deadline was said for it. Never guess one.
 - at: the time of the line where the commitment is made.
-- quote: up to 15 words copied exactly from that line, in the language spoken.
+- quote: 5 to 8 words copied exactly from that line, in the language spoken.
 One line per task, no duplicates.
 
 Transcript:
@@ -146,6 +154,10 @@ class LLM:
                 if "memory" in str(e).lower():
                     raise MemoryError(str(e)) from e
                 raise
+            finally:
+                import mlx.core as mx
+
+                mx.clear_cache()  # give the GPU memory of this answer back before the next pass
         elif self.cfg.llm_backend == "openai":
             req = urllib.request.Request(
                 self.cfg.llm_url.rstrip("/") + "/chat/completions",
@@ -196,6 +208,26 @@ REQUEST = re.compile(r"\b(can you|could you|would you|will you|please|tu peux|tu
                      r"vous pouvez|est-ce que tu)\b", re.I)
 
 
+def _action_lines(raw: str) -> list[dict]:
+    """The extraction answer: "owner | due | hh:mm:ss | task | quote" lines (JSON objects are
+    accepted too, from models that prefer them)."""
+    out = []
+    for line in raw.splitlines():
+        line = line.strip().strip("`")
+        if line.startswith("{"):
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            out.append(item)
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) >= 5 and re.fullmatch(r"\d+:\d{2}(:\d{2})?", cells[2]):
+            out.append({"owner": cells[0], "due": "" if cells[1] in ("-", "—", "") else cells[1],
+                        "at": cells[2], "task": cells[3], "quote": " | ".join(cells[4:])})
+    return out
+
+
 def check_actions(raw: str, transcript: str, meeting) -> list[dict]:
     """Keeps the extracted commitments whose quote really is in the transcript (anything else
     was made up), places them at that line, and keeps a deadline only when that date is said
@@ -205,11 +237,7 @@ def check_actions(raw: str, transcript: str, meeting) -> list[dict]:
     lines = _lines(transcript)
     seen: list = []
     out = []
-    for chunk in re.findall(r"\{[^{}]*\}", raw):
-        try:
-            item = json.loads(chunk)
-        except json.JSONDecodeError:
-            continue
+    for item in _action_lines(raw):
         task, owner = str(item.get("task", "")).strip(), str(item.get("owner", "")).strip()
         quote = set(_norm_words(str(item.get("quote", ""))))
         if not task or len(quote) < 2:
@@ -328,19 +356,20 @@ def _summarize(transcript: str, cfg: Config, language: str, context: str, templa
     if cfg.summary_style not in STYLES:
         raise SystemExit(f"summary_style must be one of: {', '.join(STYLES)}")
     style = STYLES[cfg.summary_style]
-    max_tokens = 4000 if cfg.summary_style == "detailed" else 2500
+    max_tokens = 4000 if cfg.summary_style == "detailed" else 3000
     from . import progress
 
-    expected = {"brief": 220, "standard": 380, "detailed": 800}.get(cfg.summary_style, 380)  # measured
+    expected = {"brief": 300, "standard": 700, "detailed": 1100}.get(cfg.summary_style, 700)  # measured
     if llm.count_tokens(transcript) <= cfg.max_context_tokens:
         parts = _parts(llm, transcript, EXTRACT_TOKENS)
         raw = ""
         for i, part in enumerate(parts):
-            raw += llm.chat(ACTIONS_PROMPT.format(language=lang, transcript=part), max_tokens=800,
+            raw += llm.chat(ACTIONS_PROMPT.format(language=lang, transcript=part), max_tokens=900,
                             on_token=lambda n, i=i: progress.update(0.05 + 0.45 * (i + min(n / 300, 0.97)) / len(parts)))
         actions = merge_actions(check_actions(raw, transcript, meeting))
         body = llm.chat(NOTES_PROMPT.format(language=lang, style=style, extra_sections=extra, transcript=transcript,
-                                            actions=_actions_context(actions)), max_tokens=max_tokens,
+                                            actions=_actions_context(actions), summary_how=_summary_how(transcript)),
+                        max_tokens=max_tokens,
                         on_token=lambda n: progress.update(0.5 + 0.5 * min(n / expected, 0.97)))
         return _with_actions(body, actions)
 
@@ -369,7 +398,7 @@ def _summarize(transcript: str, cfg: Config, language: str, context: str, templa
                                  chunk, meeting)
     actions = merge_actions(actions)
     body = llm.chat(NOTES_PROMPT.format(language=lang, style=style, extra_sections=extra, transcript="\n\n".join(partial),
-                                        actions=_actions_context(actions)),
+                                        actions=_actions_context(actions), summary_how=_summary_how(transcript)),
                     max_tokens=max_tokens,
                     on_token=lambda n: progress.update((len(chunks) + min(n / expected, 0.97)) / (len(chunks) + 1)))
     return _with_actions(body, actions)
@@ -393,6 +422,17 @@ def _parts(llm, transcript: str, budget: int) -> list[str]:
     if current:
         parts.append("\n".join(current))
     return parts
+
+
+def _summary_how(transcript: str) -> str:
+    """Short meetings: a few bullets. Long ones: one bullet per topic with its key points, so the
+    summary carries the substance (arguments, numbers, who thinks what), not just outcomes."""
+    lines = _lines(transcript)
+    minutes = (lines[-1][0] - lines[0][0]) / 60 if lines else 0
+    if minutes < 15:
+        return "The main topics and outcomes, as bullet points."
+    return ("One bullet per topic discussed, in the order of the meeting: \"**Topic** — what was said\": "
+            "the key arguments, facts and numbers, who argued what, and the outcome. Use 4–10 topics.")
 
 
 def _actions_context(actions: list[dict]) -> str:

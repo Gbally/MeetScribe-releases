@@ -64,7 +64,8 @@ another language — translate those; lines tagged e.g. "(FR)" were spoken in th
 Level of detail — {style}
 
 Keep facts exact: never add a year, date, number or detail that wasn't said (write "June",
-not "June 2025", unless the year was said).
+not "June 2025", unless the year was said). Keep who does what, and whether it is already done
+or still to do, exactly as said ("Priya will fix the crash today", not "Priya fixed the crash").
 
 Scale everything to what was actually said: a short or trivial meeting gets 1–2 summary
 bullets. Never pad: no bullets about the transcript itself, the meeting's length, or what
@@ -120,6 +121,7 @@ Transcript part:
 
 
 TEMPERATURE = 0.2  # notes are extraction, not creative writing: low = faithful and repeatable
+EXTRACT_TEMPERATURE = TEMPERATURE  # the action-item passes (benchmarks compare 0 = no randomness)
 
 
 class LLM:
@@ -138,7 +140,8 @@ class LLM:
             from mlx_lm import load
             self._model, self._tokenizer = load(self.cfg.llm_model)
 
-    def chat(self, prompt: str, max_tokens: int = 2500, on_token=None, prose: bool = False) -> str:
+    def chat(self, prompt: str, max_tokens: int = 2500, on_token=None, prose: bool = False,
+             temperature: float | None = None) -> str:
         """`prose`: free text (the notes), where a mild repetition penalty stops the loops small
         models sometimes fall into (one line repeated until the length limit). Not for the JSON
         extraction, whose keys repeat on every line by design."""
@@ -156,7 +159,8 @@ class LLM:
             try:
                 penalty = make_logits_processors(repetition_penalty=1.08, repetition_context_size=256) if prose else None
                 tokens = stream_generate(self._model, self._tokenizer, text, max_tokens=max_tokens,
-                                         sampler=make_sampler(temp=TEMPERATURE, top_p=0.8), logits_processors=penalty)
+                                         sampler=make_sampler(temp=TEMPERATURE if temperature is None else temperature, top_p=0.8),
+                                         logits_processors=penalty)
                 for r in tokens:
                     out += r.text
                     if on_token:
@@ -173,7 +177,8 @@ class LLM:
             req = urllib.request.Request(
                 self.cfg.llm_url.rstrip("/") + "/chat/completions",
                 data=json.dumps({"model": self.cfg.llm_model, "messages": messages,
-                                 "temperature": TEMPERATURE, "max_tokens": max_tokens}).encode(),
+                                 "temperature": TEMPERATURE if temperature is None else temperature,
+                                 "max_tokens": max_tokens}).encode(),
                 headers={"Content-Type": "application/json"},
             )
             with urllib.request.urlopen(req, timeout=1800) as r:
@@ -220,19 +225,19 @@ REQUEST = re.compile(r"\b(can you|could you|would you|will you|please|tu peux|tu
 
 
 def _action_lines(raw: str) -> list[dict]:
-    """The extraction answer: "owner | due | hh:mm:ss | task | quote" lines (JSON objects are
-    accepted too, from models that prefer them)."""
+    """The extraction answer: JSON objects (one per line is asked for, but some models spread an
+    object over several lines or wrap them in a code block), or "owner | due | hh:mm:ss | task |
+    quote" lines from models that prefer tables."""
     out = []
-    for line in raw.splitlines():
-        line = line.strip().strip("`")
-        if line.startswith("{"):
-            try:
-                item = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            out.append(item)
+    for chunk in re.findall(r"\{[^{}]*\}", raw, flags=re.S):
+        try:
+            out.append(json.loads(chunk))
+        except json.JSONDecodeError:
             continue
-        cells = [c.strip() for c in line.strip("|").split("|")]
+    if out:
+        return out
+    for line in raw.splitlines():
+        cells = [c.strip() for c in line.strip().strip("`").strip("|").split("|")]
         if len(cells) >= 5 and re.fullmatch(r"\d+:\d{2}(:\d{2})?", cells[2]):
             out.append({"owner": cells[0], "due": "" if cells[1] in ("-", "—", "") else cells[1],
                         "at": cells[2], "task": cells[3], "quote": " | ".join(cells[4:])})
@@ -242,48 +247,46 @@ def _action_lines(raw: str) -> list[dict]:
 def check_actions(raw: str, transcript: str, meeting) -> list[dict]:
     """Keeps the extracted commitments whose quote really is in the transcript (anything else
     was made up), places them at that line, and keeps a deadline only when that date is said
-    there, just around it, or in a line naming the owner (a recap)."""
+    there, just around it, or in a line naming the owner (a recap). Duplicates are left to
+    merge_actions."""
     from .dates import parse_due
 
     lines = _lines(transcript)
-    seen: list = []
+    words_of = [set(_norm_words(text)) for _, _, text in lines]
+    speakers = {sp for _, sp, _ in lines}
     out = []
     for item in _action_lines(raw):
         task, owner = str(item.get("task", "")).strip(), str(item.get("owner", "")).strip()
         quote = set(_norm_words(str(item.get("quote", ""))))
         if not task or len(quote) < 2:
             continue
-        best, best_i = 0.0, None
-        for i, (_, _, text) in enumerate(lines):
-            score = len(quote & set(_norm_words(text))) / len(quote)
-            if score > best:
-                best, best_i = score, i
-        if best_i is None or best < 0.7:
+        scores = [len(quote & w) / len(quote) for w in words_of]
+        best = max(scores, default=0.0)
+        if best < 0.7:
             continue
+        # A common quote ("yes, I'll do it") can fit several lines: take the one nearest to
+        # the time the model gave.
+        said = _seconds(str(item.get("at", ""))) if re.fullmatch(r"\d+:\d{2}:\d{2}", str(item.get("at", ""))) else None
+        close = [i for i, sc in enumerate(scores) if sc >= best - 0.1]
+        best_i = min(close, key=lambda i: abs(lines[i][0] - said)) if said is not None else close[0]
         # "Guillaume, can you prepare …?" said by Sarah: the task is Guillaume's, not hers.
         t_line, speaker, text = lines[best_i]
         if owner.lower() == speaker.lower():
-            asked = [sp for sp in {sp for _, sp, _ in lines} if sp.lower() != speaker.lower()
-                     and sp.split()[0].lower() in _norm_words(text)]
+            asked = [sp for sp in speakers if sp.lower() != speaker.lower()
+                     and _norm_words(sp)[:1] and _norm_words(sp)[0] in words_of[best_i]]
             if len(asked) == 1 and REQUEST.search(text):
                 owner = asked[0]
-        # The same task twice (said at the same moment, or the same words for the same person).
-        words = set(_norm_words(task))
-        if any(o == owner.lower() and (t == t_line or len(words & w) / max(len(words | w), 1) > 0.6)
-               for o, t, w in seen):
-            continue
-        seen.append((owner.lower(), t_line, words))
         due = str(item.get("due", "")).strip()
         if due and meeting:
-            first = owner.split()[0].lower() if owner else ""
+            first = (_norm_words(owner) or [""])[0]
             near = [t for _, _, t in lines[max(0, best_i - 1): best_i + 2]]  # the line, the ask, the answer
-            near += [t for _, sp, t in lines if first and first in _norm_words(t) and sp.lower() != first]
+            near += [t for (_, sp, t), w in zip(lines, words_of)
+                     if first and first in w and (_norm_words(sp) or [""])[0] != first]
             d = parse_due(due, meeting)
             if d is None or d not in _dates_said(near, meeting):
                 due = ""
-        t = lines[best_i][0]
         out.append({"owner": owner, "task": task, "due": due,
-                    "at": f"{t // 3600:02d}:{t % 3600 // 60:02d}:{t % 60:02d}"})
+                    "at": f"{t_line // 3600:02d}:{t_line % 3600 // 60:02d}:{t_line % 60:02d}"})
     return out
 
 
@@ -292,8 +295,18 @@ le la les un une des de du d l et ou en au aux pour par avec sur dans ce cette s
 the his her their qui que""".split())
 
 
+# Words that say nothing about WHICH task it is: two tasks sharing only these aren't the same.
+GENERIC = set("""prepare send make create get have check add provide share write update give take do
+ask tell set start finish follow next week today tomorrow monday tuesday wednesday thursday friday
+january february march april may june july august september october november december lundi mardi
+mercredi jeudi vendredi janvier fevrier mars avril mai juin juillet aout septembre octobre novembre
+decembre semaine prochaine prepare envoie envoyer faire fait demande""".split())
+
+
 def _content(task: str) -> set[str]:
-    return {w[:-1] if len(w) > 4 and w.endswith("s") else w for w in _norm_words(task) if len(w) > 2 and w not in STOP}
+    words = {w[:-1] if len(w) > 4 and w.endswith("s") else w for w in _norm_words(task)
+             if (len(w) > 2 or any(c.isdigit() for c in w)) and w not in STOP and not w.isdigit()}  # "W4", "PS5"
+    return {w for w in words if w not in GENERIC}
 
 
 def _seconds(at: str) -> int:
@@ -315,13 +328,21 @@ def merge_actions(actions: list[dict]) -> list[dict]:
         recap = len(owners_at[a["at"]]) >= 2  # one line giving several people's tasks: a recap
         same = None
         for b in out:
-            if b["owner"].lower() != a["owner"].lower() or not words:
+            if b["owner"].lower() != a["owner"].lower():
                 continue
-            common = len(words & _content(b["task"]))
-            shared = common / max(1, min(len(words), len(_content(b["task"]))))
-            # …or asked and accepted a moment apart ("can you prepare…?" — "yes, I'll do…").
-            if shared >= (0.3 if recap else 0.5) or (common and _seconds(a["at"]) - _seconds(b["at"]) <= 60):
+            if a["task"].lower() == b["task"].lower():
                 same = b
+                break
+            other = _content(b["task"])
+            common = len(words & other)
+            shared = common / max(1, min(len(words), len(other)))
+            if not common:  # nothing that names the task in common ("prepare", "November" don't count)
+                continue
+            if (recap and shared >= 0.3) or _seconds(a["at"]) - _seconds(b["at"]) <= 60:
+                same = b  # restated in the recap, or asked and accepted a moment apart
+                break
+            if common >= min(2, len(words), len(other)) and shared >= 0.5:
+                same = b  # the same task said again later (one shared word like "support" isn't enough)
                 break
         if same:
             same["due"] = same["due"] or a["due"]
@@ -349,6 +370,13 @@ def summarize(transcript: str, cfg: Config, language: str = "", context: str = "
         if cfg.max_context_tokens <= 6000:
             raise SystemExit("Not enough memory for the notes model — choose a smaller one in Settings → AI models.")
         import dataclasses
+        import gc
+
+        gc.collect()  # let the first attempt's model and buffers go before loading it again
+        if cfg.llm_backend == "mlx":
+            import mlx.core as mx
+
+            mx.clear_cache()
 
         print("   not enough memory for the whole meeting at once — writing the notes in parts")
         return summarize(transcript, dataclasses.replace(cfg, max_context_tokens=6000), language, context, template,
@@ -376,6 +404,7 @@ def _summarize(transcript: str, cfg: Config, language: str, context: str, templa
         raw = ""
         for i, part in enumerate(parts):
             raw += llm.chat(ACTIONS_PROMPT.format(language=lang, transcript=part), max_tokens=900,
+                            temperature=EXTRACT_TEMPERATURE,
                             on_token=lambda n, i=i: progress.update(0.05 + 0.45 * (i + min(n / 300, 0.97)) / len(parts)))
         actions = merge_actions(check_actions(raw, transcript, meeting))
         body = llm.chat(NOTES_PROMPT.format(language=lang, style=style, extra_sections=extra, transcript=transcript,
@@ -403,11 +432,12 @@ def _summarize(transcript: str, cfg: Config, language: str, context: str, templa
         partial.append(f"### Part {i}\n" + llm.chat(
             CHUNK_PROMPT.format(part=i, total=len(chunks), language=lang, transcript=chunk), max_tokens=1500, prose=True,
             on_token=lambda n, i=i: progress.update((i - 1 + min(n / 600, 0.97)) / (len(chunks) + 1))))
-    actions = []
-    for chunk in chunks:  # commitments are checked against the real transcript, part by part
-        actions += check_actions(llm.chat(ACTIONS_PROMPT.format(language=lang, transcript=chunk), max_tokens=1500),
-                                 chunk, meeting)
-    actions = merge_actions(actions)
+    # Commitments: the same small parts as for shorter meetings, checked against the whole
+    # transcript (a recap at the end confirms dates said much earlier).
+    raw = "".join(llm.chat(ACTIONS_PROMPT.format(language=lang, transcript=part), max_tokens=900,
+                           temperature=EXTRACT_TEMPERATURE)
+                  for part in _parts(llm, transcript, EXTRACT_TOKENS))
+    actions = merge_actions(check_actions(raw, transcript, meeting))
     body = llm.chat(NOTES_PROMPT.format(language=lang, style=style, extra_sections=extra, transcript="\n\n".join(partial),
                                         actions=_actions_context(actions), summary_how=_summary_how(transcript)),
                     max_tokens=max_tokens, prose=True,

@@ -270,7 +270,7 @@ def write_transcript(session: Path, utterances, title: str):
     (session / "transcript.md").write_text(to_markdown(utterances, title))
 
 
-def write_notes(session: Path, cfg: Config):
+def write_notes(session: Path, cfg: Config, template: str = ""):
     from .notes import parse_notes, split_title
     from .summarize import TEMPLATES, summarize
     from .transcript import load_json, main_language, to_plain
@@ -278,7 +278,8 @@ def write_notes(session: Path, cfg: Config):
     utterances, meta = load_json(session / "transcript.json")
     language = notes_language(cfg, main_language(utterances) or (meta.get("languages") or [""])[0])
     context = calendar_context(session)
-    template = meeting_info(session).get("template") or cfg.template
+    # The type asked for on the command line, else the meeting's own (picked in the app), else the default.
+    template = template or meeting_info(session).get("template") or cfg.template
     if template not in TEMPLATES:
         template = "general"
     step("Writing the summary and to-do list (%@)", language)
@@ -294,13 +295,6 @@ def write_notes(session: Path, cfg: Config):
              "template": template, "guessed_names": meta.get("guessed_names", []), **parse_notes(body)}
     save_notes(session, notes)
     print(f"   notes ready in {time.time() - t0:.0f}s")
-
-
-def meeting_info(session: Path) -> dict:
-    try:
-        return json.loads((session / "meeting.json").read_text())
-    except Exception:
-        return {}
 
 
 def save_notes(session: Path, notes: dict) -> None:
@@ -480,7 +474,7 @@ def cmd_setup(args, cfg: Config):
 
 
 def cmd_summarize(args, cfg: Config):
-    write_notes(Path(args.folder).expanduser().resolve(), cfg)
+    write_notes(Path(args.folder).expanduser().resolve(), cfg, args.template or "")
 
 
 def main():

@@ -69,13 +69,28 @@ def _actions(lines: list[str]) -> list[dict]:
     return out
 
 
+def _section_key(heading: str) -> str:
+    """A section heading, lowercased, with the usual French names mapped to the English ones
+    (in case a model translates the headings)."""
+    import unicodedata
+
+    key = heading.strip().lower()
+    plain = unicodedata.normalize("NFKD", key).encode("ascii", "ignore").decode()
+    for french, english in (("resume", "summary"), ("synthese", "summary"), ("decision", "decisions"),
+                            ("taches", "action items"), ("actions a mener", "action items"),
+                            ("a faire", "action items"), ("questions ouvertes", "open questions")):
+        if plain.startswith(french):
+            return english
+    return key
+
+
 def parse_notes(md: str) -> dict:
     sections: dict[str, list[str]] = {}
     current = None
     for line in md.splitlines():
         m = re.match(r"^#{1,4}\s+(.*)$", line)
         if m:
-            current = m.group(1).strip().lower()
+            current = _section_key(m.group(1))
             sections[current] = []
         elif current:
             sections[current].append(line)

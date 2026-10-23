@@ -137,6 +137,8 @@ def _transcribe(audio, model, language, vocabulary) -> tuple[list[Word], str]:
             continue
         if seg.get("no_speech_prob", 0) > 0.8 and seg.get("avg_logprob", 0) < -0.7:
             continue
+        if prompt and text.startswith("vocabulary:"):  # Whisper repeating its prompt over silence
+            continue
         for w in seg.get("words", []):
             words.append(Word(float(w["start"]), float(w["end"]), w["word"], lang))
     return words, lang

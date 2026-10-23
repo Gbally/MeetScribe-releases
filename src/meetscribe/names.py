@@ -1,7 +1,9 @@
 """Put names on "Speaker N" labels from the calendar invitations: when someone addresses an
 invited person by name ("Sarah, can you…") and the same voice answers right after, or when a
-speaker introduces themselves ("it's Marc", "c'est Marc"), that's evidence. A name is only used
-with clear, repeated evidence; otherwise the label stays "Speaker N" for you to name."""
+speaker introduces themselves ("it's Marc", "c'est Marc"), that's evidence. One clear clue is
+enough when nothing contradicts it; the last voice without a name gets the last invited person
+(a 1:1). Otherwise the label stays "Speaker N" for you to name — the app shows guessed names so
+they can be checked."""
 
 import re
 import unicodedata
@@ -27,10 +29,14 @@ def _close(word: str, name: str) -> bool:
 def guess_names(utterances, invited: list[str], me: str) -> dict[str, str]:
     """{"Speaker 1": "Sarah", …} for the labels the transcript gives clear evidence about.
     `invited`: the calendar attendees (full names); the first name is used when it's unique."""
+    # Names already on a voice (yours, or one recognised from the voice library) aren't given
+    # to a second voice — that would merge two people in the transcript.
+    taken = {_plain(me.split()[0]) if me else ""}
+    taken |= {_plain(u.speaker.split()[0]) for u in utterances if not UNNAMED.match(u.speaker)}
     first = {}
     for full in invited:
         parts = full.split()
-        if not parts or _plain(parts[0]) == _plain(me.split()[0] if me else ""):
+        if not parts or _plain(parts[0]) in taken:
             continue
         first.setdefault(_plain(parts[0]), []).append(full)
     names = {k: (v[0].split()[0] if len(v) == 1 else v[0]) for k, v in first.items()}
@@ -42,8 +48,8 @@ def guess_names(utterances, invited: list[str], me: str) -> dict[str, str]:
         ("I'll send it to Emma"). Spelling variants only for capitalised words ("Mark" for Marc —
         not "list" for Lisa)."""
         out = []
-        for m in re.finditer(r"\b([A-ZÀ-Ý][a-zà-ÿ]+)\b", text):
-            word, after = _plain(m[1]), text[m.end():m.end() + 2]
+        for m in re.finditer(r"\b([A-ZÀ-Ý][a-zà-ÿ]+(?:-[A-ZÀ-Ý][a-zà-ÿ]+)?)\b", text):  # also "Jean-Marc"
+            word, after = _plain(m[1]), text[m.end():m.end() + 3].lstrip()  # "Léa ?" (French spacing)
             before = _plain(text[max(0, m.start() - 12):m.start()])
             if re.search(r"(thanks|thank you|merci)[ ,]*$", before) and after[:1] != "?":
                 continue  # "Thanks Lisa" answers Lisa, who spoke before ("Thanks, Tom?" does hand over)
@@ -66,25 +72,39 @@ def guess_names(utterances, invited: list[str], me: str) -> dict[str, str]:
         if i and utterances[i - 1].speaker != u.speaker and u.start - utterances[i - 1].end < 8:
             tail = utterances[i - 1].text[-160:]  # "… Sarah, can you …?" → Sarah answers
             called = addressed(tail)
+            # A reply of a few words ("Perfect, thanks.") is too short to be sure whose voice it
+            # is: it counts half.
+            weight = 2 if len(u.text.split()) >= 4 else 1
             for k in called:  # "Hi David, hi Emma": either may answer — the clue is shared
-                votes[u.speaker][k] += 2 / len(called)
+                votes[u.speaker][k] += weight / len(called)
 
     out: dict[str, str] = {}
     used: set[str] = set()
-    ranked = sorted(((score, label, k) for label, v in votes.items() for k, score in v.items()), reverse=True)
-    for score, label, k in ranked:
-        # Two clues are enough; one ("Emma, can you…?" — and Emma's voice answers) when nothing
-        # points elsewhere: in short meetings people are often named only once.
-        if label in out or k in used or score < 2:
-            continue
-        others = sorted((s for kk, s in votes[label].items() if kk != k), reverse=True)
-        if others and others[0] > score / 2:  # not clearly this person
-            continue
-        rival = max((v.get(k, 0) for lb, v in votes.items() if lb != label), default=0)
-        if rival > score / 2:  # another voice is just as likely to be them
-            continue
-        out[label] = names[k]
-        used.add(k)
+
+    def explained_otherwise(label: str, k: str) -> bool:
+        """This voice fits another free name at least as well as k."""
+        return any(kk != k and kk not in used and s >= votes[label][k] for kk, s in votes[label].items())
+
+    changed = True
+    while changed:  # a name given on one pass can settle a tie on the next
+        changed = False
+        ranked = sorted(((score, label, k) for label, v in votes.items() for k, score in v.items()), reverse=True)
+        for score, label, k in ranked:
+            # Two clues are enough; one ("Emma, can you…?" — and Emma's voice answers) when nothing
+            # points elsewhere: in short meetings people are often named only once.
+            if label in out or k in used or score < 2:
+                continue
+            others = sorted((s for kk, s in votes[label].items() if kk != k and kk not in used), reverse=True)
+            if others and others[0] > score / 2:  # not clearly this person
+                continue
+            # Another voice just as likely to be them — unless it fits another name as well (it
+            # answered both "Chloe?" and "Zoe?", and this one only "Chloe?").
+            if any(v.get(k, 0) > score / 2 and not explained_otherwise(lb, k)
+                   for lb, v in votes.items() if lb != label and lb not in out):
+                continue
+            out[label] = names[k]
+            used.add(k)
+            changed = True
 
     # Elimination: one voice left without a name and one invited person left → them (e.g. a 1:1).
     unnamed = sorted({u.speaker for u in utterances if UNNAMED.match(u.speaker)} - set(out))

@@ -54,17 +54,20 @@ def condense(audio: np.ndarray, pieces: list[tuple[float, float]], gap: float = 
         return 0
 
     def original(start: float, end: float) -> tuple[float, float]:
-        """A (start, end) span in the shorter audio → the original timeline, mapped within the
-        stretch holding its middle (Whisper often starts or ends a word a little into the
-        silence around it). Spans across several stretches (diarization turns) keep both ends."""
+        """A (start, end) span in the shorter audio → the original timeline. A word (a short span)
+        is mapped within the stretch holding its middle: Whisper often starts or ends a word a
+        little into the silence around it. Longer spans (diarization turns) can really run over
+        several stretches: each end is mapped in its own, so no part of the turn is lost."""
+        if not starts:
+            return start, end
         a, b = piece(start), piece(end)
-        k = piece((start + end) / 2) if b - a <= 1 else None
+
         def one(t: float, i: int) -> float:
             c, o, length = starts[i]
             return o + max(0.0, min(t - c, length))
-        if not starts:
-            return start, end
-        if k is not None:
+
+        if a == b or (b - a == 1 and end - start <= 2.5):
+            k = piece((start + end) / 2)
             return one(start, k), max(one(end, k), one(start, k))
         return one(start, a), one(end, b)
 

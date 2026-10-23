@@ -25,7 +25,9 @@ def _month_end(d: date) -> date:
 
 def _next_weekday(base: date, wd: int, skip_week: bool = False) -> date:
     days = (wd - base.weekday()) % 7 or 7  # "Wednesday" said on a Wednesday = next week's
-    if skip_week and days < 7:
+    # "next Friday" said on a Monday is the Friday after this one; but "next Wednesday" said on a
+    # Friday is simply the coming Wednesday (this week's is already over).
+    if skip_week and wd > base.weekday():
         days += 7
     return base + timedelta(days=days)
 

@@ -56,24 +56,42 @@ def diarize(audio: np.ndarray, num_speakers: int = 0, threshold: float = 0.5) ->
 def consolidate(turns: list[Turn], prints: dict, max_speakers: int = 0, same: float = 0.7) -> list[Turn]:
     """Clean up over-split diarization: one person often comes out as several "speakers" (a
     change of tone, a noisy stretch, VoIP compression). Speakers whose voiceprints match
-    (cosine ≥ `same`; the same voice scores 0.9+, different people ≤ ~0.6) are merged, and
-    so are the closest ones while there are more than `max_speakers` (e.g. the calendar's
-    attendees). Speakers with too little speech for a voiceprint join the nearest turn's."""
+    (cosine ≥ `same`; the same voice scores 0.9+, different people ≤ ~0.6) are merged; while
+    there are more than `max_speakers` (e.g. the calendar's attendees), the smallest ones join
+    the voice they're closest to (≥ 0.5). Speakers with too little speech for a voiceprint
+    join the nearest turn's."""
     sizes: dict[int, float] = {}
     for t in turns:
         sizes[t.speaker] = sizes.get(t.speaker, 0.0) + t.end - t.start
     groups = {spk: [spk] for spk in prints}
     centre = {spk: prints[spk] / (np.linalg.norm(prints[spk]) or 1) for spk in prints}
     weight = {spk: sizes.get(spk, 0.0) for spk in prints}
-    while len(groups) > 1:
-        keys = sorted(groups)
-        sim, a, b = max((float(centre[a] @ centre[b]), a, b) for i, a in enumerate(keys) for b in keys[i + 1:])
-        if sim < same and not (max_speakers and len(groups) > max_speakers):
-            break
+
+    def merge(a: int, b: int):
         v = centre[a] * weight[a] + centre[b] * weight[b]
         centre[a], weight[a] = v / (np.linalg.norm(v) or 1), weight[a] + weight[b]
         groups[a] += groups.pop(b)
         del centre[b], weight[b]
+
+    while len(groups) > 1:
+        keys = sorted(groups)
+        sim, a, b = max((float(centre[a] @ centre[b]), a, b) for i, a in enumerate(keys) for b in keys[i + 1:])
+        if sim >= same:
+            merge(a, b)
+            continue
+        if not max_speakers or len(groups) <= max_speakers:
+            break
+        # More voices than people invited: the extra one is most likely a few seconds of
+        # someone in another tone, not one of two people who both talked a lot (their voices
+        # can be closer). So the smallest joins the voice it's closest to — if at all alike: an
+        # uninvited guest must not be glued to someone else.
+        for small in sorted(groups, key=weight.get):
+            sim, near = max((float(centre[small] @ centre[o]), o) for o in groups if o != small)
+            if sim >= 0.5:
+                merge(near, small)
+                break
+        else:
+            break
     owner = {spk: g for g, members in groups.items() for spk in members}
 
     merged = [Turn(t.start, t.end, owner[t.speaker]) for t in turns if t.speaker in owner]
@@ -99,7 +117,10 @@ def speakers(audio: np.ndarray, n: int, threshold: float, cap: int = 0) -> tuple
     from .voices import speaker_prints
 
     # Like transcription: only the stretches with speech (often half the track or less).
-    short, original = condense(audio, speech_pieces(audio))
+    pieces = speech_pieces(audio)
+    if not pieces:  # nothing but silence (e.g. an imported file): no speakers
+        return [], {}
+    short, original = condense(audio, pieces)
     turns = [Turn(*original(t.start, t.end), t.speaker) for t in diarize(short, n, threshold)]
     turns = [t for t in turns if t.end > t.start]
     if n <= 0 and len({t.speaker for t in turns}) > 1:

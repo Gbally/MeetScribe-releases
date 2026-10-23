@@ -30,8 +30,10 @@ class Config:
     # Names / jargon that Whisper should spell correctly, e.g. "FlagQuest, Supabase, Kubernetes".
     vocabulary: str = ""
 
-    # Speaker separation: clustering threshold (lower = more speakers), 0 < x < 1.
-    diarization_threshold: float = 0.7
+    # Speaker separation: clustering threshold (lower = more speakers), 0 < x < 1. Fine enough
+    # not to glue two people together (0.7 did, with 4+ voices); the extra splits are merged
+    # back afterwards (matching voiceprints, the calendar's head count).
+    diarization_threshold: float = 0.6
 
     # Summary. backend = "mlx" (in-process, default) or "openai" (Ollama / LM Studio server).
     llm_backend: str = "mlx"

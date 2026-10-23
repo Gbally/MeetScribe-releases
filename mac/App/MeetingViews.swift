@@ -122,6 +122,21 @@ struct MeetingView: View {
                         .font(.caption).fixedSize(horizontal: false, vertical: true)
                 }
             }
+            if let guessed = m.notes?.guessedNames, !guessed.isEmpty, !model.isBusy(id) {
+                Card {
+                    Label(tr("Named from the calendar: %@", guessed.joined(separator: ", ")), systemImage: "person.crop.circle.badge.checkmark")
+                        .font(.callout.weight(.medium))
+                    Text("Worked out from who was addressed by name. Check that the right voice got the right name.")
+                        .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                    HStack {
+                        Button("They're right") {
+                            model.enqueue(.rename(id, Dictionary(uniqueKeysWithValues: guessed.map { ($0, $0) })))
+                        }
+                        Button("Check the voices…") { route = .speakers(id) }
+                    }
+                    .controlSize(.small)
+                }
+            }
             if !m.unnamedSpeakers.isEmpty && !model.isBusy(id) && m.notes != nil {
                 Button { route = .speakers(id) } label: {
                     HStack {
@@ -318,8 +333,9 @@ struct SpeakersView: View {
                 Spacer()
                 Button("Save & regenerate notes") {
                     player.stop()
+                    let guessed = Set(model.meeting(id)?.notes?.guessedNames ?? [])
                     let mapping = names.mapValues { $0.trimmingCharacters(in: .whitespaces) }
-                        .filter { !$0.value.isEmpty && $0.key != $0.value }
+                        .filter { !$0.value.isEmpty && ($0.key != $0.value || guessed.contains($0.key)) } // kept = confirmed
                     if !mapping.isEmpty { model.enqueue(.rename(id, mapping)) }
                     route = .meeting(id)
                 }

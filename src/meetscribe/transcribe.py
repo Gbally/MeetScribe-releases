@@ -99,18 +99,36 @@ def _transcribe_all(audio: np.ndarray, model: str, language: str, vocabulary: st
 
 
 def _transcribe(audio, model, language, vocabulary) -> tuple[list[Word], str]:
+    import importlib
+
     import mlx_whisper
 
-    result = mlx_whisper.transcribe(
-        audio,
-        path_or_hf_repo=model,
-        language=language,
-        word_timestamps=True,
-        condition_on_previous_text=False,  # avoids repetition loops on long recordings
-        hallucination_silence_threshold=2.0,
-        initial_prompt=f"Vocabulary: {vocabulary}." if vocabulary else None,
-        verbose=False,  # False (not None) enables the progress bar that progress.py listens to
-    )
+    mt = importlib.import_module("mlx_whisper.transcribe")  # the module (the package exports a function of that name)
+
+    # Whisper only shows its prompt to the first 30 s window when it doesn't carry text from
+    # window to window (which we avoid: it causes repetition loops). The names and jargon are
+    # given to every window instead, so they're spelled right for the whole meeting.
+    prompt = f"Vocabulary: {vocabulary}." if vocabulary else None
+    options = mt.DecodingOptions
+
+    def with_vocabulary(**kwargs):
+        if prompt and not kwargs.get("prompt"):
+            kwargs["prompt"] = prompt
+        return options(**kwargs)
+
+    mt.DecodingOptions = with_vocabulary
+    try:
+        result = mlx_whisper.transcribe(
+            audio,
+            path_or_hf_repo=model,
+            language=language,
+            word_timestamps=True,
+            condition_on_previous_text=False,  # avoids repetition loops on long recordings
+            hallucination_silence_threshold=2.0,
+            verbose=False,  # False (not None) enables the progress bar that progress.py listens to
+        )
+    finally:
+        mt.DecodingOptions = options
     lang = result.get("language") or language or ""
     words: list[Word] = []
     for seg in result["segments"]:
@@ -148,13 +166,35 @@ def speech_regions(audio: np.ndarray, min_gap: float = 0.4, relative: float = 0.
     return [(s, e) for s, e in regions if e - s > 0.25]
 
 
+# Small Whisper used only to tell the languages apart: as reliable as the big one between the
+# allowed languages, ~20× faster (detection was most of the time of mixed-language meetings).
+LANGUAGE_ID_MODEL = "mlx-community/whisper-base-mlx"
+_language_id = None
+
+
+def _language_id_model(fallback: str):
+    """The small detection model if it's downloaded, else the transcription model."""
+    global _language_id
+    import mlx.core as mx
+
+    if _language_id is None:
+        try:
+            from huggingface_hub import snapshot_download
+            from mlx_whisper.load_models import load_model
+
+            _language_id = load_model(snapshot_download(LANGUAGE_ID_MODEL, local_files_only=True), mx.float16)
+        except Exception:
+            from mlx_whisper.transcribe import ModelHolder
+
+            return ModelHolder.get_model(fallback, mx.float16)
+    return _language_id
+
+
 def language_runs(audio: np.ndarray, model_path: str, allowed: list[str]) -> list[tuple[str, float, float]]:
     """Split the audio into stretches of one language: [(lang, start, end)]."""
     import mlx.core as mx
     from mlx_whisper.audio import N_FRAMES, N_SAMPLES, log_mel_spectrogram, pad_or_trim
-    from mlx_whisper.transcribe import ModelHolder
-
-    model = ModelHolder.get_model(model_path, mx.float16)
+    model = _language_id_model(model_path)
 
     # Group speech into windows of ~4–20 s (short bits are too short to identify reliably).
     windows: list[list[float]] = []

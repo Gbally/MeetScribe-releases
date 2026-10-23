@@ -44,6 +44,12 @@ struct MeetingNotes: Codable {
     var template: String?
     var sections: [NoteSection]?
     var version: Int?
+    var guessedNames: [String]?   // speaker names taken from the calendar invitations, not yet confirmed
+
+    enum CodingKeys: String, CodingKey {
+        case title, date, duration, participants, summary, decisions, actions, questions, tracks, template,
+             sections, version, guessedNames = "guessed_names"
+    }
 
     /// Recorded by the app, but only the microphone had sound: the other participants were
     /// only captured through the speakers (usually: Screen & System Audio permission missing).

@@ -30,6 +30,7 @@ enum Uninstaller {
         var repos = Set((model.catalog.notes + model.catalog.speech).map(\.repo))
         repos.formUnion([model.settings.llmModel, model.settings.whisperModel].compactMap { $0 })
         repos.formUnion(UserDefaults.standard.stringArray(forKey: "downloadedRepos") ?? [])
+        repos.insert("mlx-community/whisper-base-mlx") // language detection for mixed-language meetings
         let folders = repos.map { hfCache.appendingPathComponent("models--" + $0.replacingOccurrences(of: "/", with: "--")) }
             .filter { FileManager.default.fileExists(atPath: $0.path) }
         let others = ((try? FileManager.default.contentsOfDirectory(at: hfCache, includingPropertiesForKeys: nil)) ?? [])

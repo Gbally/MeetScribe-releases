@@ -103,7 +103,7 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
         progress.start(stage)
         with ProcessPoolExecutor(1, mp_context=multiprocessing.get_context("spawn")) as pool:
             fut = pool.submit(diarized_speakers, audio, n, threshold, cap)
-            words, lang = transcribe(audio, cfg.whisper_model, cfg.language, cfg.vocabulary)
+            words, lang = transcribe(audio, cfg.whisper_model, cfg.language, vocabulary)
             turns, prints = fut.result()
         languages.add(lang)
         known = identify(prints, exclude)
@@ -147,7 +147,12 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
             room = True
 
     # At most this many people besides you, when the calendar knows the attendees.
-    others = len((meeting_info(session).get("calendar") or {}).get("attendees") or [])
+    calendar = meeting_info(session).get("calendar") or {}
+    others = len(calendar.get("attendees") or [])
+    # Whisper spells names it has been told about: yours, the invited people's, the meeting title.
+    told = [cfg.me if cfg.me != "Me" else "", calendar.get("title", "")]
+    told += [a.get("name", "") for a in calendar.get("attendees") or []]
+    vocabulary = ", ".join(x for x in [cfg.vocabulary.strip(" ,"), *told] if x)
 
     def work(a):  # rough seconds of processing per track (model load + Whisper ≈ 10× real time)
         return 8 + len(a) / 16000 / 10 if a is not None else 0
@@ -178,7 +183,7 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
             else:
                 step("Your microphone: transcribing (%@ min)", f"{len(audio) / 16000 / 60:.0f}")
                 progress.start("mic")
-                words, lang = transcribe(audio, cfg.whisper_model, cfg.language, cfg.vocabulary, own_mic=True)
+                words, lang = transcribe(audio, cfg.whisper_model, cfg.language, vocabulary, own_mic=True)
                 languages.add(lang)
                 own = drop_echo(words, system_words)
                 print(f"   {len(own)} words ({len(words) - len(own)} dropped as speaker echo)")
@@ -193,9 +198,20 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
     utterances = merge(*tracks)
     if not utterances:
         sys.exit("No speech found in the recording.")
+    # "Speaker N" → a name from the calendar invitations, when the transcript makes it clear.
+    from .names import guess_names
+
+    invited = [a.get("name", "") for a in (meeting_info(session).get("calendar") or {}).get("attendees") or []]
+    guessed = guess_names(utterances, invited, cfg.me)
+    if guessed:
+        print("   probably: " + ", ".join(f"{label} = {name}" for label, name in guessed.items()))
+        for u in utterances:
+            u.speaker = guessed.get(u.speaker, u.speaker)
+        session_prints = {guessed.get(k, k): v for k, v in session_prints.items()}
     if session_prints:
         save_session_prints(session, session_prints)
     meta = {"title": title, "languages": sorted(l for l in languages if l), "tracks": track_names,
+            "guessed_names": sorted(guessed.values()),
             "duration": max(u.end for u in utterances), "created": started_at(session).isoformat(timespec="seconds")}
     save_json(utterances, session / "transcript.json", meta)
     write_transcript(session, utterances, title or "Meeting")
@@ -270,12 +286,12 @@ def write_notes(session: Path, cfg: Config):
 
     progress.ensure("notes")
     t0 = time.time()
-    ai_title, body = split_title(summarize(to_plain(utterances), cfg, language, context, template))
     created = datetime.fromisoformat(meta["created"]) if "created" in meta else datetime.now()
+    ai_title, body = split_title(summarize(to_plain(utterances), cfg, language, context, template, created.date()))
     title = meta.get("title") or ai_title or f"Meeting {created:%Y-%m-%d %H:%M}"
     notes = {"title": title, "date": created.isoformat(timespec="seconds"), "duration": meta["duration"],
              "participants": list(dict.fromkeys(u.speaker for u in utterances)), "tracks": meta.get("tracks", []),
-             "template": template, **parse_notes(body)}
+             "template": template, "guessed_names": meta.get("guessed_names", []), **parse_notes(body)}
     save_notes(session, notes)
     print(f"   notes ready in {time.time() - t0:.0f}s")
 
@@ -372,6 +388,8 @@ def cmd_rename(args, cfg: Config):
             sys.exit(f"No speaker called '{old}'. Speakers: {', '.join(sorted(known))}")
     for u in utterances:
         u.speaker = mapping.get(u.speaker, u.speaker)
+    # Names guessed from the calendar are confirmed (or corrected) once you name them.
+    meta["guessed_names"] = [n for n in meta.get("guessed_names", []) if n not in mapping]
     save_json(utterances, session / "transcript.json", meta)
 
     # Teach the voice library: next time these voices get their names automatically.
@@ -392,6 +410,13 @@ def cmd_rename(args, cfg: Config):
     rename_clips(session, mapping)
     write_transcript(session, utterances, meta.get("title") or "Meeting")
     print("Transcript updated.")
+    if all(old == new for old, new in mapping.items()):  # only confirming guessed names
+        notes_file = session / "notes.json"
+        if notes_file.exists():
+            notes = json.loads(notes_file.read_text())
+            notes["guessed_names"] = meta["guessed_names"]
+            notes_file.write_text(json.dumps(notes, indent=1, ensure_ascii=False))
+        return
     if not args.no_summary:
         write_notes(session, cfg)
 

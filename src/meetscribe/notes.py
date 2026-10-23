@@ -41,10 +41,13 @@ def _actions(lines: list[str]) -> list[dict]:
             continue
         owner, task = cells[0], cells[1]
         due = cells[2] if len(cells) > 2 else ""
+        at = cells[3] if len(cells) > 3 and re.fullmatch(r"\d+:\d{2}(:\d{2})?", cells[3]) else ""
         if EMPTY.match(task):
             continue
-        out.append({"owner": "" if EMPTY.match(owner) else owner, "task": task,
-                    "due": "" if EMPTY.match(due) else due})
+        item = {"owner": "" if EMPTY.match(owner) else owner, "task": task, "due": "" if EMPTY.match(due) else due}
+        if at:
+            item["at"] = at  # where it was said in the transcript
+        out.append(item)
     if not out:  # model used bullets instead of a table
         out = [{"owner": "", "task": t, "due": ""} for t in _bullets(lines)]
     return out
@@ -103,12 +106,12 @@ def render_markdown(notes: dict, duration_text: str) -> str:
     bullets("Decisions", notes.get("decisions", []))
     out += ["## Action items", ""]
     if notes.get("actions"):
-        out += ["| Owner | Task | Due |", "|---|---|---|"]
+        out += ["| Owner | Task | Due | Said at |", "|---|---|---|---|"]
         for a in notes["actions"]:
             due = a.get("due") or "—"
             if a.get("due_date") and a["due_date"] not in due:
                 due += f" ({a['due_date']})"
-            out.append(f"| {a.get('owner') or '—'} | {a['task']} | {due} |")
+            out.append(f"| {a.get('owner') or '—'} | {a['task']} | {due} | {a.get('at') or '—'} |")
     else:
         out.append("None recorded.")
     out.append("")

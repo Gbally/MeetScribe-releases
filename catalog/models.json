@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-10-22",
+  "updated": "2026-10-23",
   "notes": [
     {
       "id": "qwen3-4b",
@@ -27,7 +27,7 @@
       "repo": "mlx-community/Qwen3-8B-4bit",
       "name": "Qwen3 8B",
       "size_gb": 4.6,
-      "min_ram_gb": 8,
+      "min_ram_gb": 16,
       "recommended_ram_gb": 16,
       "quality": 3,
       "speed": 3,

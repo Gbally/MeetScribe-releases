@@ -65,7 +65,9 @@ def run_setup(cfg: Config):
     emb = MODELS_DIR / "nemo_en_titanet_small.onnx"
 
     step("Checking what needs downloading…")
-    sizes = {repo: _repo_size(repo) for repo in (cfg.whisper_model, cfg.llm_model)}
+    from .transcribe import LANGUAGE_ID_MODEL
+
+    sizes = {repo: _repo_size(repo) for repo in (cfg.whisper_model, cfg.llm_model, LANGUAGE_ID_MODEL)}
     small = 50e6
     total = small + sum(sizes.values())
 
@@ -82,7 +84,8 @@ def run_setup(cfg: Config):
 
     base = small
     for repo, label in ((cfg.whisper_model, "Downloading the speech recognition model (%@ GB)"),
-                        (cfg.llm_model, "Downloading the summary model (%@ GB)")):
+                        (cfg.llm_model, "Downloading the summary model (%@ GB)"),
+                        (LANGUAGE_ID_MODEL, "Downloading the language detection model (%@ GB)")):
         step(label, f"{sizes[repo] / 1e9:.1f}")
         for attempt in range(3):
             try:

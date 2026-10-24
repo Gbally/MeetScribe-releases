@@ -106,7 +106,8 @@ Answer with one JSON object per line and nothing else:
 {{"owner": "…", "task": "…", "due": "…", "at": "hh:mm:ss", "quote": "…"}}
 - owner: who will DO the task (not who asked for it), as written in the transcript: a speaker
   label ("Sarah", "Speaker 2") or the name of someone mentioned.
-- task: short, starting with a verb, in {language}.
+- task: short, starting with a verb, in {language}, saying what it is about ("create test data for
+  each pipeline", "call the compliance team" — never just "do it", "call them").
 - due: the deadline exactly as said for THIS task ("Friday the 31st", "le 14 novembre"), or ""
   when no deadline was said for it. Never guess one.
 - at: the time of the line where the commitment is made.
@@ -230,6 +231,10 @@ def _dates_said(texts: list[str], meeting) -> set:
     return found
 
 
+# Someone committing themselves in the sentence ("I'll…", "je vais…", "we will…").
+FIRST_PERSON = re.compile(r"\b(i'll|i will|i'm going to|i am going to|i can|let me|we'll|we will|we're going to|"
+                          r"je vais|je m'en|je peux|je (le|la|les|lui|leur|te|vous) |je [lt]'|je fais|on va|nous allons)", re.I)
+
 REQUEST = re.compile(r"\b(can you|could you|would you|will you|please|tu peux|tu pourrais|peux-tu|pourrais-tu|"
                      r"vous pouvez|est-ce que tu)\b", re.I)
 
@@ -256,7 +261,8 @@ def _action_lines(raw: str) -> list[dict]:
 
 # Resolutions about one's own behaviour, not tasks ("je vais faire attention", "I'll try to be clearer").
 BEHAVIOUR = re.compile(r"^(faire attention|be careful|pay attention|try to|try and|essayer|keep in mind|garder en t[eê]te|"
-                       r"r[ée]fl[ée]chir|think about|be more|[eê]tre plus|take care to|veiller [àa])", re.I)
+                       r"r[ée]fl[ée]chir|think about|be more|[eê]tre plus|take care to|veiller [àa]|"
+                       r"(be|stay|keep|get) in touch|rester en contact)", re.I)  # "we'll be in touch": a goodbye
 # "je vais en parler à l'équipe" copied as the task: the subject goes ("en parler à l'équipe").
 SUBJECT = re.compile(r"^(je vais |je m'en |je |j'|i'll |i will |i'm going to |we'll |we will |on va |nous allons )", re.I)
 
@@ -289,9 +295,12 @@ def check_actions(raw: str, transcript: str, meeting) -> list[dict]:
         else:
             # Some models translate the quote ("je l'envoie demain" → "I'll send it tomorrow"): then
             # the line at the time they gave counts, if the owner says it or is named in it.
-            first = (_norm_words(owner) or [""])[0]
+            own = _norm_words(owner)
+            numbers = set(re.findall(r"\d+", str(item.get("quote", ""))))  # the same in any language
+            same = lambda sp: bool(own) and (_norm_words(sp)[:len(own)] == own or own[:len(_norm_words(sp))] == _norm_words(sp))
             near = [i for i, (t, sp, _) in enumerate(lines) if said is not None and abs(t - said) <= 3
-                    and first and (first == (_norm_words(sp) or [""])[0] or first in words_of[i])]
+                    and (same(sp) or (own and own[0] != "speaker" and own[0] in words_of[i]))
+                    and numbers <= words_of[i]]
             if not near:
                 continue
             best_i = min(near, key=lambda i: abs(lines[i][0] - said))
@@ -299,15 +308,20 @@ def check_actions(raw: str, transcript: str, meeting) -> list[dict]:
         # the sentence the quote comes from counts: a long turn can mention someone ("the roles
         # Peter mentioned"), ask him something else and ask something of everyone ("please…").
         t_line, speaker, text = lines[best_i]
+        sentences = re.split(r"(?<=[.?!])\s+", text)
+        ask = sentences[max(range(len(sentences)), key=lambda j: len(quote & set(_norm_words(sentences[j]))))]
+        tokens = " ".join(re.findall(r"[a-z0-9]+|[,?]", _plain_text(ask)))  # "sarah , can you"
         if owner.lower() == speaker.lower():
-            sentences = re.split(r"(?<=[.?!])\s+", text)
-            k = max(range(len(sentences)), key=lambda j: len(quote & set(_norm_words(sentences[j]))))
-            ask = sentences[k]
-            tokens = " ".join(re.findall(r"[a-z0-9]+|[,?]", _plain_text(ask)))  # "sarah , can you"
             asked = [sp for sp in speakers if sp.lower() != speaker.lower() and _norm_words(sp)[:1]
                      and re.search(rf"\b{_norm_words(sp)[0]} [,?]", tokens)]
             if len(asked) == 1 and REQUEST.search(ask):
                 owner = asked[0]
+        elif best >= 0.7 and FIRST_PERSON.search(ask) and not REQUEST.search(ask):
+            # "I'll send two dates by Friday", said by Nadia, is hers whoever the model named — unless
+            # that person is in the sentence other than spoken to ("I'll ask Sarah to prepare it").
+            first = (_norm_words(owner) or [""])[0]
+            if not (first and re.search(rf"\b{re.escape(first)}\b(?! [,?])", tokens)):
+                owner = speaker
         due = str(item.get("due", "")).strip()
         if due and meeting:
             first = (_norm_words(owner) or [""])[0]
@@ -317,7 +331,7 @@ def check_actions(raw: str, transcript: str, meeting) -> list[dict]:
             d = parse_due(due, meeting)
             if d is None or d not in _dates_said(near, meeting):
                 due = ""
-        out.append({"owner": owner, "task": task, "due": due, "quote": str(item.get("quote", "")),
+        out.append({"owner": owner, "task": task, "due": due, "quote": str(item.get("quote", "")), "line": best_i,
                     "at": f"{t_line // 3600:02d}:{t_line % 3600 // 60:02d}:{t_line % 60:02d}"})
     return out
 
@@ -330,7 +344,9 @@ will send you the exercise today").
 For each such task, answer with one JSON object per line, and nothing else:
 {{"owner": "…", "task": "…", "due": "…", "at": "hh:mm:ss", "quote": "…"}}
 - owner: who will DO it: the speaker for "I", "we" or "je", else the person named.
-- task: short, starting with a verb, in {language}. due: the deadline exactly as said, or "".
+- task: short, starting with a verb, in {language}, saying what it is about (use the context: "I
+  can do it" after "each pipeline needs its own test data" → "create test data for each pipeline").
+- due: the deadline exactly as said, or "".
 - at: the time of the line. quote: 5 to 8 words copied exactly from that line (not the context).
 Give nothing for a line without such a task: what is done right now in the meeting ("let me
 think", "I'll start", asking or presenting), what is already done, opinions, news, and what only
@@ -345,7 +361,8 @@ IN_MEETING = re.compile(r"\b(say|talk|tell|present|explain|speak|start|think|ask
 
 # Someone taking something on ("I'll…", "we will…", "je m'en occupe"). The first pass misses
 # some of these in a long stretch; the ones no extracted task comes from get a second look.
-TAKES_ON = re.compile(r"\b(i'll|i will|i'm going to|i am going to|let me|leave it with me|i'm on it|i can (do|take)|"
+TAKES_ON = re.compile(r"\b(i'll|i will|i'm going to|i am going to|let me|leave it with me|i'm on it|i can (do|take|run|send|check)|"
+                      r"i'm happy to|happy to (do|take|run)|je veux bien|"
                       r"we'll|we will|we're going to|we are going to|je vais|je m'en (occupe|charge)|"
                       r"je peux (le |la |les )?(faire|prendre|envoyer|regarder|préparer)|on va|nous allons)\b", re.I)
 
@@ -374,10 +391,11 @@ def unclaimed(transcript: str, checked: list[dict], meeting) -> list[dict]:
                 plain = _plain_text(part)
                 if len(plain.split()) < 3:
                     continue
-                third = re.search(r"\b([a-z]+) (will|is going to|va|doit|s'occupe)\b", plain)
+                third = any(m[1] in names for m in re.finditer(
+                    r"\b([a-z]+) (will|is going to|runs|takes|handles|leads|va|doit|s'occupe|prend|gere)\b", plain))
                 dates = _dates_said([part], meeting) if meeting else set()
                 dated = re.search(r"\b(i|i'm|we|we're|je|j|nous)\b", plain) and any(d >= meeting for d in dates)
-                if not (TAKES_ON.search(part) or (third and third[1] in names) or dated):
+                if not (TAKES_ON.search(part) or third or dated):
                     continue
                 if IN_MEETING.search(plain) and not any(d > meeting for d in dates):
                     continue  # "Chloe will say more about that", "I'll ask the questions today": done in the meeting
@@ -438,6 +456,21 @@ def _seconds(at: str) -> int:
     return h * 3600 + m * 60 + s
 
 
+def _verb(task: str) -> str:
+    """A to-do's action: its first word ("send", "envoyer")."""
+    return (_norm_words(task) or [""])[0]
+
+
+def _days_apart(due_a: str, due_b: str) -> int | None:
+    """How many days apart two said deadlines are, when both are dates."""
+    from datetime import date
+
+    from .dates import parse_due
+
+    a, b = (parse_due(d, date.today()) if d else None for d in (due_a, due_b))
+    return abs((a - b).days) if a and b else None
+
+
 def merge_actions(actions: list[dict]) -> list[dict]:
     """One item per task. The same task often comes back (worded differently, or in the recap
     at the end, where one line lists everyone's tasks): for the same owner, items sharing most
@@ -460,15 +493,26 @@ def merge_actions(actions: list[dict]) -> list[dict]:
             other = _content(b["task"])
             common = len(words & other)
             shared = common / max(1, min(len(words), len(other)))
-            if not words and _seconds(a["at"]) - _seconds(b["at"]) <= 60:
-                same = b  # "I'll do it before noon", "check with them by Wednesday": the task just said
+            vague = not words or (len(words) <= 1 and re.search(r"\b(it|them|this|that|ça|cela)\b", a["task"], re.I))
+            if vague and _seconds(a["at"]) - _seconds(b["at"]) <= 60:
+                same = b  # "I'll do it before noon", "have it running by Thursday": the task just said
                 break
             if not common:  # nothing that names the task in common ("prepare", "November" don't count)
                 continue
-            if (recap and shared >= 0.3) or _seconds(a["at"]) - _seconds(b["at"]) <= 60:
-                same = b  # restated in the recap, or asked and accepted a moment apart
+            # Saying the same thing again, not just about the same thing: "take the lead on the
+            # analytics project" and "send the analytics project proposal" are two tasks.
+            restated = words <= other or other <= words or _verb(a["task"]) == _verb(b["task"])
+            apart = _days_apart(a["due"], b["due"])  # None unless both deadlines are dates
+            dt = _seconds(a["at"]) - _seconds(b["at"])
+            # Asked, then accepted in the very next line ("Tom, please order the new server" — "Will
+            # do, I'll have it running by Thursday"); other lines in between: only if said again.
+            reply = a.get("line") is not None and b.get("line") is not None and a["line"] - b["line"] == 1
+            if (recap and shared >= 0.3) or dt == 0 or (dt <= 60 and (reply or restated) and not (apart and apart > 7)):
+                same = b  # restated in the recap, two parts of one sentence, or asked and accepted
                 break
-            if common >= min(2, len(words), len(other)) and shared >= 0.5:
+            if apart:
+                continue  # "propose 6 % to the director on Monday" ≠ "a proposal to the client by the 15th"
+            if common >= min(2, len(words), len(other)) and shared >= 0.5 and (restated or common >= 3):
                 same = b  # the same task said again later (one shared word like "support" isn't enough)
                 break
         if same:

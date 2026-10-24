@@ -26,6 +26,18 @@ def _close(word: str, name: str) -> bool:
     return any(long_[:i] + long_[i + 1:] == short for i in range(len(long_)))
 
 
+def _hands_over(text: str, name: str) -> bool:
+    """The line gives the floor to `name`: it ends with a question, or the name comes with a word
+    or two ("Fiona, support.", "Chloe?") — not a longer statement or instruction to them."""
+    if text.rstrip().endswith("?"):
+        return True
+    found = list(re.finditer(rf"\b{re.escape(name)}\b", _plain(text)))
+    if not found:
+        return True
+    rest = re.split(r"[.!?]", _plain(text)[found[-1].end():], maxsplit=1)[0]
+    return len(re.findall(r"\w+", rest)) <= 3
+
+
 def guess_names(utterances, invited: list[str], me: str) -> dict[str, str]:
     """{"Speaker 1": "Sarah", …} for the labels the transcript gives clear evidence about.
     `invited`: the calendar attendees (full names); the first name is used when it's unique."""
@@ -75,8 +87,18 @@ def guess_names(utterances, invited: list[str], me: str) -> dict[str, str]:
             # A reply of a few words ("Perfect, thanks.") is too short to be sure whose voice it
             # is: it counts half.
             weight = 2 if len(u.text.split()) >= 4 else 1
+            # "Sarah, what do you think?", "Fiona, support." hand over to Sarah / Fiona. But "Okay,
+            # Karim, take it in the next sprint." may answer Karim, who just spoke: then the clue
+            # is shared between the next voice and the one before.
+            before = utterances[i - 2] if i >= 2 and utterances[i - 2].speaker != utterances[i - 1].speaker else None
+            if before is not None and not UNNAMED.match(before.speaker):
+                before = None  # you, or a voice already known: not the one being answered
             for k in called:  # "Hi David, hi Emma": either may answer — the clue is shared
-                votes[u.speaker][k] += weight / len(called)
+                if before is not None and not _hands_over(tail, k):
+                    votes[u.speaker][k] += weight / len(called) / 2
+                    votes[before.speaker][k] += (2 if len(before.text.split()) >= 4 else 1) / len(called) / 2
+                else:
+                    votes[u.speaker][k] += weight / len(called)
 
     out: dict[str, str] = {}
     used: set[str] = set()

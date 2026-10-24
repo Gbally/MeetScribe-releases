@@ -85,18 +85,23 @@ def _section_key(heading: str) -> str:
 
 
 BASE_SECTIONS = ("summary", "decision", "action", "to-do", "todo", "question")
+# Headings some models write as "**Résumé**" or "Décisions :" instead of "## …" — only these
+# exact names, so a line like "Decision pending on the venue" stays a line.
+LABELS = {"summary", "resume", "synthese", "decisions", "decision", "action items", "actions", "to-dos", "todos",
+          "to do", "taches", "a faire", "actions a mener", "open questions", "questions", "questions ouvertes"}
 
 
 def parse_notes(md: str) -> dict:
+    import unicodedata
+
     sections: dict[str, list[str]] = {}
     current = None
     for line in md.splitlines():
         m = re.match(r"^#{1,4}\s+(.*)$", line)
-        # Some models write the headings as "**Résumé**" or "Décisions :" instead of "## …".
-        label = m or re.match(r"^\s*(?:\*\*([^*]{3,40}?)\s*:?\*\*|([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ ]{2,30}?))\s*:?\s*$", line)
-        key = _section_key(next(g for g in label.groups() if g)) if label else ""
-        if m or (label and any(n in key for n in BASE_SECTIONS)):
-            current = key
+        label = re.match(r"^\s*\**\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ -]{1,24}?)\s*:?\s*\**\s*:?\s*$", line) if not m else None
+        plain = unicodedata.normalize("NFKD", label[1]).encode("ascii", "ignore").decode().lower().strip() if label else ""
+        if m or plain in LABELS:
+            current = _section_key(m[1] if m else label[1])
             sections[current] = []
         elif current:
             sections[current].append(line)

@@ -41,7 +41,8 @@ def parse_due(text: str, meeting: date) -> date | None:
     m = re.search(r"(\d{4})-(\d{2})-(\d{2})", t)
     if m:
         return date(int(m[1]), int(m[2]), int(m[3]))
-    if re.search(r"\b(today|tonight|eod|end of (the )?day|aujourd'?hui|ce soir|asap|immediately)\b", t):
+    if re.search(r"\b(today|tonight|eod|end of (the )?day|this (morning|afternoon|evening)|aujourd'?hui|ce soir|ce matin|"
+                 r"cet apr[eè]s[- ]?midi|ce midi|asap|immediately)\b", t):
         return meeting
     if re.search(r"\b(tomorrow|demain)\b", t):
         return meeting + timedelta(days=1)

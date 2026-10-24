@@ -48,20 +48,26 @@ def snap_to_sentences(words: list[Word], labels: list[str]) -> list[str]:
     words around it run on (no full stop before, no capital after, no pause)."""
     labels = list(labels)
     changes = [i for i in range(1, len(words)) if labels[i] != labels[i - 1]]
+    settled = 0  # where the previous change ended up: words before it aren't moved again
     for n, i in enumerate(changes):
-        if _ends_sentence(words[i - 1]) or not words[i].text.strip()[:1].islower() or words[i].start - words[i - 1].end > 1.0:
-            continue
-        lo = max(changes[n - 1] if n else 0, i - SNAP_WORDS)
-        hi = min(changes[n + 1] if n + 1 < len(changes) else len(words), i + SNAP_WORDS)
-        # Each side keeps at least one word: a short reply must not vanish into its neighbour.
-        ends = [j for j in range(lo + 1, hi) if _ends_sentence(words[j - 1])]
-        if not ends:
-            continue
-        j = min(ends, key=lambda j: abs(j - i))  # the change goes between words j-1 and j
-        if j < i:
-            labels[j:i] = [labels[i]] * (i - j)  # the start of the next speaker's sentence
-        elif j > i:
-            labels[i:j] = [labels[i - 1]] * (j - i)  # the end of the previous speaker's sentence
+        nxt = changes[n + 1] if n + 1 < len(changes) else len(words)
+        j = i
+        runs_on = (not _ends_sentence(words[i - 1]) and words[i].text.strip()[:1].islower()
+                   and words[i].start - words[i - 1].end <= 1.5)
+        if runs_on:
+            lo, hi = max(settled, i - SNAP_WORDS), min(nxt, i + SNAP_WORDS)
+            # Each side keeps at least one word — except the end of a sentence that came apart on
+            # its own ("…personne | ne la met à jour." then someone else): it goes back to its start.
+            ends = [k for k in range(lo + 1, hi) if _ends_sentence(words[k - 1])]
+            if not ends and nxt - i <= 6 and _ends_sentence(words[nxt - 1]):
+                ends = [nxt]
+            if ends:
+                j = min(ends, key=lambda k: abs(k - i))  # the change goes between words j-1 and j
+                if j < i:
+                    labels[j:i] = [labels[i]] * (i - j)  # the start of the next speaker's sentence
+                elif j > i:
+                    labels[i:j] = [labels[i - 1]] * (j - i)  # the end of the previous speaker's sentence
+        settled = j
     return labels
 
 

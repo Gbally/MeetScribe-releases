@@ -254,6 +254,13 @@ def _action_lines(raw: str) -> list[dict]:
     return out
 
 
+# Resolutions about one's own behaviour, not tasks ("je vais faire attention", "I'll try to be clearer").
+BEHAVIOUR = re.compile(r"^(faire attention|be careful|pay attention|try to|try and|essayer|keep in mind|garder en t[eê]te|"
+                       r"r[ée]fl[ée]chir|think about|be more|[eê]tre plus|take care to|veiller [àa])", re.I)
+# "je vais en parler à l'équipe" copied as the task: the subject goes ("en parler à l'équipe").
+SUBJECT = re.compile(r"^(je vais |je m'en |je |j'|i'll |i will |i'm going to |we'll |we will |on va |nous allons )", re.I)
+
+
 def check_actions(raw: str, transcript: str, meeting) -> list[dict]:
     """Keeps the extracted commitments whose quote really is in the transcript (anything else
     was made up), places them at that line, and keeps a deadline only when that date is said
@@ -267,8 +274,9 @@ def check_actions(raw: str, transcript: str, meeting) -> list[dict]:
     out = []
     for item in _action_lines(raw):
         task, owner = str(item.get("task", "")).strip(), str(item.get("owner", "")).strip()
+        task = SUBJECT.sub("", task).strip()
         quote = set(_norm_words(str(item.get("quote", ""))))
-        if not task or len(quote) < 2:
+        if not task or len(quote) < 2 or BEHAVIOUR.match(task):
             continue
         scores = [len(quote & w) / len(quote) for w in words_of]
         best = max(scores, default=0.0)

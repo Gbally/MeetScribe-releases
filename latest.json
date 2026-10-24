@@ -1,7 +1,7 @@
 {
- "version": "0.5.8",
- "build": 71,
- "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.5.8/MeetScribe-0.5.8.dmg",
- "sha256": "81d3432deb414ea7557cb277a969b48e01579e6c5fcc7e46f715ed9c8a930ae8",
- "notes": "Qwen3.5 4B for 8 GB Macs: more accurate to-dos, dates and summaries. Better speaker separation (meetings with 4+ people) and automatic names from the calendar."
+ "version": "0.6.0",
+ "build": 80,
+ "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.6.0/MeetScribe-0.6.0.dmg",
+ "sha256": "50057b9ad6d93b4a779de43002864c56a2045edf6ba9428cd49ecba816f5de17",
+ "notes": "Import transcripts from Teams, Zoom, Google Meet, Granola (.vtt, .srt, .docx, .txt). Send notes to Apple Notes, to-dos to Things, or a Markdown copy to a folder (Obsidian). Fewer missed to-dos, real decisions instead of announcements, vocabulary learned from earlier meetings."
 }

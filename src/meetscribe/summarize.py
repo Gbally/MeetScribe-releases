@@ -280,13 +280,21 @@ def check_actions(raw: str, transcript: str, meeting) -> list[dict]:
             continue
         scores = [len(quote & w) / len(quote) for w in words_of]
         best = max(scores, default=0.0)
-        if best < 0.7:
-            continue
-        # A common quote ("yes, I'll do it") can fit several lines: take the one nearest to
-        # the time the model gave.
         said = _seconds(str(item.get("at", ""))) if re.fullmatch(r"\d+:\d{2}:\d{2}", str(item.get("at", ""))) else None
-        close = [i for i, sc in enumerate(scores) if sc >= best - 0.1]
-        best_i = min(close, key=lambda i: abs(lines[i][0] - said)) if said is not None else close[0]
+        if best >= 0.7:
+            # A common quote ("yes, I'll do it") can fit several lines: take the one nearest to
+            # the time the model gave.
+            close = [i for i, sc in enumerate(scores) if sc >= best - 0.1]
+            best_i = min(close, key=lambda i: abs(lines[i][0] - said)) if said is not None else close[0]
+        else:
+            # Some models translate the quote ("je l'envoie demain" → "I'll send it tomorrow"): then
+            # the line at the time they gave counts, if the owner says it or is named in it.
+            first = (_norm_words(owner) or [""])[0]
+            near = [i for i, (t, sp, _) in enumerate(lines) if said is not None and abs(t - said) <= 3
+                    and first and (first == (_norm_words(sp) or [""])[0] or first in words_of[i])]
+            if not near:
+                continue
+            best_i = min(near, key=lambda i: abs(lines[i][0] - said))
         # "Guillaume, can you prepare …?" said by Sarah: the task is Guillaume's, not hers. Only
         # the sentence the quote comes from counts: a long turn can mention someone ("the roles
         # Peter mentioned"), ask him something else and ask something of everyone ("please…").
@@ -604,16 +612,22 @@ def _actions_context(actions: list[dict]) -> str:
 
 
 def _drop_task_decisions(body: str, actions: list[dict]) -> str:
-    """Removes "decisions" that are really tasks ("Sarah to contact W4…", "Marc will build…"):
-    small models file commitments under Decisions too, though they are listed as action items."""
-    owners = {a["owner"].split()[0].lower() for a in actions if a.get("owner")}
+    """Removes "decisions" that are really one of the action items again ("Sarah to contact W4…"
+    when "contact W4 for a quote" is Sarah's to-do): small models file commitments under
+    Decisions too. "Oliver to go to the final round" — no such to-do — is a decision and stays."""
+    tasks: dict[str, list[set]] = {}
+    for a in actions:
+        if a.get("owner"):
+            tasks.setdefault(a["owner"].split()[0].lower(), []).append(_content(a["task"]))
     out, in_decisions = [], False
     for line in body.splitlines():
         if re.match(r"^#{1,4}\s", line):
             in_decisions = "decision" in line.lower()
         m = re.match(r"^\s*[-*•]\s+\**([A-Za-zÀ-ÿ]+)(?: \d+)?\**(?: \([A-Z]{2}\))?\s+(to|will|shall|must|va|doit)\b", line)
-        if in_decisions and m and m[1].lower() in owners:  # also "Speaker 1 (FR) will…"
-            continue
+        if in_decisions and m and m[1].lower() in tasks:  # also "Speaker 1 (FR) will…"
+            words = _content(line[m.end():])
+            if any(t and len(words & t) >= min(2, len(t)) for t in tasks[m[1].lower()]):
+                continue
         out.append(line)
     text = "\n".join(out)
     # A Decisions section left empty by the cleanup says so.

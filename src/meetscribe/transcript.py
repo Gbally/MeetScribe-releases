@@ -34,11 +34,42 @@ def speaker_for(word: Word, turns: list[Turn]) -> int:
     return min(turns, key=lambda t: min(abs(mid - t.start), abs(mid - t.end))).speaker
 
 
+SNAP_WORDS = 8  # how far a change of speaker can move to reach the end of a sentence
+
+
+def _ends_sentence(w: Word) -> bool:
+    return w.text.rstrip().endswith((".", "?", "!", "…"))
+
+
+def snap_to_sentences(words: list[Word], labels: list[str]) -> list[str]:
+    """People rarely take over in the middle of a sentence. When the voices come apart there
+    ("…if we reach the fourth | quarter target…", often a reply chained on in under a second),
+    the change moves to the nearest end of sentence — a few words at most, and only when the
+    words around it run on (no full stop before, no capital after, no pause)."""
+    labels = list(labels)
+    changes = [i for i in range(1, len(words)) if labels[i] != labels[i - 1]]
+    for n, i in enumerate(changes):
+        if _ends_sentence(words[i - 1]) or not words[i].text.strip()[:1].islower() or words[i].start - words[i - 1].end > 1.0:
+            continue
+        lo = max(changes[n - 1] if n else 0, i - SNAP_WORDS)
+        hi = min(changes[n + 1] if n + 1 < len(changes) else len(words), i + SNAP_WORDS)
+        # Each side keeps at least one word: a short reply must not vanish into its neighbour.
+        ends = [j for j in range(lo + 1, hi) if _ends_sentence(words[j - 1])]
+        if not ends:
+            continue
+        j = min(ends, key=lambda j: abs(j - i))  # the change goes between words j-1 and j
+        if j < i:
+            labels[j:i] = [labels[i]] * (i - j)  # the start of the next speaker's sentence
+        elif j > i:
+            labels[i:j] = [labels[i - 1]] * (j - i)  # the end of the previous speaker's sentence
+    return labels
+
+
 def group_words(words: list[Word], label_of) -> list[Utterance]:
     """Group consecutive words of the same speaker into utterances."""
     out: list[Utterance] = []
-    for w in words:
-        label = label_of(w)
+    labels = snap_to_sentences(words, [label_of(w) for w in words])
+    for w, label in zip(words, labels):
         last = out[-1] if out else None
         if last and last.speaker == label and w.start - last.end < PAUSE_SPLIT and last.lang == w.lang:
             last.text += w.text

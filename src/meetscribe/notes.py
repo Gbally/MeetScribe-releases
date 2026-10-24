@@ -84,13 +84,19 @@ def _section_key(heading: str) -> str:
     return key
 
 
+BASE_SECTIONS = ("summary", "decision", "action", "to-do", "todo", "question")
+
+
 def parse_notes(md: str) -> dict:
     sections: dict[str, list[str]] = {}
     current = None
     for line in md.splitlines():
         m = re.match(r"^#{1,4}\s+(.*)$", line)
-        if m:
-            current = _section_key(m.group(1))
+        # Some models write the headings as "**Résumé**" or "Décisions :" instead of "## …".
+        label = m or re.match(r"^\s*(?:\*\*([^*]{3,40}?)\s*:?\*\*|([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ ]{2,30}?))\s*:?\s*$", line)
+        key = _section_key(next(g for g in label.groups() if g)) if label else ""
+        if m or (label and any(n in key for n in BASE_SECTIONS)):
+            current = key
             sections[current] = []
         elif current:
             sections[current].append(line)
@@ -101,9 +107,8 @@ def parse_notes(md: str) -> dict:
                 return lines
         return []
 
-    base = ("summary", "decision", "action", "to-do", "todo", "question")
     extra = [{"title": title_case(k), "items": _table_rows(v) + _bullets(v)} for k, v in sections.items()
-             if not any(n in k for n in base)]
+             if not any(n in k for n in BASE_SECTIONS)]
     return {
         "summary": _bullets(get("summary")),
         "decisions": _bullets(get("decision")),

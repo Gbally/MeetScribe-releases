@@ -188,6 +188,12 @@ class LLM:
         return re.sub(r"<think>.*?</think>", "", out, flags=re.S).strip()
 
 
+def _plain_text(text: str) -> str:
+    import unicodedata
+
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
+
+
 def _norm_words(text: str) -> list[str]:
     import unicodedata
 
@@ -269,12 +275,18 @@ def check_actions(raw: str, transcript: str, meeting) -> list[dict]:
         said = _seconds(str(item.get("at", ""))) if re.fullmatch(r"\d+:\d{2}:\d{2}", str(item.get("at", ""))) else None
         close = [i for i, sc in enumerate(scores) if sc >= best - 0.1]
         best_i = min(close, key=lambda i: abs(lines[i][0] - said)) if said is not None else close[0]
-        # "Guillaume, can you prepare …?" said by Sarah: the task is Guillaume's, not hers.
+        # "Guillaume, can you prepare …?" said by Sarah: the task is Guillaume's, not hers. Only
+        # the sentence the quote comes from counts: a long turn can mention someone ("the roles
+        # Peter mentioned"), ask him something else and ask something of everyone ("please…").
         t_line, speaker, text = lines[best_i]
         if owner.lower() == speaker.lower():
-            asked = [sp for sp in speakers if sp.lower() != speaker.lower()
-                     and _norm_words(sp)[:1] and _norm_words(sp)[0] in words_of[best_i]]
-            if len(asked) == 1 and REQUEST.search(text):
+            sentences = re.split(r"(?<=[.?!])\s+", text)
+            k = max(range(len(sentences)), key=lambda j: len(quote & set(_norm_words(sentences[j]))))
+            ask = sentences[k]
+            tokens = " ".join(re.findall(r"[a-z0-9]+|[,?]", _plain_text(ask)))  # "sarah , can you"
+            asked = [sp for sp in speakers if sp.lower() != speaker.lower() and _norm_words(sp)[:1]
+                     and re.search(rf"\b{_norm_words(sp)[0]} [,?]", tokens)]
+            if len(asked) == 1 and REQUEST.search(ask):
                 owner = asked[0]
         due = str(item.get("due", "")).strip()
         if due and meeting:

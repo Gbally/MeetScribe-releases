@@ -93,7 +93,7 @@ final class Updater: ObservableObject {
         let dmg = work.appendingPathComponent("update.dmg")
         try data.write(to: dmg)
         try run("/usr/bin/hdiutil", ["attach", "-nobrowse", "-readonly", "-mountpoint", mount.path, dmg.path])
-        defer { try? run("/usr/bin/hdiutil", ["detach", mount.path, "-force"]) }
+        defer { _ = try? run("/usr/bin/hdiutil", ["detach", mount.path, "-force"]) }
 
         let newApp = mount.appendingPathComponent("MeetScribe.app")
         guard FileManager.default.fileExists(atPath: newApp.path) else { throw UpdateError(tr("The update doesn't contain MeetScribe.")) }

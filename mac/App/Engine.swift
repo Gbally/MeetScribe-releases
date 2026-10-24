@@ -93,9 +93,17 @@ enum Engine {
                     cont.resume(returning: Result(ok: false, errorTail: error.localizedDescription))
                 }
             }
-        } onCancel: {
-            if process.isRunning { process.terminate() }
+        } onCancel: { [stopper = Stopper(process)] in
+            stopper.stop()
         }
+    }
+
+    /// Lets the cancellation handler (which may run on any thread) stop the process: Process is
+    /// thread-safe for isRunning / terminate, but not marked Sendable.
+    private final class Stopper: @unchecked Sendable {
+        private let process: Process
+        init(_ process: Process) { self.process = process }
+        func stop() { if process.isRunning { process.terminate() } }
     }
 
     /// Appends to ~/Library/Application Support/MeetScribe/engine.log (kept under ~1 MB).

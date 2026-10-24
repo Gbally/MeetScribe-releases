@@ -1058,7 +1058,7 @@ final class AppModel: ObservableObject {
     private func autoExport(_ folder: URL?) {
         guard settings.autoExport, !settings.exportFolderPath.isEmpty, let folder, let m = Meeting.load(folder), m.notes != nil
         else { return }
-        try? Export.saveToFolder(m, folder: URL(fileURLWithPath: settings.exportFolderPath, isDirectory: true))
+        _ = try? Export.saveToFolder(m, folder: URL(fileURLWithPath: settings.exportFolderPath, isDirectory: true))
     }
 
     func show(_ message: String) {

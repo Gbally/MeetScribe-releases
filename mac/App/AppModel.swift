@@ -18,6 +18,14 @@ enum Job: Equatable {
         case .processFile, .ask: return nil
         }
     }
+
+    /// A recording or file that becomes a meeting (not a redo of an existing one).
+    var isNewMeeting: Bool {
+        switch self {
+        case .process, .processFile: return true
+        case .rename, .resummarize, .ask: return false
+        }
+    }
 }
 
 struct AskResult: Decodable, Equatable {
@@ -489,7 +497,8 @@ final class AppModel: ObservableObject {
             if case .ask = job {
                 if !result.ok { askError = result.errorTail.isEmpty ? tr("Something went wrong.") : result.errorTail }
             } else {
-                if result.ok { autoExport(finalFolder ?? lastDoneFolder) }
+                // New meetings only: a regenerated one would overwrite what was edited in the notes app.
+                if result.ok, job.isNewMeeting { autoExport(finalFolder ?? lastDoneFolder) }
                 notify(job: job, ok: result.ok, folder: finalFolder)
             }
             currentJob = nil
@@ -1055,10 +1064,13 @@ final class AppModel: ObservableObject {
     }
 
     /// A finished meeting's notes, copied to the export folder when that's switched on.
+    /// Never over an existing copy (e.g. "Transcribe again"): it may have been edited in the notes app.
     private func autoExport(_ folder: URL?) {
         guard settings.autoExport, !settings.exportFolderPath.isEmpty, let folder, let m = Meeting.load(folder), m.notes != nil
         else { return }
-        _ = try? Export.saveToFolder(m, folder: URL(fileURLWithPath: settings.exportFolderPath, isDirectory: true))
+        let target = URL(fileURLWithPath: settings.exportFolderPath, isDirectory: true)
+        guard !FileManager.default.fileExists(atPath: Export.fileURL(m, folder: target).path) else { return }
+        _ = try? Export.saveToFolder(m, folder: target)
     }
 
     func show(_ message: String) {

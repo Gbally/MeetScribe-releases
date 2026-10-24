@@ -28,7 +28,10 @@ RECORDER = PROJECT_ROOT / "bin" / "meeting-recorder"
 def new_session_dir(cfg: Config, title: str, when: datetime | None = None) -> Path:
     slug = re.sub(r"[^\w-]+", "-", title).strip("-")[:50]
     name = (when or datetime.now()).strftime("%Y-%m-%d_%H%M") + (f"_{slug}" if slug else "")
-    path = cfg.notes_path / name
+    path, n = cfg.notes_path / name, 1
+    while path.exists() and any(path.iterdir()):  # never write over another meeting (same name, same minute)
+        n += 1
+        path = cfg.notes_path / f"{name}-{n}"
     path.mkdir(parents=True, exist_ok=True)
     return path
 

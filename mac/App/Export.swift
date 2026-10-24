@@ -18,14 +18,19 @@ enum Export {
         return (front + lines).joined(separator: "\n")
     }
 
-    /// "2026-10-23 Weekly sync.md" in `folder`; an earlier export of the same meeting is replaced.
-    @discardableResult
-    static func saveToFolder(_ m: Meeting, folder: URL) throws -> URL {
-        guard let text = markdown(m) else { throw CocoaError(.fileReadNoSuchFile) }
+    /// "2026-10-23 Weekly sync.md" in `folder`.
+    static func fileURL(_ m: Meeting, folder: URL) -> URL {
         let day = m.date.formatted(.iso8601.year().month().day())
         let safe = m.title.replacingOccurrences(of: "[/\\\\:*?\"<>|]", with: "-", options: .regularExpression)
             .trimmingCharacters(in: .whitespaces)
-        let file = folder.appendingPathComponent("\(day) \(safe.isEmpty ? tr("Meeting") : String(safe.prefix(80))).md")
+        return folder.appendingPathComponent("\(day) \(safe.isEmpty ? tr("Meeting") : String(safe.prefix(80))).md")
+    }
+
+    /// Writes the meeting's Markdown copy into `folder`; an earlier export of it is replaced.
+    @discardableResult
+    static func saveToFolder(_ m: Meeting, folder: URL) throws -> URL {
+        guard let text = markdown(m) else { throw CocoaError(.fileReadNoSuchFile) }
+        let file = fileURL(m, folder: folder)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try text.write(to: file, atomically: true, encoding: .utf8)
         return file

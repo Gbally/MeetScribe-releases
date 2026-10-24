@@ -29,7 +29,7 @@ def read_transcript(path: Path, me: str = "") -> list[Utterance]:
         text = _docx_text(path)
     else:
         raw = path.read_bytes()
-        text = raw.decode("utf-8-sig", errors="replace") if not raw.startswith(b"\xff\xfe") else raw.decode("utf-16")
+        text = raw.decode("utf-16") if raw.startswith((b"\xff\xfe", b"\xfe\xff")) else raw.decode("utf-8-sig", errors="replace")
     if suffix in (".vtt", ".srt") or re.search(rf"^{TIME}\s*-->\s*{TIME}", text, re.M):
         utts = _cues(text)
     else:
@@ -74,11 +74,18 @@ def _speaker_text(text: str) -> tuple[str, str]:
     return "", text
 
 
+# Capitalised labels that come before a colon in notes, not names ("Note: …", "Update: …").
+NOT_NAMES = set("""note notes update updates action actions summary agenda question questions answer important todo
+next steps decision decisions info fyi reminder remarque attention résumé resume ordre du jour sujet point
+ok okay yes no thanks merci oui non""".split()) | {"next steps", "ordre du jour", "to do"}
+
+
 def _looks_like_name(label: str) -> bool:
-    """ "Sarah Martin", "Speaker 2", "Me", "Dr. Ana Lima" — not "Note" or a sentence."""
+    """ "Sarah Martin", "Speaker 2", "Me", "Dr. Ana Lima" — not "Note", a time or a sentence."""
     label = label.strip().strip("*").strip()
     words = label.split()
-    return (0 < len(words) <= 4 and not re.search(r"https?|www\.", label)
+    return (0 < len(words) <= 4 and not re.search(r"https?|www\.", label) and re.search(r"[^\W\d_]", label) is not None
+            and label.lower() not in NOT_NAMES and not re.fullmatch(r"Q[1-4]", label)
             and all(w[:1].isupper() or w[:1].isdigit() or w.lower() in {"de", "van", "von", "da", "le", "la"} for w in words))
 
 
@@ -109,7 +116,10 @@ def _lines(text: str) -> list[Utterance]:
             continue
         t = None
         m = re.match(rf"^\[?\(?{TIME}\)?\]?\s*[-–—]?\s*", line)
-        if m and m.end() < len(line) or (m and not pending):
+        if m and m.end() == len(line):  # a time alone on its line (after the speaker's name, or before)
+            pending_t = _seconds(*m.groups())
+            continue
+        if m:
             t, line = _seconds(*m.groups()), line[m.end():].strip()
         # "Sarah Martin  0:03" / "Sarah Martin (00:03)" alone on its line: a header
         h = re.match(rf"^(.{{1,40}}?)\s*[\(\[]?{TIME}[\)\]]?$", line)

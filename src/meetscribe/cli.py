@@ -152,7 +152,18 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
     # Whisper spells names it has been told about: yours, the invited people's, the meeting title.
     told = [cfg.me if cfg.me != "Me" else "", calendar.get("title", "")]
     told += [a.get("name", "") for a in calendar.get("attendees") or []]
-    vocabulary = ", ".join(x for x in [cfg.vocabulary.strip(" ,"), *told] if x)
+    # …and the names and jargon that came back in earlier meetings of the same series.
+    from .vocab import learned
+    from .voices import load_library
+
+    try:
+        earlier = learned(cfg.notes_path, calendar, [cfg.vocabulary, *told], list(load_library()), cfg.me)
+    except Exception as e:  # a hint only: never worth failing the recording for
+        print(f"   (no vocabulary from earlier meetings: {e})")
+        earlier = []
+    if earlier:
+        print("   vocabulary from earlier meetings: " + ", ".join(earlier))
+    vocabulary = ", ".join(x for x in [cfg.vocabulary.strip(" ,"), *told, *earlier] if x)
 
     def work(a):  # rough seconds of processing per track (model load + Whisper ≈ 10× real time)
         return 8 + len(a) / 16000 / 10 if a is not None else 0

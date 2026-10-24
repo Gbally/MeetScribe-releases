@@ -39,6 +39,9 @@ Your recordings, transcripts and notes are plain files in a folder you choose.
   **Record**; when the calendar meeting is over, it offers **Stop & create notes**.
 - **Languages:** tick the languages your meetings use (e.g. English + French) and switches are
   detected every few seconds; notes are written in the meeting's main language (or a fixed one).
+- **Learns your jargon:** names and terms that came back in earlier meetings of the same series
+  (calendar title or the same people) are given to the transcription, so "Godot" or "PS5" stay
+  spelled right; your own vocabulary (Settings) comes first.
 - **Reminders:** send your to-dos to Apple Reminders.
 - **Import a transcript** (⋯ → Import a transcript…): a `.vtt`, `.srt`, `.docx`, `.txt` or `.md`
   saved by Teams, Zoom, Google Meet, Granola, Otter… gets the same notes as a recording, with

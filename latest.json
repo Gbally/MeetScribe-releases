@@ -1,7 +1,7 @@
 {
- "version": "0.5.6",
- "build": 66,
- "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.5.6/MeetScribe-0.5.6.dmg",
- "sha256": "73d902e186f72af209dd4c0955e5bb996f03244c522726019e9d8507a98e90b0",
- "notes": "Much more useful notes: summary by topic with key figures and risks, an options table for workshops, reliable action items (each with when it was said, no invented deadlines), speakers named from the calendar, names and jargon applied to the whole meeting, and faster mixed-language meetings."
+ "version": "0.5.8",
+ "build": 71,
+ "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.5.8/MeetScribe-0.5.8.dmg",
+ "sha256": "81d3432deb414ea7557cb277a969b48e01579e6c5fcc7e46f715ed9c8a930ae8",
+ "notes": "Qwen3.5 4B for 8 GB Macs: more accurate to-dos, dates and summaries. Better speaker separation (meetings with 4+ people) and automatic names from the calendar."
 }

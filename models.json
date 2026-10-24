@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-10-23",
+  "updated": "2026-10-24",
   "notes": [
     {
       "id": "qwen3-4b",
@@ -13,13 +13,33 @@
       "speed": 4,
       "license": "Apache-2.0",
       "tested": "2026-10-21",
-      "description": "Light and fast. Best for 8 GB Macs.",
+      "description": "Lightest and fastest. For 8 GB Macs short on disk space.",
       "descriptions": {
-        "fr": "Léger et rapide. Idéal pour les Mac avec 8 Go.",
-        "es": "Ligero y rápido. Ideal para Mac con 8 GB.",
-        "pt": "Leve e rápido. Ideal para Macs com 8 GB.",
-        "ja": "軽くて高速。メモリ 8 GB の Mac に最適。",
-        "zh-Hans": "轻量快速。适合 8 GB 内存的 Mac。"
+        "fr": "Le plus léger et le plus rapide. Pour les Mac 8 Go avec peu d'espace disque.",
+        "es": "El más ligero y rápido. Para Mac de 8 GB con poco espacio en disco.",
+        "pt": "O mais leve e rápido. Para Macs de 8 GB com pouco espaço em disco.",
+        "ja": "最も軽く高速。ディスク容量の少ない 8 GB の Mac 向け。",
+        "zh-Hans": "最轻最快。适合磁盘空间不足的 8 GB Mac。"
+      }
+    },
+    {
+      "id": "qwen3.5-4b",
+      "repo": "mlx-community/Qwen3.5-4B-4bit",
+      "name": "Qwen3.5 4B",
+      "size_gb": 3.1,
+      "min_ram_gb": 8,
+      "recommended_ram_gb": 8,
+      "quality": 3,
+      "speed": 3,
+      "license": "Apache-2.0",
+      "tested": "2026-10-24",
+      "description": "Best notes on 8 GB Macs: more accurate to-dos, dates and summaries.",
+      "descriptions": {
+        "fr": "Les meilleures notes sur un Mac 8 Go : tâches, dates et résumés plus justes.",
+        "es": "Las mejores notas en un Mac de 8 GB: tareas, fechas y resúmenes más precisos.",
+        "pt": "As melhores notas em um Mac de 8 GB: tarefas, datas e resumos mais precisos.",
+        "ja": "8 GB の Mac で最良のメモ：タスク・日付・要約がより正確。",
+        "zh-Hans": "8 GB Mac 上最好的笔记：待办、日期和摘要更准确。"
       }
     },
     {
@@ -29,7 +49,7 @@
       "size_gb": 4.6,
       "min_ram_gb": 16,
       "recommended_ram_gb": 16,
-      "quality": 3,
+      "quality": 4,
       "speed": 3,
       "license": "Apache-2.0",
       "tested": "2026-10-21",

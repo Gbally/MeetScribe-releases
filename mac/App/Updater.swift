@@ -103,7 +103,9 @@ final class Updater: ObservableObject {
         return staged
     }
 
-    /// The new app must satisfy the running app's designated requirement (same certificate).
+    /// The new app must satisfy the running app's designated requirement (same certificate) — or,
+    /// when this build names the developer's Apple team (MSDeveloperTeam in Info.plist), be signed
+    /// with that team's Developer ID: the one-time move from the local certificate to a notarized one.
     private static func verifySameSigner(_ app: URL) throws {
         var me: SecCode?
         var meStatic: SecStaticCode?
@@ -115,7 +117,16 @@ final class Updater: ObservableObject {
               SecStaticCodeCreateWithPath(app as CFURL, [], &newCode) == errSecSuccess, let newCode else {
             throw UpdateError(tr("Couldn't check the update's signature."))
         }
-        let status = SecStaticCodeCheckValidity(newCode, SecCSFlags(rawValue: kSecCSCheckAllArchitectures), requirement)
+        var status = SecStaticCodeCheckValidity(newCode, SecCSFlags(rawValue: kSecCSCheckAllArchitectures), requirement)
+        if status != errSecSuccess, let team = Bundle.main.object(forInfoDictionaryKey: "MSDeveloperTeam") as? String,
+           team.range(of: "^[A-Z0-9]{10}$", options: .regularExpression) != nil {
+            var developerID: SecRequirement?
+            let text = "anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and "
+                + "certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = \"\(team)\""
+            if SecRequirementCreateWithString(text as CFString, [], &developerID) == errSecSuccess, let developerID {
+                status = SecStaticCodeCheckValidity(newCode, SecCSFlags(rawValue: kSecCSCheckAllArchitectures), developerID)
+            }
+        }
         guard status == errSecSuccess else {
             throw UpdateError(tr("The update isn't signed by the MeetScribe developer — not installed."))
         }

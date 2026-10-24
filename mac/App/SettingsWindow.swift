@@ -277,6 +277,33 @@ struct NotesPane: View {
             }
             Caption("Applies to new meetings. To redo one: open it → ⋯ → Regenerate notes.")
         }
+        ExportSection()
+    }
+}
+
+/// A notes app's folder (Obsidian vault, Logseq…) that gets a Markdown copy of the notes.
+struct ExportSection: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        Section("Export") {
+            LabeledContent("Copy notes to a folder") {
+                HStack {
+                    Text(model.settings.exportFolderPath.isEmpty ? tr("None")
+                         : (model.settings.exportFolderPath as NSString).abbreviatingWithTildeInPath)
+                        .foregroundColor(.secondary).lineLimit(1).truncationMode(.middle)
+                    Button("Choose…") {
+                        if let url = model.pickFolder() { model.settings.exportFolderPath = url.path }
+                    }
+                    if !model.settings.exportFolderPath.isEmpty {
+                        Button("Remove") { model.settings.exportFolderPath = ""; model.settings.autoExport = false }
+                    }
+                }
+            }
+            Toggle("Copy every new meeting's notes there automatically", isOn: $model.settings.autoExport)
+                .disabled(model.settings.exportFolderPath.isEmpty)
+            Caption("Markdown files with the date, participants and a #meeting tag — e.g. for an Obsidian vault. Apple Notes and Things are in each meeting's ⋯ menu.")
+        }
     }
 }
 

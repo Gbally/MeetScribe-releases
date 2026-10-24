@@ -2,6 +2,7 @@ import AppKit
 import AVFoundation
 import Foundation
 import ServiceManagement
+import UniformTypeIdentifiers
 import UserNotifications
 
 enum Job: Equatable {
@@ -453,6 +454,7 @@ final class AppModel: ObservableObject {
         jobStatus = tr("Starting…")
         jobProgress = nil
         jobStarted = Date()
+        lastDoneFolder = nil
         Engine.writeConfig(settings)
 
         runner = Task {
@@ -461,6 +463,9 @@ final class AppModel: ObservableObject {
             let result = await Engine.meetscribe(args) { [weak self] line in
                 if line.hasPrefix("@@result "), let data = line.dropFirst(9).data(using: .utf8) {
                     self?.askResult = try? JSONDecoder().decode(AskResult.self, from: data)
+                } else if line.hasPrefix("✅ Done"), let arrow = line.range(of: "→ ") {
+                    // An imported file's meeting folder is only known from the engine's last line.
+                    self?.lastDoneFolder = URL(fileURLWithPath: line[arrow.upperBound...].trimmingCharacters(in: .whitespaces))
                 } else if let text = localizedStep(line) {
                     self?.jobStatus = text
                 } else if line.hasPrefix("@@progress "), let v = Double(line.dropFirst(11)) {
@@ -484,6 +489,7 @@ final class AppModel: ObservableObject {
             if case .ask = job {
                 if !result.ok { askError = result.errorTail.isEmpty ? tr("Something went wrong.") : result.errorTail }
             } else {
+                if result.ok { autoExport(finalFolder ?? lastDoneFolder) }
                 notify(job: job, ok: result.ok, folder: finalFolder)
             }
             currentJob = nil
@@ -1016,6 +1022,45 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - Export
+
+    private var lastDoneFolder: URL?
+
+    func exportToFolder(_ id: Meeting.ID) {
+        guard let m = meeting(id) else { return }
+        guard !settings.exportFolderPath.isEmpty else {
+            guard let url = pickFolder() else { return }
+            settings.exportFolderPath = url.path
+            return exportToFolder(id)
+        }
+        do {
+            let file = try Export.saveToFolder(m, folder: URL(fileURLWithPath: settings.exportFolderPath, isDirectory: true))
+            show(tr("Saved to %@.", file.lastPathComponent))
+        } catch {
+            show(tr("Couldn't save to the export folder: %@", error.localizedDescription))
+        }
+    }
+
+    func exportToAppleNotes(_ id: Meeting.ID) {
+        guard let m = meeting(id) else { return }
+        show(Export.appleNotes(m) ? tr("Added to Apple Notes.")
+             : tr("Couldn't add to Apple Notes — allow MeetScribe in System Settings → Privacy & Security → Automation."))
+    }
+
+    func sendToThings(_ id: Meeting.ID, mineOnly: Bool) {
+        guard let m = meeting(id), let actions = m.notes?.actions else { return }
+        let items = actions.enumerated().filter { !m.done.contains($0.offset) && (!mineOnly || isMine($0.element.owner)) }.map(\.element)
+        guard !items.isEmpty else { show(mineOnly ? tr("No open to-dos for you in this meeting.") : tr("No open to-dos.")); return }
+        if !Export.things(items, meetingTitle: m.title) { show(tr("Couldn't open Things.")) }
+    }
+
+    /// A finished meeting's notes, copied to the export folder when that's switched on.
+    private func autoExport(_ folder: URL?) {
+        guard settings.autoExport, !settings.exportFolderPath.isEmpty, let folder, let m = Meeting.load(folder), m.notes != nil
+        else { return }
+        try? Export.saveToFolder(m, folder: URL(fileURLWithPath: settings.exportFolderPath, isDirectory: true))
+    }
+
     func show(_ message: String) {
         toast = message
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
@@ -1162,6 +1207,15 @@ final class AppModel: ObservableObject {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.audio, .movie]
         panel.message = tr("Choose a meeting recording to transcribe")
+        if panel.runModal() == .OK, let url = panel.url { enqueue(.processFile(url)) }
+    }
+
+    /// A transcript saved by Teams, Zoom, Google Meet, Granola, Otter… gets the same notes as a recording.
+    func chooseTranscriptFile() {
+        NSApp.activate(ignoringOtherApps: true)
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = ["vtt", "srt", "docx", "txt", "md"].compactMap { UTType(filenameExtension: $0) }
+        panel.message = tr("Choose a transcript from Teams, Zoom, Google Meet, Granola… (.vtt, .srt, .docx, .txt)")
         if panel.runModal() == .OK, let url = panel.url { enqueue(.processFile(url)) }
     }
 

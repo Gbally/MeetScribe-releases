@@ -40,6 +40,15 @@ struct MeetingView: View {
                             Button("Email the notes…") { model.emailNotes(id) }.disabled(m.notes == nil)
                             Button("Add my to-dos to Reminders") { model.addToReminders(id, mineOnly: true) }.disabled(m.notes == nil)
                             Button("Add all to-dos to Reminders") { model.addToReminders(id, mineOnly: false) }.disabled(m.notes == nil)
+                            Menu("Send to…") {
+                                Button("Apple Notes") { model.exportToAppleNotes(id) }
+                                Button("Export folder (Markdown)") { model.exportToFolder(id) }
+                                if Export.hasThings {
+                                    Button("Things — my to-dos") { model.sendToThings(id, mineOnly: true) }
+                                    Button("Things — all to-dos") { model.sendToThings(id, mineOnly: false) }
+                                }
+                            }
+                            .disabled(m.notes == nil)
                         }
                         Divider()
                         Group {

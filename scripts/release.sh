@@ -24,6 +24,7 @@ if [ "$PUBLISH" = 0 ]; then
   [ -f signing/MeetScribe-signing.keychain-db ] || [ -n "$SIGN_ID" ] || {
     echo "No stable signing identity: installed apps would refuse the update."; exit 1; }
   ./scripts/build_app.sh
+  [ -n "$SIGN_ID" ] && ./scripts/notarize.sh "dist/MeetScribe-$VERSION.dmg"
   BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" build/MeetScribe.app/Contents/Info.plist)
   DMG="MeetScribe-$VERSION.dmg"
   rm -rf "$OUT" && mkdir -p "$OUT"

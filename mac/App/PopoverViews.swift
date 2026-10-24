@@ -210,6 +210,7 @@ struct HomeView: View {
                 .buttonStyle(.borderless).help("Settings")
             Menu {
                 Button("Transcribe an audio file…") { model.chooseAudioFile() }.disabled(model.phase != .ready)
+                Button("Import a transcript…") { model.chooseTranscriptFile() }.disabled(model.phase != .ready)
                 Button("Open notes folder") { NSWorkspace.shared.open(model.settings.notesFolder) }
                 Divider()
                 Button("Quit MeetScribe") { NSApp.terminate(nil) }

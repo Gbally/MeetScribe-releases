@@ -56,12 +56,14 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSUIElement</key><true/>
   <key>LSArchitecturePriority</key><array><string>arm64</string></array>
   <key>MSReleasesRepo</key><string>Gbally/MeetScribe-releases</string>
+  <key>MSDeveloperTeam</key><string>${DEVELOPER_TEAM:-}</string>
   <key>NSMicrophoneUsageDescription</key><string>MeetScribe records your voice during meetings to create a transcript. Audio stays on this Mac.</string>
   <key>NSAudioCaptureUsageDescription</key><string>MeetScribe records the meeting audio (the other participants) to create a transcript. Audio stays on this Mac.</string>
   <key>NSCalendarsUsageDescription</key><string>MeetScribe reads the current meeting's title and attendees to name the notes and email them. Nothing leaves this Mac.</string>
   <key>NSCalendarsFullAccessUsageDescription</key><string>MeetScribe reads the current meeting's title and attendees to name the notes and email them. Nothing leaves this Mac.</string>
   <key>NSRemindersUsageDescription</key><string>MeetScribe can add your meeting to-dos to Reminders.</string>
   <key>NSRemindersFullAccessUsageDescription</key><string>MeetScribe can add your meeting to-dos to Reminders.</string>
+  <key>NSAppleEventsUsageDescription</key><string>MeetScribe adds your meeting notes to Apple Notes when you ask it to.</string>
   <key>NSScreenCaptureUsageDescription</key><string>MeetScribe only records the meeting audio, never your screen. Audio stays on this Mac.</string>
 </dict>
 </plist>

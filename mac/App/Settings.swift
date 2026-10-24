@@ -67,6 +67,8 @@ struct AppSettings: Codable, Equatable {
     var audioRetentionDays = 7   // 0 = delete right after the notes, -1 = keep forever
     var llmModel: String?        // nil = the catalog's recommendation for this Mac
     var whisperModel: String?
+    var exportFolderPath = ""    // a notes app's folder (Obsidian vault…) for Markdown copies
+    var autoExport = false       // copy every new meeting's notes there
 
     var notesFolder: URL {
         switch storage {
@@ -107,6 +109,8 @@ struct AppSettings: Codable, Equatable {
         hotkey = c.contains(.hotkey) ? try c.decodeIfPresent(Hotkey.self, forKey: .hotkey) : d.hotkey
         llmModel = try c.decodeIfPresent(String.self, forKey: .llmModel)
         whisperModel = try c.decodeIfPresent(String.self, forKey: .whisperModel)
+        exportFolderPath = try c.decodeIfPresent(String.self, forKey: .exportFolderPath) ?? ""
+        autoExport = try c.decodeIfPresent(Bool.self, forKey: .autoExport) ?? false
         if let days = try c.decodeIfPresent(Int.self, forKey: .audioRetentionDays) {
             audioRetentionDays = days
         } else if (try c.decodeIfPresent(Bool.self, forKey: .keepAudio)) == false {
@@ -130,7 +134,7 @@ struct AppSettings: Codable, Equatable {
         case myName, language, languages, notesLanguage, useCalendar, callReminders, endReminders, notifyWhenReady,
              emailApp, gmailAccount, briefs, dueReminders, autoRecord, defaultTemplate, hotkey, audioRetentionDays, llmModel, whisperModel,
              vocabulary, summaryStyle, teamsOnly, keepAudio, storage, oneDrivePath,
-             customFolderPath, notesFolderPath
+             customFolderPath, notesFolderPath, exportFolderPath, autoExport
     }
 
     func encode(to encoder: Encoder) throws {
@@ -158,6 +162,8 @@ struct AppSettings: Codable, Equatable {
         try c.encode(storage, forKey: .storage)
         try c.encode(oneDrivePath, forKey: .oneDrivePath)
         try c.encode(customFolderPath, forKey: .customFolderPath)
+        try c.encode(exportFolderPath, forKey: .exportFolderPath)
+        try c.encode(autoExport, forKey: .autoExport)
     }
 }
 

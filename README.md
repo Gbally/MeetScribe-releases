@@ -40,6 +40,12 @@ Your recordings, transcripts and notes are plain files in a folder you choose.
 - **Languages:** tick the languages your meetings use (e.g. English + French) and switches are
   detected every few seconds; notes are written in the meeting's main language (or a fixed one).
 - **Reminders:** send your to-dos to Apple Reminders.
+- **Import a transcript** (⋯ → Import a transcript…): a `.vtt`, `.srt`, `.docx`, `.txt` or `.md`
+  saved by Teams, Zoom, Google Meet, Granola, Otter… gets the same notes as a recording, with
+  the speakers' names from the file.
+- **Send to other apps:** a meeting's ⋯ → Send to… adds the notes to Apple Notes, or the to-dos
+  to Things; Settings → Notes → Export copies every meeting's notes as Markdown into a folder
+  (an Obsidian vault, Logseq…), with the date, participants and a #meeting tag.
 - **Briefs:** 5 min before a calendar meeting that happened before (same series, title or
   people), a notification shows what's still open from last time.
 - **Due dates:** "Friday", "next week", "30 Oct", "fin du mois"… become real dates; "My to-dos" is
@@ -113,10 +119,21 @@ Needs the Xcode command line tools (`xcode-select --install`) and [uv](https://g
 so permissions survive updates. Without it, builds are ad-hoc signed and every update re-asks.
 
 **Signing:** without a Developer ID the app is self-signed, so on another Mac macOS blocks the first
-open (System Settings → Privacy & Security → Open Anyway). For a warning-free install, build
-with an Apple Developer ID (`SIGN_ID="Developer ID Application: …" ./scripts/build_app.sh`)
-and notarize the DMG (`xcrun notarytool submit dist/MeetScribe-*.dmg --wait`, then
-`xcrun stapler staple`) — or have IT deploy it via MDM.
+open (System Settings → Privacy & Security → Open Anyway). For a warning-free install, sign with
+an Apple Developer ID and notarize — or have IT deploy it via MDM.
+
+**Moving to a Developer ID (once).** Installed apps only accept an update signed like themselves,
+so the switch takes two releases:
+
+1. Join the Apple Developer Program, create a *Developer ID Application* certificate (it lands in
+   your login keychain) and note your Team ID (10 characters). Store notarization credentials:
+   `xcrun notarytool store-credentials meetscribe-notary --apple-id … --team-id TEAMID`.
+2. **Transition release**, still self-signed: `DEVELOPER_TEAM=TEAMID ./scripts/release.sh "…"`.
+   Apps that install it also accept updates signed by that team.
+3. A few days later, every release: `SIGN_ID="Developer ID Application: Name (TEAMID)"
+   DEVELOPER_TEAM=TEAMID ./scripts/release.sh "…"` — signs with the hardened runtime, notarizes
+   and staples the DMG (`scripts/notarize.sh`). macOS asks for the microphone / audio permissions
+   once more after that first notarized update (the signature changed).
 
 ### Releasing (maintainer)
 

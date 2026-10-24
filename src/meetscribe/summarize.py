@@ -66,6 +66,8 @@ Level of detail — {style}
 Keep facts exact: never add a year, date, number or detail that wasn't said (write "June",
 not "June 2025", unless the year was said). Keep who does what, and whether it is already done
 or still to do, exactly as said ("Priya will fix the crash today", not "Priya fixed the crash").
+Never link facts nobody linked: no "because", "due to" or "so" unless someone gave that reason.
+Keep each date, number and request with the item it was said about.
 
 Scale everything to what was actually said: a short or trivial meeting gets 1–2 summary
 bullets. Never pad: no bullets about the transcript itself, the meeting's length, or what
@@ -78,11 +80,13 @@ these sections (the action items are listed separately — don't write them):
 {summary_how}
 {extra_sections}
 ## Decisions
-What the group agreed or decided, each written as the decision itself ("Unreal stays as a
-fallback", "The final choice is made on 20 November"). A decision is never a task: no "X will…"
-or "X to…", no owner, no deadline for someone's work — those are action items, listed
-separately. Look for agreements, choices, rules and options dropped or kept. Write "None
-recorded." only if nothing at all was decided.
+What the group agreed or decided, each written as the decision itself (like "<option> stays as
+a fallback", "<project> moves to <month>"). Look for choices made, conditions agreed ("if <test>
+goes well, <next step>"), rules or policies set or kept as they are, priorities set, and things
+approved, dropped or postponed. Not decisions: news, results or dates that are only announced —
+they go in the summary. A decision is never a task: no "X will…" or "X to…", no owner, no
+deadline for someone's work — those are action items, listed separately. Write "None recorded."
+only if nothing at all was decided.
 
 ## Open questions
 Unresolved questions or topics to follow up on (write "None." if none).
@@ -297,14 +301,104 @@ def check_actions(raw: str, transcript: str, meeting) -> list[dict]:
             d = parse_due(due, meeting)
             if d is None or d not in _dates_said(near, meeting):
                 due = ""
-        out.append({"owner": owner, "task": task, "due": due,
+        out.append({"owner": owner, "task": task, "due": due, "quote": str(item.get("quote", "")),
                     "at": f"{t_line // 3600:02d}:{t_line % 3600 // 60:02d}:{t_line % 60:02d}"})
     return out
 
 
+SECOND_LOOK_PROMPT = """Below are lines from a meeting, each with the line said just before it (for context only).
+In some of them someone takes on a task to do after the meeting: volunteered ("I'll send it",
+"we will submit it on the 10th"), accepted when asked ("Yes, I'll…"), or given to them ("Aisha
+will send you the exercise today").
+
+For each such task, answer with one JSON object per line, and nothing else:
+{{"owner": "…", "task": "…", "due": "…", "at": "hh:mm:ss", "quote": "…"}}
+- owner: who will DO it: the speaker for "I", "we" or "je", else the person named.
+- task: short, starting with a verb, in {language}. due: the deadline exactly as said, or "".
+- at: the time of the line. quote: 5 to 8 words copied exactly from that line (not the context).
+Give nothing for a line without such a task: what is done right now in the meeting ("let me
+think", "I'll start", asking or presenting), what is already done, opinions, news, and what only
+might happen ("if we…, we can…").
+
+Lines:
+{excerpts}"""
+
+# Things done in the meeting itself ("I'll start", "let me think out loud", "Chloe will say more").
+IN_MEETING = re.compile(r"\b(say|talk|tell|present|explain|speak|start|think|ask (you|most|a few|some)|give you|"
+                        r"walk (you|us) through|dire|parler|presenter|expliquer|commencer)\b")
+
+# Someone taking something on ("I'll…", "we will…", "je m'en occupe"). The first pass misses
+# some of these in a long stretch; the ones no extracted task comes from get a second look.
+TAKES_ON = re.compile(r"\b(i'll|i will|i'm going to|i am going to|let me|leave it with me|i'm on it|i can (do|take)|"
+                      r"we'll|we will|we're going to|we are going to|je vais|je m'en (occupe|charge)|"
+                      r"je peux (le |la |les )?(faire|prendre|envoyer|regarder|préparer)|on va|nous allons)\b", re.I)
+
+
+def unclaimed(transcript: str, checked: list[dict], meeting) -> list[dict]:
+    """Sentences where someone seems to take on a task that none of the extracted ones comes
+    from: "I'll…", "Aisha will…", or "I"/"we" with a date ("je leur écris la semaine
+    prochaine"). A sentence can hold two ("I'm writing the notes, and I'll deploy on Monday"):
+    each part is checked. → [{"at", "speaker", "sentence", "before"}]"""
+    lines = _lines(transcript)
+    names = {(_norm_words(sp) or [""])[0] for _, sp, _ in lines} - {"speaker", ""}
+    content = lambda text: set(_norm_words(text)) - STOP
+    quotes: dict[int, list[set]] = {}
+    for a in checked:
+        quotes.setdefault(_seconds(a["at"]), []).append(content(a.get("quote", "")))
+    out = []
+    for i, (t, sp, text) in enumerate(lines):
+        sentences = re.split(r"(?<=[.?!])\s+", text)
+        for k, sentence in enumerate(sentences):
+            if sentence.rstrip().endswith("?"):
+                continue
+            # Parts: a new clause with its own subject ("…, and I'll deploy…"), not "the plan and the quote".
+            parts = re.split(r",?\s+(?:and|then|so|et|puis|donc)\s+(?=(?:i|i'll|i'm|we|we'll|we're|je|j'|on|nous)\b)|;\s*",
+                             sentence, flags=re.I)
+            for j, part in enumerate(parts):
+                plain = _plain_text(part)
+                if len(plain.split()) < 3:
+                    continue
+                third = re.search(r"\b([a-z]+) (will|is going to|va|doit|s'occupe)\b", plain)
+                dates = _dates_said([part], meeting) if meeting else set()
+                dated = re.search(r"\b(i|i'm|we|we're|je|j|nous)\b", plain) and any(d >= meeting for d in dates)
+                if not (TAKES_ON.search(part) or (third and third[1] in names) or dated):
+                    continue
+                if IN_MEETING.search(plain) and not any(d > meeting for d in dates):
+                    continue  # "Chloe will say more about that", "I'll ask the questions today": done in the meeting
+                words = content(part)
+                if any(q and words and max(len(q & words) / len(q), len(q & words) / len(words)) >= 0.6
+                       for q in quotes.get(t, [])):
+                    continue  # already extracted from this part
+                # Only that part is put to the model (a commitment at the end of a long sentence gets
+                # overlooked); what comes just before is shown for context.
+                if j:
+                    before = (sp, " ".join(parts[:j]))
+                elif k:
+                    before = (sp, sentences[k - 1])
+                else:
+                    before = (lines[i - 1][1], re.split(r"(?<=[.?!])\s+", lines[i - 1][2])[-1]) if i else None
+                out.append({"at": t, "speaker": sp, "sentence": part.strip(), "before": before})
+    return out
+
+
+def second_look(llm, lang: str, transcript: str, checked: list[dict], meeting) -> list[dict]:
+    """The commitments the first pass left out, from the sentences `unclaimed` finds — checked
+    like the first pass's (quote in the transcript, owner when asked, deadline said)."""
+    found = unclaimed(transcript, checked, meeting)
+    raw = ""
+    for k in range(0, len(found), 20):
+        excerpts = "\n\n".join(
+            (f"(context) {c['before'][0]}: {c['before'][1]}\n" if c["before"] else "")
+            + f"[{c['at'] // 3600:02d}:{c['at'] % 3600 // 60:02d}:{c['at'] % 60:02d}] {c['speaker']}: {c['sentence']}"
+            for c in found[k:k + 20])
+        raw += llm.chat(SECOND_LOOK_PROMPT.format(language=lang, excerpts=excerpts), max_tokens=700,
+                        temperature=EXTRACT_TEMPERATURE)
+    return check_actions(raw, transcript, meeting) if raw else []
+
+
 STOP = set("""a an the to of for on in at by with and or is be it this that our we you they he she i
 le la les un une des de du d l et ou en au aux pour par avec sur dans ce cette son sa ses leur
-the his her their qui que""".split())
+the his her their qui que them those these him us lui eux ceux cela""".split())
 
 
 # Words that say nothing about WHICH task it is: two tasks sharing only these aren't the same.
@@ -312,12 +406,14 @@ GENERIC = set("""prepare send make create get have check add provide share write
 ask tell set start finish follow next week today tomorrow monday tuesday wednesday thursday friday
 january february march april may june july august september october november december lundi mardi
 mercredi jeudi vendredi janvier fevrier mars avril mai juin juillet aout septembre octobre novembre
-decembre semaine prochaine prepare envoie envoyer faire fait demande""".split())
+decembre semaine prochaine prepare envoie envoyer faire fait demande before after noon morning
+afternoon evening tonight end month soon avant apres matin soir midi fin mois""".split())
 
 
 def _content(task: str) -> set[str]:
     words = {w[:-1] if len(w) > 4 and w.endswith("s") else w for w in _norm_words(task)
              if (len(w) > 2 or any(c.isdigit() for c in w)) and w not in STOP and not w.isdigit()}  # "W4", "PS5"
+    words |= {w.lower() for w in re.findall(r"\b[A-Z]{2}\b", task)}  # "HR", "IT", "QA"
     return {w for w in words if w not in GENERIC}
 
 
@@ -348,6 +444,9 @@ def merge_actions(actions: list[dict]) -> list[dict]:
             other = _content(b["task"])
             common = len(words & other)
             shared = common / max(1, min(len(words), len(other)))
+            if not words and _seconds(a["at"]) - _seconds(b["at"]) <= 60:
+                same = b  # "I'll do it before noon", "check with them by Wednesday": the task just said
+                break
             if not common:  # nothing that names the task in common ("prepare", "November" don't count)
                 continue
             if (recap and shared >= 0.3) or _seconds(a["at"]) - _seconds(b["at"]) <= 60:
@@ -417,8 +516,10 @@ def _summarize(transcript: str, cfg: Config, language: str, context: str, templa
         for i, part in enumerate(parts):
             raw += llm.chat(ACTIONS_PROMPT.format(language=lang, transcript=part), max_tokens=900,
                             temperature=EXTRACT_TEMPERATURE,
-                            on_token=lambda n, i=i: progress.update(0.05 + 0.45 * (i + min(n / 300, 0.97)) / len(parts)))
-        actions = merge_actions(check_actions(raw, transcript, meeting))
+                            on_token=lambda n, i=i: progress.update(0.05 + 0.4 * (i + min(n / 300, 0.97)) / len(parts)))
+        checked = check_actions(raw, transcript, meeting)
+        progress.update(0.45)
+        actions = merge_actions(checked + second_look(llm, lang, transcript, checked, meeting))
         body = llm.chat(NOTES_PROMPT.format(language=lang, style=style, extra_sections=extra, transcript=transcript,
                                             actions=_actions_context(actions), summary_how=_summary_how(transcript)),
                         max_tokens=max_tokens, prose=True,
@@ -449,7 +550,8 @@ def _summarize(transcript: str, cfg: Config, language: str, context: str, templa
     raw = "".join(llm.chat(ACTIONS_PROMPT.format(language=lang, transcript=part), max_tokens=900,
                            temperature=EXTRACT_TEMPERATURE)
                   for part in _parts(llm, transcript, EXTRACT_TOKENS))
-    actions = merge_actions(check_actions(raw, transcript, meeting))
+    checked = check_actions(raw, transcript, meeting)
+    actions = merge_actions(checked + second_look(llm, lang, transcript, checked, meeting))
     body = llm.chat(NOTES_PROMPT.format(language=lang, style=style, extra_sections=extra, transcript="\n\n".join(partial),
                                         actions=_actions_context(actions), summary_how=_summary_how(transcript)),
                     max_tokens=max_tokens, prose=True,
@@ -501,8 +603,8 @@ def _drop_task_decisions(body: str, actions: list[dict]) -> str:
     for line in body.splitlines():
         if re.match(r"^#{1,4}\s", line):
             in_decisions = "decision" in line.lower()
-        m = re.match(r"^\s*[-*•]\s+\**([A-Za-zÀ-ÿ]+)\**\s+(to|will|shall|must|va|doit)\b", line)
-        if in_decisions and m and m[1].lower() in owners:
+        m = re.match(r"^\s*[-*•]\s+\**([A-Za-zÀ-ÿ]+)(?: \d+)?\**(?: \([A-Z]{2}\))?\s+(to|will|shall|must|va|doit)\b", line)
+        if in_decisions and m and m[1].lower() in owners:  # also "Speaker 1 (FR) will…"
             continue
         out.append(line)
     text = "\n".join(out)

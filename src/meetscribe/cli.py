@@ -25,9 +25,9 @@ from .config import PROJECT_ROOT, Config, load_config
 RECORDER = PROJECT_ROOT / "bin" / "meeting-recorder"
 
 
-def new_session_dir(cfg: Config, title: str) -> Path:
+def new_session_dir(cfg: Config, title: str, when: datetime | None = None) -> Path:
     slug = re.sub(r"[^\w-]+", "-", title).strip("-")[:50]
-    name = datetime.now().strftime("%Y-%m-%d_%H%M") + (f"_{slug}" if slug else "")
+    name = (when or datetime.now()).strftime("%Y-%m-%d_%H%M") + (f"_{slug}" if slug else "")
     path = cfg.notes_path / name
     path.mkdir(parents=True, exist_ok=True)
     return path
@@ -354,12 +354,49 @@ def cmd_process(args, cfg: Config):
         if not any(target.glob("*.caf")):
             sys.exit(f"No mic.caf / system.caf in {target}")
         process_session(target, cfg, args.title or "", args.room, args.speakers, summary=not args.no_summary)
+    elif target.is_file() and target.suffix.lower() in TRANSCRIPT_SUFFIXES:
+        import_transcript(target, cfg, args.title or "", summary=not args.no_summary)
     elif target.is_file():
         session = new_session_dir(cfg, args.title or target.stem)
         process_session(session, cfg, args.title or "", args.room, args.speakers,
                         audio_file=target, summary=not args.no_summary)
     else:
         sys.exit(f"Not found: {target}")
+
+
+from .imports import SUFFIXES as TRANSCRIPT_SUFFIXES  # noqa: E402
+
+
+def import_transcript(path: Path, cfg: Config, title: str, summary: bool = True):
+    """A transcript made by another app (Teams, Zoom, Meet, Granola…) → a meeting folder with
+    the same transcript and notes as a recording (no audio, so no voice clips)."""
+    from .imports import read_transcript
+    from .transcript import save_json
+
+    step("Reading the transcript %@", path.name)
+    try:
+        utterances = read_transcript(path, cfg.me if cfg.me != "Me" else "")
+    except (ValueError, KeyError, OSError) as e:
+        sys.exit(f"Couldn't read {path.name}: {e}")
+    # The meeting's day, for "Friday" or "next week": a date in the file name, else when it was saved.
+    m = re.search(r"(20\d\d)[-_.]?(\d\d)[-_.]?(\d\d)", path.stem)
+    try:
+        created = datetime(int(m[1]), int(m[2]), int(m[3]), 9) if m else datetime.fromtimestamp(path.stat().st_mtime)
+    except ValueError:
+        created = datetime.fromtimestamp(path.stat().st_mtime)
+    # Named after the meeting's day; the file name minus a date it starts with ("2026-10-23 Standup").
+    name = title or re.sub(r"^\W*20\d\d[-_.]?\d\d[-_.]?\d\d\W*", "", path.stem) or path.stem
+    session = new_session_dir(cfg, name, created)
+    (session / "meeting.json").write_text(json.dumps({"title": title, "started": created.isoformat(timespec="seconds"),
+                                                      "imported": path.name}))
+    meta = {"title": title, "languages": sorted({u.lang for u in utterances if u.lang}), "tracks": ["file"],
+            "guessed_names": [], "duration": max(u.end for u in utterances), "created": created.isoformat(timespec="seconds")}
+    save_json(utterances, session / "transcript.json", meta)
+    write_transcript(session, utterances, title or path.stem)
+    print(f"   {len(utterances)} lines, {len({u.speaker for u in utterances})} speaker(s)")
+    if summary:
+        write_notes(session, cfg)
+    print(f"\n✅ Done → {session}")
 
 
 # ---------------------------------------------------------------- rename / summarize
@@ -496,7 +533,8 @@ def main():
     r.add_argument("--no-process", action="store_true", help="just record; process later")
     r.set_defaults(func=cmd_record)
 
-    pr = sub.add_parser("process", help="process a recording folder or any audio file")
+    pr = sub.add_parser("process", help="process a recording folder, any audio file, or a transcript "
+                                        "from another app (.vtt, .srt, .docx, .txt, .md)")
     pr.add_argument("path")
     common(pr)
     pr.set_defaults(func=cmd_process)

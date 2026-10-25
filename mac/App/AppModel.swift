@@ -1115,7 +1115,7 @@ final class AppModel: ObservableObject {
     }
 
     /// A finished meeting's notes, copied to the export folder when that's switched on.
-    /// Never over an existing copy (e.g. "Transcribe again"): it may have been edited in the notes app.
+    /// Never over its existing copy (e.g. "Transcribe again"): it may have been edited in the notes app.
     private func autoExport(_ folder: URL?) {
         guard settings.autoExport, !settings.exportFolderPath.isEmpty, let folder, let m = Meeting.load(folder), m.notes != nil
         else { return }

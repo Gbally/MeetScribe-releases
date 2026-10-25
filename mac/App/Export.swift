@@ -12,18 +12,31 @@ enum Export {
         let day = m.date.formatted(.iso8601.year().month().day())
         let people = (m.notes?.participants ?? []).map { "\"\($0.replacingOccurrences(of: "\"", with: "'"))\"" }
         let front = ["---", "date: \(day)", "participants: [\(people.joined(separator: ", "))]",
-                     "tags: [meeting]", "source: MeetScribe", "---", ""]
+                     "tags: [meeting]", "source: MeetScribe", "meetscribe_id: \"\(m.id)\"", "---", ""]
         // The link to the transcript only works inside the meeting folder.
         let lines = body.components(separatedBy: "\n").filter { !$0.contains("(transcript.md)") }
         return (front + lines).joined(separator: "\n")
     }
 
-    /// "2026-10-23 Weekly sync.md" in `folder`.
+    /// "2026-10-23 Weekly sync.md" in `folder` — or "… 2.md" when that name is another meeting's
+    /// copy (two "Weekly sync" the same day), so that neither replaces the other.
     static func fileURL(_ m: Meeting, folder: URL) -> URL {
         let day = m.date.formatted(.iso8601.year().month().day())
         let safe = m.title.replacingOccurrences(of: "[/\\\\:*?\"<>|]", with: "-", options: .regularExpression)
             .trimmingCharacters(in: .whitespaces)
-        return folder.appendingPathComponent("\(day) \(safe.isEmpty ? tr("Meeting") : String(safe.prefix(80))).md")
+        let name = "\(day) \(safe.isEmpty ? tr("Meeting") : String(safe.prefix(80)))"
+        for n in 1...99 {
+            let file = folder.appendingPathComponent(n == 1 ? "\(name).md" : "\(name) \(n).md")
+            guard FileManager.default.fileExists(atPath: file.path) else { return file }
+            guard let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
+            // Whose copy it is, from its front matter; copies made before it said so count as this one's.
+            let lines = text.components(separatedBy: "\n")
+            let front = lines.first == "---" ? Array(lines.dropFirst().prefix { $0 != "---" }) : []
+            guard let line = front.first(where: { $0.hasPrefix("meetscribe_id:") }) else { return file }
+            let id = line.dropFirst("meetscribe_id:".count).trimmingCharacters(in: CharacterSet(charactersIn: " \"'"))
+            if id == m.id { return file }
+        }
+        return folder.appendingPathComponent("\(name) \(m.id).md")
     }
 
     /// Writes the meeting's Markdown copy into `folder`; an earlier export of it is replaced.

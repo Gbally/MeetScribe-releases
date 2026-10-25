@@ -96,9 +96,7 @@ only if nothing at all was decided.
 Unresolved questions or topics to follow up on (write "None." if none).
 
 Do not add any other section.
-{actions}
-Transcript:
-{transcript}"""
+{actions}(The transcript is above.)"""
 
 ACTIONS_PROMPT = """List every commitment made in this meeting: each task someone will do. Include tasks
 people volunteer for ("I'll…", "I will…", "let me…", "je vais…", "je m'en occupe", "je fais…")
@@ -116,10 +114,7 @@ Answer with one JSON object per line and nothing else:
   when no deadline was said for it. Never guess one.
 - at: the time of the line where the commitment is made.
 - quote: 5 to 8 words copied exactly from that line, in the language spoken.
-One line per task, no duplicates.
-
-Transcript:
-{transcript}"""
+One line per task, no duplicates. (The transcript is above.)"""
 
 CHUNK_PROMPT = """This is part {part} of {total} of a long meeting transcript. Write detailed
 notes in {language} of everything important in this part: topics, facts and numbers,
@@ -137,6 +132,7 @@ class LLM:
     def __init__(self, cfg: Config):
         self.cfg = cfg
         self._model = self._tokenizer = None
+        self._read = None  # (transcript, its tokens, the model's state after reading them)
 
     def count_tokens(self, text: str) -> int:
         if self.cfg.llm_backend == "mlx":
@@ -149,12 +145,45 @@ class LLM:
             from mlx_lm import load
             self._model, self._tokenizer = load(self.cfg.llm_model)
 
+    def _after_reading(self, head: str, text: str):
+        """The tokens of `text` and, when it starts with the same transcript as the last call, a
+        copy of the model's state after reading it: the transcript is read once, then each pass
+        only reads its own instructions (most of a pass's time was re-reading the transcript)."""
+        import copy
+
+        import mlx.core as mx
+        from mlx_lm.models.cache import make_prompt_cache
+
+        tokens = self._tokenizer.encode(text)
+        end = text.find(head) + len(head)
+        if end < len(head):
+            return tokens, 0, None
+        if not (self._read and self._read[0] == head):
+            prefix = self._tokenizer.encode(text[:end])
+            self._read = None
+            if tokens[:len(prefix)] != prefix:  # the cut falls inside a token: read it all each time
+                return tokens, 0, None
+            state = make_prompt_cache(self._model)
+            for i in range(0, len(prefix), 512):  # small steps: much faster than 2048 with 8 GB
+                self._model(mx.array(prefix[i:i + 512])[None], cache=state)
+                mx.eval([c.state for c in state])
+            self._read = (head, prefix, state)
+        prefix = self._read[1]
+        if tokens[:len(prefix)] != prefix:
+            return tokens, 0, None
+        return tokens, len(prefix), copy.deepcopy(self._read[2])
+
+    def forget(self):
+        self._read = None
+
     def chat(self, prompt: str, max_tokens: int = 2500, on_token=None, prose: bool = False,
-             temperature: float | None = None) -> str:
+             temperature: float | None = None, transcript: str | None = None) -> str:
         """`prose`: free text (the notes), where a mild repetition penalty stops the loops small
         models sometimes fall into (one line repeated until the length limit). Not for the JSON
-        extraction, whose keys repeat on every line by design."""
-        messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": prompt}]
+        extraction, whose keys repeat on every line by design. `transcript` comes first, before
+        the instructions, so passes over the same transcript share its reading."""
+        head = f"Transcript:\n{transcript}\n\n---\n\n" if transcript is not None else ""
+        messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": head + prompt}]
         if self.cfg.llm_backend == "mlx":
             from mlx_lm import stream_generate
             from mlx_lm.sample_utils import make_logits_processors, make_sampler
@@ -166,10 +195,13 @@ class LLM:
             )
             out = ""
             try:
+                import mlx.core as mx
+
                 penalty = make_logits_processors(repetition_penalty=1.08, repetition_context_size=256) if prose else None
-                tokens = stream_generate(self._model, self._tokenizer, text, max_tokens=max_tokens,
+                ids, done, state = self._after_reading(head, text) if head else (self._tokenizer.encode(text), 0, None)
+                tokens = stream_generate(self._model, self._tokenizer, mx.array(ids[done:]), max_tokens=max_tokens,
                                          sampler=make_sampler(temp=TEMPERATURE if temperature is None else temperature, top_p=0.8),
-                                         logits_processors=penalty)
+                                         logits_processors=penalty, prompt_cache=state)
                 for r in tokens:
                     out += r.text
                     if on_token:
@@ -576,19 +608,15 @@ def _summarize(transcript: str, cfg: Config, language: str, context: str, templa
     expected = {"brief": 300, "standard": 700, "detailed": 1100}.get(cfg.summary_style, 700)  # measured
     if llm.count_tokens(transcript) <= cfg.max_context_tokens:
         parts = _parts(llm, transcript, EXTRACT_TOKENS)
-        raw = ""
-        for i, part in enumerate(parts):
-            raw += llm.chat(ACTIONS_PROMPT.format(language=lang, transcript=part), max_tokens=900,
-                            temperature=EXTRACT_TEMPERATURE,
-                            on_token=lambda n, i=i: progress.update(0.05 + 0.4 * (i + min(n / 300, 0.97)) / len(parts)))
+        raw, raw_decisions = _extract(llm, lang, parts, lambda i, n: progress.update(0.05 + 0.4 * (i + min(n / 400, 0.97)) / len(parts)))
         checked = check_actions(raw, transcript, meeting)
-        progress.update(0.4)
+        progress.update(0.45)
         actions = merge_actions(checked + second_look(llm, lang, transcript, checked, meeting))
-        decisions = extract_decisions(llm, lang, transcript, parts) if DECISIONS_MODE != "notes" else []
+        decisions = finish_decisions(llm, lang, transcript, raw_decisions) if DECISIONS_MODE != "notes" else []
         progress.update(0.5)
-        body = llm.chat(NOTES_PROMPT.format(language=lang, style=style, extra_sections=extra, transcript=transcript,
+        body = llm.chat(NOTES_PROMPT.format(language=lang, style=style, extra_sections=extra,
                                             actions=_actions_context(actions), summary_how=_summary_how(transcript)),
-                        max_tokens=max_tokens, prose=True,
+                        transcript=transcript, max_tokens=max_tokens, prose=True,
                         on_token=lambda n: progress.update(0.5 + 0.5 * min(n / expected, 0.97)))
         return _with_actions(_with_decisions(body, decisions, actions), actions)
 
@@ -613,16 +641,13 @@ def _summarize(transcript: str, cfg: Config, language: str, context: str, templa
             on_token=lambda n, i=i: progress.update((i - 1 + min(n / 600, 0.97)) / (len(chunks) + 1))))
     # Commitments: the same small parts as for shorter meetings, checked against the whole
     # transcript (a recap at the end confirms dates said much earlier).
-    raw = "".join(llm.chat(ACTIONS_PROMPT.format(language=lang, transcript=part), max_tokens=900,
-                           temperature=EXTRACT_TEMPERATURE)
-                  for part in _parts(llm, transcript, EXTRACT_TOKENS))
+    raw, raw_decisions = _extract(llm, lang, _parts(llm, transcript, EXTRACT_TOKENS))
     checked = check_actions(raw, transcript, meeting)
     actions = merge_actions(checked + second_look(llm, lang, transcript, checked, meeting))
-    decisions = (extract_decisions(llm, lang, transcript, _parts(llm, transcript, EXTRACT_TOKENS))
-                 if DECISIONS_MODE != "notes" else [])
-    body = llm.chat(NOTES_PROMPT.format(language=lang, style=style, extra_sections=extra, transcript="\n\n".join(partial),
+    decisions = finish_decisions(llm, lang, transcript, raw_decisions) if DECISIONS_MODE != "notes" else []
+    body = llm.chat(NOTES_PROMPT.format(language=lang, style=style, extra_sections=extra,
                                         actions=_actions_context(actions), summary_how=_summary_how(transcript)),
-                    max_tokens=max_tokens, prose=True,
+                    transcript="\n\n".join(partial), max_tokens=max_tokens, prose=True,
                     on_token=lambda n: progress.update((len(chunks) + min(n / expected, 0.97)) / (len(chunks) + 1)))
     return _with_actions(_with_decisions(body, decisions, actions), actions)
 
@@ -644,10 +669,7 @@ Answer with one JSON object per line and nothing else:
   decided, never only that something was ("the date is set").
 - at: the time of the line where it is decided or agreed.
 - quote: 5 to 8 words copied exactly from that line, in the language spoken.
-One line per decision, no duplicates; nothing at all if nothing was decided.
-
-Transcript:
-{transcript}"""
+One line per decision, no duplicates; nothing at all if nothing was decided. (The transcript is above.)"""
 
 DECISIONS_SECOND_LOOK_PROMPT = """Below are lines from a meeting, each with the line said just before it (for context only).
 In some of them the group settles something: a choice made, a condition agreed, a rule or policy
@@ -777,11 +799,22 @@ def decisions_second_look(llm, lang: str, transcript: str, checked: list[dict]) 
     return check_decisions(raw, transcript) if raw else []
 
 
-def extract_decisions(llm, lang: str, transcript: str, parts: list[str]) -> list[dict]:
-    """Decisions found part by part (like the to-dos), checked against the whole transcript, then
-    a second look at the sentences that settle something."""
-    raw = "".join(llm.chat(DECISIONS_PROMPT.format(language=lang, transcript=part), max_tokens=500,
-                           temperature=EXTRACT_TEMPERATURE) for part in parts)
+def _extract(llm, lang: str, parts: list[str], on_token=None) -> tuple[str, str]:
+    """The to-dos and the decisions of each part, one part after the other: both passes over a
+    part share its reading (see LLM.chat)."""
+    raw = raw_decisions = ""
+    for i, part in enumerate(parts):
+        raw += llm.chat(ACTIONS_PROMPT.format(language=lang), transcript=part, max_tokens=900, temperature=EXTRACT_TEMPERATURE,
+                        on_token=(lambda n, i=i: on_token(i, n)) if on_token else None)
+        if DECISIONS_MODE != "notes":
+            raw_decisions += llm.chat(DECISIONS_PROMPT.format(language=lang), transcript=part, max_tokens=500,
+                                      temperature=EXTRACT_TEMPERATURE)
+    return raw, raw_decisions
+
+
+def finish_decisions(llm, lang: str, transcript: str, raw: str) -> list[dict]:
+    """The decisions found part by part, checked against the whole transcript, then a second look
+    at the sentences that settle something."""
     checked = check_decisions(raw, transcript)
     return merge_decisions(checked + decisions_second_look(llm, lang, transcript, checked))
 
@@ -792,7 +825,10 @@ EXTRACT_TOKENS = 2600  # transcript per commitment-extraction pass (~5 min of me
 
 def _parts(llm, transcript: str, budget: int) -> list[str]:
     """The transcript in consecutive parts of about `budget` tokens (whole lines), each
-    starting with the end of the previous one so a task said across the cut isn't lost."""
+    starting with the end of the previous one so a task said across the cut isn't lost. A transcript
+    barely over the budget stays whole: then every pass reads the same text, read only once."""
+    if llm.count_tokens(transcript) <= budget * 1.35:
+        return [transcript]
     parts, current, size = [], [], 0
     for line in transcript.splitlines():
         n = llm.count_tokens(line)

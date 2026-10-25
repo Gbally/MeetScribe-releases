@@ -25,8 +25,10 @@ STYLES = {
 }
 
 # Meeting types: extra sections (title, instructions) inserted after the Summary.
-KEY_FIGURES = ("Key figures and dates", "Every number, amount, quantity and date that matters, as "
-                "\"figure — what it refers to\" (e.g. \"€5,000 — training budget\", \"20 Nov — final decision\").")
+KEY_FIGURES = ("Key figures and dates", "Every number, amount, percentage, count, duration and date that matters, one "
+                "per line as \"figure — what it refers to\" (e.g. \"€5,000 — training budget\", \"20 Nov — final "
+                "decision\", \"15 % — discounts above this need approval\"), also those given in other sections; when "
+                "in doubt, include it.")
 RISKS = ("Risks", "Risks, concerns and dependencies raised, with who raised them.")
 
 TEMPLATES = {
@@ -43,11 +45,13 @@ TEMPLATES = {
         ("Client requests", "What the client asked for or expects."),
         ("Our commitments", "What we promised the client, with dates if stated."),
         ("Risks & concerns", "Concerns, objections or risks raised."),
+        KEY_FIGURES,
     ]),
     "interview": ("Interview", [
         ("Candidate background", "Experience and skills the candidate described."),
         ("Strengths", "Strengths shown, with evidence from the conversation."),
         ("Concerns", "Gaps or concerns, with evidence. No judgements beyond what was said."),
+        KEY_FIGURES,
     ]),
     "workshop": ("Workshop / brainstorm", [
         ("Options compared", "When options were compared: a Markdown table with columns Option | For | Against | "

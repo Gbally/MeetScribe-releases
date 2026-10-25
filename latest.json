@@ -1,7 +1,7 @@
 {
- "version": "0.6.0",
- "build": 80,
- "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.6.0/MeetScribe-0.6.0.dmg",
- "sha256": "50057b9ad6d93b4a779de43002864c56a2045edf6ba9428cd49ecba816f5de17",
- "notes": "Import transcripts from Teams, Zoom, Google Meet, Granola (.vtt, .srt, .docx, .txt). Send notes to Apple Notes, to-dos to Things, or a Markdown copy to a folder (Obsidian). Fewer missed to-dos, real decisions instead of announcements, vocabulary learned from earlier meetings."
+ "version": "0.6.1",
+ "build": 95,
+ "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.6.1/MeetScribe-0.6.1.dmg",
+ "sha256": "3eafef0ccd41b7ec07e4345344c59e4c131f7a25dd21578f4d7867dd3d5f1d1e",
+ "notes": "Notes 15 % faster, decisions checked against the transcript, alerts when a model runs out of memory, Japanese and Chinese to-dos, .sbv import and more transcript formats."
 }

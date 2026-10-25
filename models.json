@@ -43,23 +43,43 @@
       }
     },
     {
+      "id": "qwen3.5-9b",
+      "repo": "mlx-community/Qwen3.5-9B-4bit",
+      "name": "Qwen3.5 9B",
+      "size_gb": 6.0,
+      "min_ram_gb": 16,
+      "recommended_ram_gb": 16,
+      "quality": 5,
+      "speed": 3,
+      "license": "Apache-2.0",
+      "tested": "2026-10-24",
+      "description": "Best notes from 16 GB: finds the to-dos and decisions the 8B misses.",
+      "descriptions": {
+        "fr": "Les meilleures notes à partir de 16 Go : trouve les tâches et décisions que le 8B oublie.",
+        "es": "Las mejores notas desde 16 GB: encuentra las tareas y decisiones que el 8B pasa por alto.",
+        "pt": "As melhores notas a partir de 16 GB: encontra as tarefas e decisões que o 8B deixa passar.",
+        "ja": "16 GB 以上で最良のメモ：8B が見落とすタスクと決定事項も拾います。",
+        "zh-Hans": "16 GB 起最好的笔记：能找到 8B 漏掉的待办和决定。"
+      }
+    },
+    {
       "id": "qwen3-8b",
       "repo": "mlx-community/Qwen3-8B-4bit",
       "name": "Qwen3 8B",
       "size_gb": 4.6,
       "min_ram_gb": 16,
       "recommended_ram_gb": 16,
-      "quality": 4,
+      "quality": 3,
       "speed": 3,
       "license": "Apache-2.0",
       "tested": "2026-10-21",
-      "description": "More precise notes. Best with 16 GB or more.",
+      "description": "Previous pick for 16 GB. Qwen3.5 9B now does better.",
       "descriptions": {
-        "fr": "Notes plus précises. Idéal avec 16 Go ou plus.",
-        "es": "Notas más precisas. Ideal con 16 GB o más.",
-        "pt": "Notas mais precisas. Ideal com 16 GB ou mais.",
-        "ja": "より正確なメモ。16 GB 以上で最適。",
-        "zh-Hans": "笔记更精确。16 GB 及以上内存效果最佳。"
+        "fr": "L'ancien choix pour 16 Go. Qwen3.5 9B fait maintenant mieux.",
+        "es": "La opción anterior para 16 GB. Qwen3.5 9B ahora lo hace mejor.",
+        "pt": "A opção anterior para 16 GB. O Qwen3.5 9B agora é melhor.",
+        "ja": "以前の 16 GB 向けの選択。現在は Qwen3.5 9B の方が優秀です。",
+        "zh-Hans": "之前的 16 GB 推荐。现在 Qwen3.5 9B 表现更好。"
       }
     }
   ],

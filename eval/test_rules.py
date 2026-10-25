@@ -257,6 +257,27 @@ def test_session_dirs():
         assert new_session_dir(cfg, "Standup", when).name == "2026-10-23_0900_Standup-2"
 
 
+def test_chinese_japanese():
+    """No spaces between words: their quotes are checked on pairs of characters, so the to-dos and
+    decisions said are kept (they all went before) — and a made-up one still goes."""
+    ja = "\n".join([
+        "[00:00:30] 佐藤: では、リリースを1月に延期することに決めましょう。",
+        "[00:00:40] 田中: 了解です。月曜日にプロバイダーに電話して契約をまとめます。",
+        "[00:01:05] 田中: 来週確認しましょう。予算は4万ユーロのままです。"])
+    raw = "\n".join([
+        '{"owner": "田中", "task": "プロバイダーに電話して契約をまとめる", "due": "", "at": "00:00:40", "quote": "月曜日にプロバイダーに電話して契約をまとめます。"}',
+        '{"owner": "田中", "task": "来週最終デザインを確認する", "due": "", "at": "00:01:05", "quote": "来週確認しましょう。"}',
+        '{"owner": "佐藤", "task": "見積もりを送る", "due": "", "at": "00:00:50", "quote": "見積もりを今日中に送ります。"}'])
+    kept = sm.merge_actions(sm.check_actions(raw, ja, D))
+    assert [(a["owner"], a["at"]) for a in kept] == [("田中", "00:00:40"), ("田中", "00:01:05")], kept
+    dec = sm.check_decisions('{"decision": "リリースを1月に延期", "at": "00:00:30", "quote": "リリースを1月に延期することに決めましょう"}', ja)
+    assert [d["at"] for d in dec] == ["00:00:30"], dec
+    zh = "[00:00:40] 李明: 好的。我周一给供应商打电话，把合同定下来。"
+    raw = '{"owner": "李明", "task": "给供应商打电话并定下合同", "due": "", "at": "00:00:40", "quote": "我周一给供应商打电话，把合同定下来。"}'
+    assert [a["owner"] for a in sm.check_actions(raw, zh, D)] == ["李明"]
+    assert sm._norm_words("l'équipe a décidé ﬁn 5,000") == ["l", "equipe", "a", "decide", "fin", "5", "000"]
+
+
 def test_out_of_memory():
     """The app is told which model ran out of memory (the speech one while transcribing, else the
     notes one), and the notes are retried in parts before giving up."""

@@ -242,11 +242,22 @@ def _plain_text(text: str) -> str:
     return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
 
 
+CJK = "\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af"  # kana, Chinese characters, Hangul
+
+
 def _norm_words(text: str) -> list[str]:
+    """Lowercase words without accents. Chinese and Japanese have no spaces between words: there,
+    each pair of characters ("電話", "話し") stands for a word, so their quotes are checked too."""
     import unicodedata
 
-    t = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
-    return re.findall(r"[a-z0-9]+", t)
+    out = []
+    for i, part in enumerate(re.split(f"([{CJK}]+)", text)):
+        if i % 2:  # a run of those characters
+            run = unicodedata.normalize("NFC", part)
+            out += [run] if len(run) == 1 else [run[k:k + 2] for k in range(len(run) - 1)]
+        else:
+            out += re.findall(r"[a-z0-9]+", unicodedata.normalize("NFKD", part).encode("ascii", "ignore").decode().lower())
+    return out
 
 
 def _lines(transcript: str) -> list[tuple[float, str, str]]:
@@ -489,7 +500,7 @@ afternoon evening tonight end month soon avant apres matin soir midi fin mois"""
 
 def _content(task: str) -> set[str]:
     words = {w[:-1] if len(w) > 4 and w.endswith("s") else w for w in _norm_words(task)
-             if (len(w) > 2 or any(c.isdigit() for c in w)) and w not in STOP and not w.isdigit()}  # "W4", "PS5"
+             if (len(w) > 2 or any(c.isdigit() for c in w) or w[0] >= "\u3040") and w not in STOP and not w.isdigit()}  # "W4", "PS5", "電話"
     words |= {w.lower() for w in re.findall(r"\b[A-Z]{2}\b", task)}  # "HR", "IT", "QA"
     return {w for w in words if w not in GENERIC}
 
@@ -737,7 +748,7 @@ def check_decisions(raw: str, transcript: str) -> list[dict]:
 def _decision_words(text: str) -> set[str]:
     """Like _content, but months and weekdays count: "a February start" names the decision."""
     return {w[:-1] if len(w) > 4 and w.endswith("s") else w for w in _norm_words(text)
-            if (len(w) > 2 or any(c.isdigit() for c in w)) and w not in STOP and not w.isdigit()}
+            if (len(w) > 2 or any(c.isdigit() for c in w) or w[0] >= "\u3040") and w not in STOP and not w.isdigit()}
 
 
 MONTHS = set("""january february march april may june july august september october november december

@@ -1,7 +1,8 @@
 """Transcripts made elsewhere (Teams, Zoom, Google Meet, Granola, Otter…) turned into MeetScribe
-utterances, so they get the same notes as a recording. Reads WebVTT (.vtt), SubRip (.srt), Word
-(.docx, Teams' download) and plain text or Markdown (.txt, .md: "Name: text" lines, with or
-without times). Who said what is kept when the file says it; times too, else they're estimated
+utterances, so they get the same notes as a recording. Reads WebVTT (.vtt), SubRip (.srt), YouTube
+(.sbv), Word (.docx, Teams' download) and plain text or Markdown (.txt, .md: "Name: text" lines,
+or a "Name 0:03" / "Name - 00:01" / "Speaker 1 (00:01):" / "[Name] 10:00:01" header line before
+what they said, with or without times). Who said what is kept when the file says it; times too, else they're estimated
 from the length of what was said."""
 
 import re
@@ -11,7 +12,7 @@ from xml.etree import ElementTree
 
 from .transcript import Utterance
 
-SUFFIXES = {".vtt", ".srt", ".docx", ".txt", ".md"}
+SUFFIXES = {".vtt", ".srt", ".sbv", ".docx", ".txt", ".md"}
 
 TIME = r"(?:(\d{1,2}):)?(\d{1,2}):(\d{2})(?:[.,](\d{1,3}))?"  # 1:02:03.456, 02:03, 0:03
 WPM = 150  # speaking pace used when the file has no times
@@ -30,16 +31,21 @@ def read_transcript(path: Path, me: str = "") -> list[Utterance]:
     else:
         raw = path.read_bytes()
         text = raw.decode("utf-16") if raw.startswith((b"\xff\xfe", b"\xfe\xff")) else raw.decode("utf-8-sig", errors="replace")
-    if suffix in (".vtt", ".srt") or re.search(rf"^{TIME}\s*-->\s*{TIME}", text, re.M):
+    if suffix in (".vtt", ".srt", ".sbv") or re.search(rf"^{TIME}\s*(-->|,)\s*{TIME}\s*$", text, re.M):
         utts = _cues(text)
     else:
         utts = _lines(text)
-    while utts and not utts[0].speaker and len(utts[0].text.split()) <= 5 and not utts[0].text.endswith((".", "!", "?")):
-        utts.pop(0)  # a title line ("Meeting transcript", "Weekly sync – 23 Oct")
+    while (utts and not utts[0].speaker and len(utts[0].text.split()) <= 5 and not utts[0].text.endswith((".", "!", "?"))
+           and re.search(r"transcri|meeting|r[ée]union|call|appel|sync|notes|recording|enregistrement|\d", utts[0].text, re.I)):
+        utts.pop(0)  # a title line ("Meeting transcript", "Weekly sync – 23 Oct"), not "Hi all"
     utts = _join(utts)
     if not utts:
         raise ValueError("No transcript text found in this file.")
     _fill_times(utts)
+    if utts[0].start >= 3600:  # times of day ("[Sarah] 10:00:01"), not from the start of the meeting
+        offset = utts[0].start
+        for u in utts:
+            u.start, u.end = u.start - offset, u.end - offset
     lang = guess_language(" ".join(u.text for u in utts))
     for u in utts:
         if me and u.speaker.lower() in {"me", "moi", "you", "vous", "toi", "yo", "eu"}:
@@ -90,10 +96,10 @@ def _looks_like_name(label: str) -> bool:
 
 
 def _cues(text: str) -> list[Utterance]:
-    """WebVTT / SubRip: blocks of "start --> end" then text."""
+    """WebVTT / SubRip / YouTube: blocks of "start --> end" (or "start,end") then text."""
     out = []
     for block in re.split(r"\n\s*\n", text.replace("\r", "")):
-        m = re.search(rf"{TIME}\s*-->\s*{TIME}", block)
+        m = re.search(rf"{TIME}\s*(?:-->|,)\s*{TIME}", block)
         if not m:
             continue
         body = block[m.end():].split("\n", 1)[1] if "\n" in block[m.end():] else ""
@@ -121,10 +127,11 @@ def _lines(text: str) -> list[Utterance]:
             continue
         if m:
             t, line = _seconds(*m.groups()), line[m.end():].strip()
-        # "Sarah Martin  0:03" / "Sarah Martin (00:03)" alone on its line: a header
-        h = re.match(rf"^(.{{1,40}}?)\s*[\(\[]?{TIME}[\)\]]?$", line)
-        if h and _looks_like_name(h[1]):
-            pending, pending_t = h[1].strip(), _seconds(*h.groups()[1:])
+        # A header alone on its line: "Sarah Martin  0:03" (Otter), "Sarah Martin - 00:01" (Fireflies),
+        # "Speaker 1 (00:01):" (Rev), "[Sarah Martin] 10:00:01" (chat-like exports)
+        h = re.match(rf"^\[?(.{{1,40}}?)\]?\s*[-–—|]?\s*[\(\[]?{TIME}[\)\]]?\s*:?$", line)
+        if h and _looks_like_name(h[1].strip(" -–—|")):
+            pending, pending_t = h[1].strip(" -–—|"), _seconds(*h.groups()[1:])
             continue
         if not line:
             pending_t = t if t is not None else pending_t

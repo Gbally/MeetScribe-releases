@@ -45,7 +45,7 @@ Your recordings, transcripts and notes are plain files in a folder you choose.
   (calendar title or the same people) are given to the transcription, so "Godot" or "PS5" stay
   spelled right; your own vocabulary (Settings) comes first.
 - **Reminders:** send your to-dos to Apple Reminders.
-- **Import a transcript** (⋯ → Import a transcript…): a `.vtt`, `.srt`, `.docx`, `.txt` or `.md`
+- **Import a transcript** (⋯ → Import a transcript…): a `.vtt`, `.srt`, `.sbv`, `.docx`, `.txt` or `.md`
   saved by Teams, Zoom, Google Meet, Granola, Otter… gets the same notes as a recording, with
   the speakers' names from the file.
 - **Send to other apps:** a meeting's ⋯ → Send to… adds the notes to Apple Notes, or the to-dos

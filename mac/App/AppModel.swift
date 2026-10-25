@@ -1226,7 +1226,7 @@ final class AppModel: ObservableObject {
     func chooseTranscriptFile() {
         NSApp.activate(ignoringOtherApps: true)
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = ["vtt", "srt", "docx", "txt", "md"].compactMap { UTType(filenameExtension: $0) }
+        panel.allowedContentTypes = ["vtt", "srt", "sbv", "docx", "txt", "md"].compactMap { UTType(filenameExtension: $0) }
         panel.message = tr("Choose a transcript from Teams, Zoom, Google Meet, Granola… (.vtt, .srt, .docx, .txt)")
         if panel.runModal() == .OK, let url = panel.url { enqueue(.processFile(url)) }
     }

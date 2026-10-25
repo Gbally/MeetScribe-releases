@@ -228,7 +228,15 @@ def test_import():
                + "</w:body></w:document>")
         with zipfile.ZipFile(tmp / "teams.docx", "w") as z:
             z.writestr("word/document.xml", doc)
+        (tmp / "youtube.sbv").write_text("0:00:01.000,0:00:04.000\nHello everyone, welcome.\n\n0:00:04.500,0:00:07.000\nToday the budget.\n")
+        (tmp / "rev.txt").write_text("Speaker 1 (00:01):\nOkay, let's start.\n\nSpeaker 2 (00:15):\nSure, the timeline first.\n")
+        (tmp / "fireflies.txt").write_text("Sarah Martin - 00:01\nGood morning, team.\nMarc Dubois - 00:08\nMorning.\n")
+        (tmp / "chat.txt").write_text("[Sarah Martin] 10:00:01\nHi all\n[Marc Dubois] 10:00:05\nHello, can you hear me?\n")
         speakers = lambda f, me="": [u.speaker for u in read_transcript(tmp / f, me)]
+        assert speakers("youtube.sbv") == ["Speaker 1"] and read_transcript(tmp / "youtube.sbv")[0].text.endswith("budget.")
+        assert speakers("rev.txt") == ["Speaker 1", "Speaker 2"] and speakers("fireflies.txt") == ["Sarah Martin", "Marc Dubois"]
+        chat = read_transcript(tmp / "chat.txt")
+        assert [u.speaker for u in chat] == ["Sarah Martin", "Marc Dubois"] and chat[0].start == 0 and chat[1].start == 4
         assert speakers("teams.vtt") == ["Sarah Martin", "Marc Dubois"]
         assert speakers("lines.txt") == ["Sarah Martin", "Marc Dubois"]
         assert speakers("labels.txt") == ["Sarah", "Marc"]

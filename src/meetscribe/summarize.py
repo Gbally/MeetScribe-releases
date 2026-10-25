@@ -432,7 +432,7 @@ def second_look(llm, lang: str, transcript: str, checked: list[dict], meeting) -
 
 STOP = set("""a an the to of for on in at by with and or is be it this that our we you they he she i
 le la les un une des de du d l et ou en au aux pour par avec sur dans ce cette son sa ses leur
-the his her their qui que them those these him us lui eux ceux cela""".split())
+the his her their qui que them those these him us lui eux ceux cela sont est ete etre sera seront ont""".split())
 
 
 # Words that say nothing about WHICH task it is: two tasks sharing only these aren't the same.
@@ -578,13 +578,15 @@ def _summarize(transcript: str, cfg: Config, language: str, context: str, templa
                             temperature=EXTRACT_TEMPERATURE,
                             on_token=lambda n, i=i: progress.update(0.05 + 0.4 * (i + min(n / 300, 0.97)) / len(parts)))
         checked = check_actions(raw, transcript, meeting)
-        progress.update(0.45)
+        progress.update(0.4)
         actions = merge_actions(checked + second_look(llm, lang, transcript, checked, meeting))
+        decisions = extract_decisions(llm, lang, transcript, parts) if DECISIONS_MODE != "notes" else []
+        progress.update(0.5)
         body = llm.chat(NOTES_PROMPT.format(language=lang, style=style, extra_sections=extra, transcript=transcript,
                                             actions=_actions_context(actions), summary_how=_summary_how(transcript)),
                         max_tokens=max_tokens, prose=True,
                         on_token=lambda n: progress.update(0.5 + 0.5 * min(n / expected, 0.97)))
-        return _with_actions(body, actions)
+        return _with_actions(_with_decisions(body, decisions, actions), actions)
 
     # Long meeting: summarize chunks, then write the final notes from the chunk notes.
     chunks, current, size = [], [], 0
@@ -612,11 +614,172 @@ def _summarize(transcript: str, cfg: Config, language: str, context: str, templa
                   for part in _parts(llm, transcript, EXTRACT_TOKENS))
     checked = check_actions(raw, transcript, meeting)
     actions = merge_actions(checked + second_look(llm, lang, transcript, checked, meeting))
+    decisions = (extract_decisions(llm, lang, transcript, _parts(llm, transcript, EXTRACT_TOKENS))
+                 if DECISIONS_MODE != "notes" else [])
     body = llm.chat(NOTES_PROMPT.format(language=lang, style=style, extra_sections=extra, transcript="\n\n".join(partial),
                                         actions=_actions_context(actions), summary_how=_summary_how(transcript)),
                     max_tokens=max_tokens, prose=True,
                     on_token=lambda n: progress.update((len(chunks) + min(n / expected, 0.97)) / (len(chunks) + 1)))
-    return _with_actions(body, actions)
+    return _with_actions(_with_decisions(body, decisions, actions), actions)
+
+
+DECISIONS_PROMPT = """List every decision taken in this meeting: what the group agreed or settled. A decision
+is a choice made ("we go with Unity"), a condition agreed ("if the take-home is good, he goes to
+the final round"), a rule or policy set or kept ("discounts above 15 % need Laura's approval",
+"the remote policy doesn't change"), a priority set, or something approved, dropped or postponed
+("the trailer is dropped", "offline mode moves to January"). Not decisions: tasks someone will do,
+even written without a name ("references are requested by Monday" — the to-dos are listed
+separately), news or dates that are only announced, results, opinions, explanations of how
+something works or would be done (a candidate's answer in an interview), proposals nobody agreed
+to, questions left open.
+
+Answer with one JSON object per line and nothing else:
+{{"decision": "…", "at": "hh:mm:ss", "quote": "…"}}
+- decision: the decision itself, short, in {language}, with no owner or deadline for someone's
+  work ("Unreal stays as a fallback", "The final choice is made on 20 November") — what was
+  decided, never only that something was ("the date is set").
+- at: the time of the line where it is decided or agreed.
+- quote: 5 to 8 words copied exactly from that line, in the language spoken.
+One line per decision, no duplicates; nothing at all if nothing was decided.
+
+Transcript:
+{transcript}"""
+
+DECISIONS_SECOND_LOOK_PROMPT = """Below are lines from a meeting, each with the line said just before it (for context only).
+In some of them the group settles something: a choice made, a condition agreed, a rule or policy
+set or kept, a priority, something approved, dropped or postponed.
+
+For each such decision, answer with one JSON object per line, and nothing else:
+{{"decision": "…", "at": "hh:mm:ss", "quote": "…"}}
+- decision: the decision itself, short, in {language}, with no owner or deadline for someone's work.
+- at: the time of the line. quote: 5 to 8 words copied exactly from that line (not the context).
+Give nothing for a line that only proposes, asks, explains, reports news or results, or gives
+someone a task.
+
+Lines:
+{excerpts}"""
+
+# Words that settle something ("decided", "let's keep…", "on garde…", "à partir de lundi").
+DECIDES = re.compile(r"\b(decided|decision|let's (go|do|keep|move|try|say|stick|use|not|drop)|go with|agreed|approved|"
+                     r"stays|remains|is dropped|we drop|forget it|moves? to|postpone|from now on|(from|starting) (next|monday|"
+                     r"tomorrow|january|today)|the rule is|we keep|keep it|no change|"
+                     r"d[ée]cid|on garde|on retient|on part sur|on reste|on abandonne|abandonn|on laisse|attendra|"
+                     r"[àa] partir d|on teste|on le teste|valid[ée]|approuv|on passe [àa]|report[ée]|on repousse|act[ée])", re.I)
+
+
+def check_decisions(raw: str, transcript: str) -> list[dict]:
+    """The extracted decisions whose quote really is in the transcript (anything else was made
+    up), placed at that line. A translated quote counts at the time given if that line settles
+    something ("on garde…", "decided") and has the quote's numbers."""
+    lines = _lines(transcript)
+    words_of = [set(_norm_words(text)) for _, _, text in lines]
+    out = []
+    for item in _action_lines(raw):
+        text, quote_text = str(item.get("decision", "")).strip(), str(item.get("quote", ""))
+        quote = set(_norm_words(quote_text))
+        if not text or len(quote) < 2 or text.lower().rstrip(".") in ("none", "none recorded", "aucune"):
+            continue
+        scores = [len(quote & w) / len(quote) for w in words_of]
+        best = max(scores, default=0.0)
+        said = _seconds(str(item.get("at", ""))) if re.fullmatch(r"\d+:\d{2}:\d{2}", str(item.get("at", ""))) else None
+        if best >= 0.7:
+            close = [i for i, sc in enumerate(scores) if sc >= best - 0.1]
+            i = min(close, key=lambda i: abs(lines[i][0] - said)) if said is not None else close[0]
+        else:
+            numbers = set(re.findall(r"\d+", quote_text))
+            near = [i for i, (t, _, line) in enumerate(lines) if said is not None and abs(t - said) <= 3
+                    and DECIDES.search(line) and numbers <= words_of[i]]
+            if not near:
+                continue
+            i = min(near, key=lambda i: abs(lines[i][0] - said))
+        t = lines[i][0]
+        out.append({"decision": text, "quote": quote_text, "line": i,
+                    "at": f"{t // 3600:02d}:{t % 3600 // 60:02d}:{t % 60:02d}"})
+    return out
+
+
+def _decision_words(text: str) -> set[str]:
+    """Like _content, but months and weekdays count: "a February start" names the decision."""
+    return {w[:-1] if len(w) > 4 and w.endswith("s") else w for w in _norm_words(text)
+            if (len(w) > 2 or any(c.isdigit() for c in w)) and w not in STOP and not w.isdigit()}
+
+
+MONTHS = set("""january february march april may june july august september october november december
+janvier fevrier mars avril mai juin juillet aout septembre octobre novembre decembre""".split())
+
+
+def _marks(text: str) -> set[str]:
+    """The numbers and months a decision names ("20", "november")."""
+    words = _norm_words(text)
+    return {w for w in words if w in MONTHS} | set(re.findall(r"\d+", " ".join(words)))
+
+
+def merge_decisions(items: list[dict]) -> list[dict]:
+    """One line per decision, in the order of the meeting: the same decision said twice (or found
+    by both passes) is kept once, in its fuller wording."""
+    out: list[dict] = []
+    for d in sorted(items, key=lambda x: x.get("line", 10 ** 9)):
+        words, marks = _decision_words(d["decision"]), _marks(d["decision"])
+        for e in out:
+            other, their = _decision_words(e["decision"]), _marks(e["decision"])
+            if marks and their and not (marks <= their or their <= marks):
+                continue  # "phase 1 on 1 December" and "phase 2 in January" are two decisions
+            common = len(words & other)
+            if common and common >= min(2, len(words), len(other)) and common / max(1, min(len(words), len(other))) >= 0.5:
+                if len(words) > len(other):
+                    e["decision"] = d["decision"]
+                break
+        else:
+            out.append(dict(d))
+    return out
+
+
+def unclaimed_decisions(transcript: str, checked: list[dict]) -> list[dict]:
+    """Sentences that settle something ("on garde…", "decided", "let's…") that none of the
+    extracted decisions comes from."""
+    lines = _lines(transcript)
+    content = lambda text: set(_norm_words(text)) - STOP
+    quotes: dict[int, list[set]] = {}
+    for d in checked:
+        quotes.setdefault(d["line"], []).append(content(d.get("quote", "")))
+    out = []
+    for i, (t, sp, text) in enumerate(lines):
+        sentences = re.split(r"(?<=[.?!])\s+", text)
+        for k, sentence in enumerate(sentences):
+            if sentence.rstrip().endswith("?") or len(sentence.split()) < 3 or not DECIDES.search(sentence):
+                continue
+            words = content(sentence)
+            if any(q and words and max(len(q & words) / len(q), len(q & words) / len(words)) >= 0.6 for q in quotes.get(i, [])):
+                continue
+            if k:
+                before = (sp, sentences[k - 1])
+            else:
+                before = (lines[i - 1][1], re.split(r"(?<=[.?!])\s+", lines[i - 1][2])[-1]) if i else None
+            out.append({"at": t, "speaker": sp, "sentence": sentence.strip(), "before": before})
+    return out
+
+
+def decisions_second_look(llm, lang: str, transcript: str, checked: list[dict]) -> list[dict]:
+    """The decisions the first pass left out, from the sentences `unclaimed_decisions` finds."""
+    found = unclaimed_decisions(transcript, checked)
+    raw = ""
+    for k in range(0, len(found), 20):
+        excerpts = "\n\n".join(
+            (f"(context) {c['before'][0]}: {c['before'][1]}\n" if c["before"] else "")
+            + f"[{c['at'] // 3600:02d}:{c['at'] % 3600 // 60:02d}:{c['at'] % 60:02d}] {c['speaker']}: {c['sentence']}"
+            for c in found[k:k + 20])
+        raw += llm.chat(DECISIONS_SECOND_LOOK_PROMPT.format(language=lang, excerpts=excerpts), max_tokens=500,
+                        temperature=EXTRACT_TEMPERATURE)
+    return check_decisions(raw, transcript) if raw else []
+
+
+def extract_decisions(llm, lang: str, transcript: str, parts: list[str]) -> list[dict]:
+    """Decisions found part by part (like the to-dos), checked against the whole transcript, then
+    a second look at the sentences that settle something."""
+    raw = "".join(llm.chat(DECISIONS_PROMPT.format(language=lang, transcript=part), max_tokens=500,
+                           temperature=EXTRACT_TEMPERATURE) for part in parts)
+    checked = check_decisions(raw, transcript)
+    return merge_decisions(checked + decisions_second_look(llm, lang, transcript, checked))
 
 
 EXTRACT_TOKENS = 2600  # transcript per commitment-extraction pass (~5 min of meeting): small
@@ -676,6 +839,84 @@ def _drop_task_decisions(body: str, actions: list[dict]) -> str:
     text = "\n".join(out)
     # A Decisions section left empty by the cleanup says so.
     return re.sub(r"(^#{1,4}\s*Decisions\s*\n)(\s*)(?=^#{1,4}\s|\Z)", r"\1None recorded.\n\n", text, flags=re.M | re.I)
+
+
+DECISIONS_MODE = "union"  # "union": the checked decisions, then the notes' own ones not among them;
+                          # "checked": only the checked ones; "notes": only the notes' (benchmarks compare)
+
+
+# Words that settle something — a line with one is a decision even if a to-do is about the same thing.
+SETTLED = re.compile(r"\b(decided|agreed|approv|stays|remains|unchanged|dropped|moves?\b|moved\b|postpon|defer|kept|keep|"
+                     r"limited|restricted|blocked|priority|rule|d[ée]cid|reste|garde|abandonn|report|repouss|d[ée]cal|limit[ée]|"
+                     r"bloqu|conserv|retenu|"
+                     r"valid[ée]|approuv|act[ée]|priorit|r[eè]gle)", re.I)
+# A deadline for someone's work ("by Monday", "d'ici mercredi", "due Friday"): to-dos have them, decisions don't.
+DEADLINE = re.compile(r"\b(by|due|before|until|d'ici|avant|pour le|pour vendredi|pour lundi)\s+(the\s+|le\s+)?"
+                      r"(monday|tuesday|wednesday|thursday|friday|next|tomorrow|tonight|today|end|\d|january|february|march|"
+                      r"april|may|june|july|august|september|october|november|december|lundi|mardi|mercredi|jeudi|vendredi|"
+                      r"demain|ce soir|la fin|fin|\d|janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[uû]t|septembre|"
+                      r"octobre|novembre|d[ée]cembre)", re.I)
+# Lines that only say something was settled, not what ("The reference deadline is set").
+HOLLOW = re.compile(r"(\b(is|are|has been|have been|was|were)\s+(set|requested|scheduled|defined|established|planned|fixed|"
+                    r"noted|discussed|mentioned)\s*\.?$|\b(deadline|due date|date|[ée]ch[ée]ance)\b.*\b(is|are) (set|fixed|scheduled)\b)", re.I)
+OPEN = re.compile(r"\b(not (yet )?decided|undecided|to be decided|still open|tbd|pas (encore )?d[ée]cid|[àa] d[ée]cider|reste ouvert)", re.I)
+
+
+def final_decisions(checked: list[str], own: list[str], actions: list[dict]) -> list[str]:
+    """The decisions to list: the checked ones and — in "union" mode — the notes' own ones not among
+    them; without what only repeats a to-do ("References are requested by Monday" when sending
+    them is Oliver's to-do) or says nothing was decided."""
+    tasks = [_content(a["task"]) for a in actions if a.get("task")]
+    by_owner: dict[str, list[set]] = {}
+    for a in actions:
+        if a.get("owner") and a.get("task"):
+            by_owner.setdefault(a["owner"].split()[0].lower(), []).append(_content(a["task"]))
+
+    def repeats_task(text: str) -> bool:
+        if SETTLED.search(text):
+            return False
+        words = _content(text)
+        m = re.match(r"^\**([A-Za-zÀ-ÿ]+)(?: \d+)?\**(?: \([A-Z]{2}\))?\s+(to|will|shall|must|is to|needs to|va|doit|"
+                     r"s'engage|\w{3,}ra)\b", text, re.I)  # "… va envoyer", "… demandera"
+        if m and m[1].lower() in by_owner:  # "Emma will send the list…" when that's her to-do
+            return any(words & t for t in by_owner[m[1].lower()])
+        if DEADLINE.search(text) and any(words & t for t in tasks):
+            return True  # "References are requested by Monday": someone's to-do, without the name
+        return any(t and (len(words & t) >= 3 or (len(words & t) >= 2 and len(words & t) / max(1, min(len(words), len(t))) >= 0.8))
+                   for t in tasks)
+
+    # Each list is cleaned first: when both give a decision, the wording kept must be one that stays.
+    keep = lambda items: [d for d in (x.replace("\n", " ").strip() for x in items)
+                          if d and not OPEN.search(d) and not HOLLOW.search(d) and not repeats_task(d)]
+    checked, own = keep(checked), keep(own)
+    if DECISIONS_MODE == "notes":
+        return own
+    if DECISIONS_MODE == "checked":
+        return checked or own  # nothing found by the checked passes: keep what the notes say
+    return [d["decision"] for d in merge_decisions([{"decision": d, "line": i} for i, d in enumerate(checked)]
+                                                   + [{"decision": d, "line": len(checked) + i} for i, d in enumerate(own)])]
+
+
+def _with_decisions(body: str, decisions: list[dict], actions: list[dict] = ()) -> str:
+    """The Decisions section from the checked decisions (each one really said, found part by part
+    and looked at twice) — in "union" mode followed by those the notes give that aren't among
+    them. Small models writing the notes in one go leave out some decisions, differently each time."""
+    if DECISIONS_MODE == "notes":
+        return body
+    heading = re.search(r"^#{1,4}\s*d[ée]cisions?\b.*$", body, re.I | re.M)  # also "## Decisions taken"
+    if heading:
+        nxt = re.search(r"^#{1,4}\s", body[heading.end():], re.M)
+        end = heading.end() + (nxt.start() if nxt else len(body) - heading.end())
+        own = [re.sub(r"^\s*[-*•]\s+|\*\*", "", x).strip() for x in body[heading.end():end].splitlines()
+               if re.match(r"^\s*[-*•]\s+", x)]
+    else:
+        own = []
+    items = final_decisions([d["decision"] for d in decisions], own, actions)
+    section = "## Decisions\n" + ("\n".join(f"- {d}" for d in items) if items else "None recorded.") + "\n\n"
+    if heading:
+        return body[:heading.start()] + section + body[end:].lstrip("\n")
+    m = re.search(r"^#{1,4}\s*open questions", body, re.I | re.M)
+    return body[:m.start()] + section + body[m.start():] if m else body.rstrip() + "\n\n" + section
 
 
 def _with_actions(body: str, actions: list[dict]) -> str:

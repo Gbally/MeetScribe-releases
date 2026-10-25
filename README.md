@@ -30,6 +30,8 @@ Your recordings, transcripts and notes are plain files in a folder you choose.
   and once you name a colleague they're recognised in later meetings.
 - **Notes you can use** — summary, decisions, open questions and to-dos with owners and real due
   dates ("next Friday" → a date), shaped by the meeting type (1:1, stand-up, client call…).
+  To-dos and decisions are looked for twice and each one is checked against what was really said,
+  so nothing is made up and little is missed.
 - **Calendar:** the current Outlook/Exchange event (via macOS Calendar) names the meeting and
   gives the AI the attendees; "Email" opens an Outlook draft to them with the notes.
 - **My to-dos:** every action item assigned to you, across all meetings, in one list.

@@ -257,6 +257,60 @@ def test_session_dirs():
         assert new_session_dir(cfg, "Standup", when).name == "2026-10-23_0900_Standup-2"
 
 
+def test_out_of_memory():
+    """The app is told which model ran out of memory (the speech one while transcribing, else the
+    notes one), and the notes are retried in parts before giving up."""
+    import contextlib
+    import dataclasses
+    import io
+    import weakref
+
+    from meetscribe import progress
+    from meetscribe.config import Config
+
+    def said(stage, fn=progress.out_of_memory):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            progress.plan([("mic", 1), ("notes", 1)])
+            if stage:
+                progress.start(stage)
+            fn()
+        return [line for line in out.getvalue().splitlines() if line.startswith("@@memory")]
+
+    assert said("mic") == ["@@memory speech"] and said("notes") == ["@@memory notes"] and said("") == ["@@memory notes"]
+    tried, first, real = [], [], sm._summarize
+
+    class Model:
+        pass
+
+    def short_of_memory(transcript, cfg, *rest):
+        tried.append(cfg.max_context_tokens)
+        if cfg.max_context_tokens > 6000:
+            model = Model()  # the first attempt's model: gone before the retry loads it again
+            first.append(weakref.ref(model))
+            raise MemoryError("[METAL] Insufficient Memory")
+        assert first[0]() is None, "the first attempt's model is still in memory during the retry"
+        return "notes"
+
+    def never_fits(*_):
+        raise MemoryError("[METAL] Insufficient Memory")
+
+    cfg = dataclasses.replace(Config(), llm_backend="openai", max_context_tokens=20000)
+    sm._summarize = short_of_memory
+    try:
+        assert said("notes", lambda: sm.summarize("t", cfg)) == ["@@memory notes"] and tried == [20000, 6000], tried
+        sm._summarize = never_fits
+        out = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out):
+                sm.summarize("t", cfg)
+            raise AssertionError("no SystemExit when even the parts don't fit")
+        except SystemExit as e:
+            assert "memory" in str(e).lower() and out.getvalue().count("@@memory notes") == 2, out.getvalue()
+    finally:
+        sm._summarize = real
+
+
 if __name__ == "__main__":
     failed = 0
     for name, fn in sorted((n, f) for n, f in globals().items() if n.startswith("test_") and callable(f)):

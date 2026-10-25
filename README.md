@@ -66,7 +66,8 @@ Your recordings, transcripts and notes are plain files in a folder you choose.
 - **Privacy:** audio (and voice samples) deleted after 7 days by default; notes are kept.
 - **Many languages** — 99 spoken languages, even switching mid-meeting; the app itself is in
   English, French, Spanish, Portuguese, Japanese and Chinese.
-- **Updates itself**, picks AI models that fit your Mac's memory, and removes itself cleanly
+- **Updates itself**, picks AI models that fit your Mac's memory (and says so when one runs out of
+  it, with a smaller one to choose), and removes itself cleanly
   (Settings → Privacy and storage → Remove MeetScribe).
 
 ## Install

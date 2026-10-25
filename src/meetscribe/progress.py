@@ -83,6 +83,13 @@ def ensure(name: str) -> None:
     start(name)
 
 
+def out_of_memory() -> None:
+    """Tells the app that a model ran out of memory — "@@memory speech" while transcribing, else
+    "@@memory notes" — so it can say the model is too big for this Mac and suggest a smaller one."""
+    name = _stages[_current][0] if 0 <= _current < len(_stages) else ""
+    print(f"@@memory {'speech' if name in ('file', 'meeting', 'mic') else 'notes'}", flush=True)
+
+
 def step(key: str, *args) -> None:
     """A status line: "→ text" for people, plus "@@step {key, args}" so the app can show it in
     the user's language (keys are translated in mac/Localization; %@ = an argument)."""

@@ -361,6 +361,7 @@ struct ModelsPane: View {
                         Tag(text: "In use", color: .green)
                     }
                     Caption(repo + " · " + tr("not tested with MeetScribe"))
+                    memoryNote(repo, speech: speech)
                 }
                 Spacer()
                 if let rec = ModelCatalog.recommended(list, for: hw) {
@@ -368,6 +369,14 @@ struct ModelsPane: View {
                         .disabled(model.modelDownload != nil)
                 }
             }
+        }
+    }
+
+    /// Said under the model in use when it ran out of memory on this Mac.
+    @ViewBuilder func memoryNote(_ repo: String, speech: Bool) -> some View {
+        if let w = model.memoryWarning, w.model == repo, w.speech == speech {
+            Label("Ran out of memory on this Mac — a smaller model is safer.", systemImage: "memorychip")
+                .font(.caption).foregroundColor(.orange).fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -384,6 +393,7 @@ struct ModelsPane: View {
                 }
                 Caption(String(format: "%.1f GB", m.sizeGB) + " · " + m.localizedDescription
                         + (fits ? "" : " · " + tr("needs %@ GB memory", "\(m.minRamGB)")))
+                if inUse { memoryNote(m.repo, speech: speech) }
             }
             Spacer()
             if !inUse {

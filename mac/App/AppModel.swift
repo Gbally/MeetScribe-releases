@@ -28,6 +28,25 @@ enum Job: Equatable {
     }
 }
 
+/// A model that ran out of memory on this Mac (said in the popover and in Settings).
+struct MemoryWarning: Codable, Equatable {
+    var model: String  // its repo
+    var speech: Bool   // the speech model, else the notes model
+    var failed: Bool   // a meeting couldn't be processed; else its notes were written in parts, more slowly
+
+    static var saved: MemoryWarning? {
+        UserDefaults.standard.data(forKey: "memoryWarning").flatMap { try? JSONDecoder().decode(Self.self, from: $0) }
+    }
+
+    static func save(_ warning: MemoryWarning?) {
+        if let warning, let data = try? JSONEncoder().encode(warning) {
+            UserDefaults.standard.set(data, forKey: "memoryWarning")
+        } else {
+            UserDefaults.standard.removeObject(forKey: "memoryWarning")
+        }
+    }
+}
+
 struct AskResult: Decodable, Equatable {
     struct Source: Decodable, Equatable, Hashable {
         var n: Int
@@ -110,6 +129,10 @@ final class AppModel: ObservableObject {
     @Published var askQuestion = ""
     @Published var askResult: AskResult?
     @Published var askError: String?
+    /// Kept until it's dismissed or another model is chosen.
+    @Published var memoryWarning = MemoryWarning.saved { didSet { MemoryWarning.save(memoryWarning) } }
+    private var jobMemory: String?       // the engine's "@@memory notes|speech" during the current job
+    private var jobTranscribing = false  // the current job's step is a transcription
     private var endReminderSent = false
     private var autoStarted = false
     private var briefed = Set<String>()
@@ -463,23 +486,35 @@ final class AppModel: ObservableObject {
         jobProgress = nil
         jobStarted = Date()
         lastDoneFolder = nil
+        jobMemory = nil
+        jobTranscribing = false
         Engine.writeConfig(settings)
 
         runner = Task {
             let (args, folder) = arguments(for: job)
             if case .ask = job { askResult = nil; askError = nil }
             let result = await Engine.meetscribe(args) { [weak self] line in
-                if line.hasPrefix("@@result "), let data = line.dropFirst(9).data(using: .utf8) {
+                if line.hasPrefix("@@memory ") {
+                    self?.jobMemory = String(line.dropFirst(9))
+                } else if line.hasPrefix("@@result "), let data = line.dropFirst(9).data(using: .utf8) {
                     self?.askResult = try? JSONDecoder().decode(AskResult.self, from: data)
                 } else if line.hasPrefix("✅ Done"), let arrow = line.range(of: "→ ") {
                     // An imported file's meeting folder is only known from the engine's last line.
                     self?.lastDoneFolder = URL(fileURLWithPath: line[arrow.upperBound...].trimmingCharacters(in: .whitespaces))
                 } else if let text = localizedStep(line) {
                     self?.jobStatus = text
+                    self?.jobTranscribing = line.contains("ranscribing")
                 } else if line.hasPrefix("@@progress "), let v = Double(line.dropFirst(11)) {
                     self?.jobProgress = max(self?.jobProgress ?? 0, v)
                 }
             }
+            // Out of memory: the engine says with which model — or, when it crashed, its errors show it.
+            let memory = Task.isCancelled ? nil : jobMemory ?? (result.outOfMemory ? (jobTranscribing ? "speech" : "notes") : nil)
+            if let memory {
+                let speech = memory == "speech"
+                memoryWarning = MemoryWarning(model: speech ? speechModel : notesModel, speech: speech, failed: !result.ok)
+            }
+            let failure = memory != nil && !result.ok ? memoryWarning.map { memoryMessage($0) } : nil
             var finalFolder = folder
             if let folder {
                 if result.ok {
@@ -489,17 +524,17 @@ final class AppModel: ObservableObject {
                         finalFolder = await moveToNotesFolder(folder)
                     }
                 } else if !Task.isCancelled {
-                    let msg = result.errorTail.isEmpty ? tr("Processing failed.") : result.errorTail
+                    let msg = failure ?? (result.errorTail.isEmpty ? tr("Processing failed.") : result.errorTail)
                     try? msg.write(to: folder.appendingPathComponent("error.txt"), atomically: true, encoding: .utf8)
                 }
             }
             reload()
             if case .ask = job {
-                if !result.ok { askError = result.errorTail.isEmpty ? tr("Something went wrong.") : result.errorTail }
+                if !result.ok { askError = failure ?? (result.errorTail.isEmpty ? tr("Something went wrong.") : result.errorTail) }
             } else {
                 // New meetings only: a regenerated one would overwrite what was edited in the notes app.
                 if result.ok, job.isNewMeeting { autoExport(finalFolder ?? lastDoneFolder) }
-                notify(job: job, ok: result.ok, folder: finalFolder)
+                notify(job: job, ok: result.ok, folder: finalFolder, memory: failure)
             }
             currentJob = nil
             jobStatus = ""
@@ -579,8 +614,9 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func notify(job: Job, ok: Bool, folder: URL?) {
-        guard settings.notifyWhenReady else { return }
+    /// `memory`: the meeting failed for lack of memory — said even when "Notes ready" notifications are off.
+    private func notify(job: Job, ok: Bool, folder: URL?, memory: String? = nil) {
+        guard settings.notifyWhenReady || memory != nil else { return }
         let content = UNMutableNotificationContent()
         let title = folder.flatMap { Meeting.load($0)?.title } ?? tr("Meeting")
         content.sound = .default
@@ -588,6 +624,9 @@ final class AppModel: ObservableObject {
         if ok {
             content.title = tr("Notes ready")
             content.body = tr("%@ — click to see the summary and to-dos.", title)
+        } else if let memory {
+            content.title = tr("Not enough memory")
+            content.body = title + " — " + memory
         } else {
             content.title = tr("Couldn't process the meeting")
             content.body = title
@@ -784,6 +823,17 @@ final class AppModel: ObservableObject {
     var notesModel: String { settings.llmModel ?? ModelCatalog.recommended(catalog.notes, for: .current)?.repo ?? "" }
     var speechModel: String { settings.whisperModel ?? ModelCatalog.recommended(catalog.speech, for: .current)?.repo ?? "" }
 
+    /// "Qwen3 8B" for a listed model, else the end of its repo.
+    func modelName(_ repo: String) -> String {
+        (catalog.notes + catalog.speech).first { $0.repo == repo }?.name ?? repo.components(separatedBy: "/").last ?? repo
+    }
+
+    /// Running out of memory, said plainly, with what to do.
+    func memoryMessage(_ w: MemoryWarning) -> String {
+        w.speech ? tr("Not enough memory to transcribe on this Mac. Close other apps, or choose a smaller speech model in Settings → AI models, then try again.")
+            : tr("Not enough memory for %@ on this Mac. Choose a smaller notes model in Settings → AI models, then try again.", modelName(w.model))
+    }
+
     /// A better notes model than the one in use fits this Mac.
     var betterNotesModel: CatalogModel? {
         guard let best = ModelCatalog.recommended(catalog.notes, for: .current), best.repo != notesModel else { return nil }
@@ -808,6 +858,7 @@ final class AppModel: ObservableObject {
         let apply = { [weak self] in
             guard let self else { return }
             if speech { self.settings.whisperModel = model.repo } else { self.settings.llmModel = model.repo }
+            if self.memoryWarning?.speech == speech { self.memoryWarning = nil }  // the model it was about is no longer used
             Engine.writeConfig(self.settings)
         }
         if installedModels[model.repo] != nil { apply(); return }

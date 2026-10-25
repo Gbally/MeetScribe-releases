@@ -132,7 +132,7 @@ class LLM:
     def __init__(self, cfg: Config):
         self.cfg = cfg
         self._model = self._tokenizer = None
-        self._read = None  # (transcript, its tokens, the model's state after reading them)
+        self._read = None  # (the transcript as given, its tokens, the model's state after reading them)
 
     def count_tokens(self, text: str) -> int:
         if self.cfg.llm_backend == "mlx":
@@ -145,21 +145,27 @@ class LLM:
             from mlx_lm import load
             self._model, self._tokenizer = load(self.cfg.llm_model)
 
-    def _after_reading(self, head: str, text: str):
-        """The tokens of `text` and, when it starts with the same transcript as the last call, a
-        copy of the model's state after reading it: the transcript is read once, then each pass
-        only reads its own instructions (most of a pass's time was re-reading the transcript)."""
+    def _encode(self, text: str) -> list[int]:
+        """The prompt's tokens, as mlx-lm makes them: no second BOS when the chat template has one."""
+        bos = self._tokenizer.bos_token
+        return self._tokenizer.encode(text, add_special_tokens=bos is None or not text.startswith(bos))
+
+    def _after_reading(self, head: str, text: str, last: bool):
+        """The tokens of `text` and, when it starts with the same transcript as the last call, the
+        model's state after reading it: the transcript is read once, then each pass only reads its
+        own instructions (most of a pass's time was re-reading the transcript). Each pass gets a
+        copy, except the `last` one, which takes it: two copies of a long meeting don't fit in 8 GB."""
         import copy
 
         import mlx.core as mx
         from mlx_lm.models.cache import make_prompt_cache
 
-        tokens = self._tokenizer.encode(text)
+        tokens = self._encode(text)
         end = text.find(head) + len(head)
         if end < len(head):
             return tokens, 0, None
         if not (self._read and self._read[0] == head):
-            prefix = self._tokenizer.encode(text[:end])
+            prefix = self._encode(text[:end])
             self._read = None
             if tokens[:len(prefix)] != prefix:  # the cut falls inside a token: read it all each time
                 return tokens, 0, None
@@ -167,21 +173,22 @@ class LLM:
             for i in range(0, len(prefix), 512):  # small steps: much faster than 2048 with 8 GB
                 self._model(mx.array(prefix[i:i + 512])[None], cache=state)
                 mx.eval([c.state for c in state])
+                mx.clear_cache()  # as mlx-lm does: the step's buffers would otherwise stay held
             self._read = (head, prefix, state)
-        prefix = self._read[1]
+        _, prefix, state = self._read
+        if last:
+            self._read = None
         if tokens[:len(prefix)] != prefix:
             return tokens, 0, None
-        return tokens, len(prefix), copy.deepcopy(self._read[2])
-
-    def forget(self):
-        self._read = None
+        return tokens, len(prefix), state if last else copy.deepcopy(state)
 
     def chat(self, prompt: str, max_tokens: int = 2500, on_token=None, prose: bool = False,
-             temperature: float | None = None, transcript: str | None = None) -> str:
+             temperature: float | None = None, transcript: str | None = None, last: bool = False) -> str:
         """`prose`: free text (the notes), where a mild repetition penalty stops the loops small
         models sometimes fall into (one line repeated until the length limit). Not for the JSON
         extraction, whose keys repeat on every line by design. `transcript` comes first, before
-        the instructions, so passes over the same transcript share its reading."""
+        the instructions, so passes over the same transcript share its reading; `last`: no pass
+        after this one reads that transcript."""
         head = f"Transcript:\n{transcript}\n\n---\n\n" if transcript is not None else ""
         messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": head + prompt}]
         if self.cfg.llm_backend == "mlx":
@@ -198,7 +205,7 @@ class LLM:
                 import mlx.core as mx
 
                 penalty = make_logits_processors(repetition_penalty=1.08, repetition_context_size=256) if prose else None
-                ids, done, state = self._after_reading(head, text) if head else (self._tokenizer.encode(text), 0, None)
+                ids, done, state = self._after_reading(head, text, last) if head else (self._encode(text), 0, None)
                 tokens = stream_generate(self._model, self._tokenizer, mx.array(ids[done:]), max_tokens=max_tokens,
                                          sampler=make_sampler(temp=TEMPERATURE if temperature is None else temperature, top_p=0.8),
                                          logits_processors=penalty, prompt_cache=state)
@@ -206,8 +213,8 @@ class LLM:
                     out += r.text
                     if on_token:
                         on_token(r.generation_tokens)
-            except RuntimeError as e:  # Metal: "Insufficient Memory" on smaller Macs
-                if "memory" in str(e).lower():
+            except RuntimeError as e:  # Metal: "Insufficient Memory" on smaller Macs, or "[metal::malloc]" for one buffer too big
+                if re.search(r"memory|malloc", str(e), re.I):
                     raise MemoryError(str(e)) from e
                 raise
             finally:
@@ -571,23 +578,26 @@ def actions_table(actions: list[dict]) -> str:
 def summarize(transcript: str, cfg: Config, language: str = "", context: str = "", template: str = "general",
               meeting=None) -> str:
     """Notes as Markdown. Long or memory-hungry meetings are retried in smaller parts."""
+    import dataclasses
+    import gc
+
+    from . import progress
+
     try:
         return _summarize(transcript, cfg, language, context, template, meeting)
     except MemoryError:
+        progress.out_of_memory()
         if cfg.max_context_tokens <= 6000:
             raise SystemExit("Not enough memory for the notes model — choose a smaller one in Settings → AI models.")
-        import dataclasses
-        import gc
+    # Retried only here, out of the `except`: its traceback would keep the first attempt's model
+    # and reading in memory while the model is loaded again.
+    gc.collect()
+    if cfg.llm_backend == "mlx":
+        import mlx.core as mx
 
-        gc.collect()  # let the first attempt's model and buffers go before loading it again
-        if cfg.llm_backend == "mlx":
-            import mlx.core as mx
-
-            mx.clear_cache()
-
-        print("   not enough memory for the whole meeting at once — writing the notes in parts")
-        return summarize(transcript, dataclasses.replace(cfg, max_context_tokens=6000), language, context, template,
-                         meeting)
+        mx.clear_cache()
+    print("   not enough memory for the whole meeting at once — writing the notes in parts")
+    return summarize(transcript, dataclasses.replace(cfg, max_context_tokens=6000), language, context, template, meeting)
 
 
 def _summarize(transcript: str, cfg: Config, language: str, context: str, template: str, meeting) -> str:
@@ -616,7 +626,7 @@ def _summarize(transcript: str, cfg: Config, language: str, context: str, templa
         progress.update(0.5)
         body = llm.chat(NOTES_PROMPT.format(language=lang, style=style, extra_sections=extra,
                                             actions=_actions_context(actions), summary_how=_summary_how(transcript)),
-                        transcript=transcript, max_tokens=max_tokens, prose=True,
+                        transcript=transcript, last=True, max_tokens=max_tokens, prose=True,
                         on_token=lambda n: progress.update(0.5 + 0.5 * min(n / expected, 0.97)))
         return _with_actions(_with_decisions(body, decisions, actions), actions)
 
@@ -647,7 +657,7 @@ def _summarize(transcript: str, cfg: Config, language: str, context: str, templa
     decisions = finish_decisions(llm, lang, transcript, raw_decisions) if DECISIONS_MODE != "notes" else []
     body = llm.chat(NOTES_PROMPT.format(language=lang, style=style, extra_sections=extra,
                                         actions=_actions_context(actions), summary_how=_summary_how(transcript)),
-                    transcript="\n\n".join(partial), max_tokens=max_tokens, prose=True,
+                    transcript="\n\n".join(partial), last=True, max_tokens=max_tokens, prose=True,
                     on_token=lambda n: progress.update((len(chunks) + min(n / expected, 0.97)) / (len(chunks) + 1)))
     return _with_actions(_with_decisions(body, decisions, actions), actions)
 
@@ -801,14 +811,17 @@ def decisions_second_look(llm, lang: str, transcript: str, checked: list[dict]) 
 
 def _extract(llm, lang: str, parts: list[str], on_token=None) -> tuple[str, str]:
     """The to-dos and the decisions of each part, one part after the other: both passes over a
-    part share its reading (see LLM.chat)."""
+    part share its reading (see LLM.chat). The notes pass reads it again only when it is the
+    whole transcript."""
     raw = raw_decisions = ""
+    decisions = DECISIONS_MODE != "notes"
     for i, part in enumerate(parts):
-        raw += llm.chat(ACTIONS_PROMPT.format(language=lang), transcript=part, max_tokens=900, temperature=EXTRACT_TEMPERATURE,
+        raw += llm.chat(ACTIONS_PROMPT.format(language=lang), transcript=part, last=len(parts) > 1 and not decisions,
+                        max_tokens=900, temperature=EXTRACT_TEMPERATURE,
                         on_token=(lambda n, i=i: on_token(i, n)) if on_token else None)
-        if DECISIONS_MODE != "notes":
-            raw_decisions += llm.chat(DECISIONS_PROMPT.format(language=lang), transcript=part, max_tokens=500,
-                                      temperature=EXTRACT_TEMPERATURE)
+        if decisions:
+            raw_decisions += llm.chat(DECISIONS_PROMPT.format(language=lang), transcript=part, last=len(parts) > 1,
+                                      max_tokens=500, temperature=EXTRACT_TEMPERATURE)
     return raw, raw_decisions
 
 

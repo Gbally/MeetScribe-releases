@@ -166,6 +166,7 @@ struct HomeView: View {
                     case .needsSetup, .settingUp: SetupCard()
                     case .ready:
                         PermissionsCard()
+                        MemoryCard()
                         hero
                     }
                     if let job = model.currentJob { jobCard(job) }
@@ -645,6 +646,30 @@ struct PermissionsCard: View {
 
     func openPane(_ pane: String) {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")!)
+    }
+}
+
+/// A model that ran out of memory on this Mac, with what to do (until dismissed or another model is chosen).
+struct MemoryCard: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        if let w = model.memoryWarning, w.model == (w.speech ? model.speechModel : model.notesModel) {
+            Card {
+                Label("Not enough memory", systemImage: "memorychip").font(.headline).foregroundColor(.orange)
+                Text(w.speech ? tr("Transcription ran out of memory on this Mac: a meeting couldn't be processed.")
+                     : w.failed ? tr("%@ needs more memory than this Mac had free, so it couldn't finish.", model.modelName(w.model))
+                     : tr("%@ ran out of memory on a long meeting: its notes were written in parts, more slowly.", model.modelName(w.model)))
+                    .font(.caption).fixedSize(horizontal: false, vertical: true)
+                Text("Choose a smaller model, or close other apps before long meetings.")
+                    .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Choose a model…") { Windows.showSettings(model, tab: .models) }.controlSize(.small)
+                    Spacer()
+                    Button("Dismiss") { model.memoryWarning = nil }.buttonStyle(.borderless).font(.caption)
+                }
+            }
+        }
     }
 }
 

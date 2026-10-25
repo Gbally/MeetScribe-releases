@@ -52,7 +52,12 @@ enum Engine {
     struct Result {
         var ok: Bool
         var errorTail: String
+        /// Ended for lack of memory: Python or Metal said so (even when the engine couldn't).
+        var outOfMemory = false
     }
+
+    /// What the engine, Python or Metal print when a model doesn't fit in memory.
+    static let memorySigns = ["Insufficient Memory", "OutOfMemory", "MemoryError", "metal::malloc", "Not enough memory"]
 
     /// Runs a process, calling `onLine` (main thread) for each stdout line. Cancellable.
     static func run(_ exe: URL, _ args: [String], onLine: @escaping (String) -> Void) async -> Result {
@@ -86,7 +91,8 @@ enum Engine {
                         .suffix(6).joined(separator: "\n")
                     log("\(exe.lastPathComponent) \(args.prefix(2).joined(separator: " ")) → exit \(p.terminationStatus)"
                         + (p.terminationStatus == 0 ? "" : "\n" + errLines.recent.suffix(20).joined(separator: "\n")))
-                    cont.resume(returning: Result(ok: p.terminationStatus == 0, errorTail: tail))
+                    let memory = errLines.recent.contains { line in memorySigns.contains { line.contains($0) } }
+                    cont.resume(returning: Result(ok: p.terminationStatus == 0, errorTail: tail, outOfMemory: memory))
                 }
                 do { try process.run() } catch {
                     log("could not start \(exe.path): \(error.localizedDescription)")

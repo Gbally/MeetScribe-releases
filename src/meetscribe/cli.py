@@ -590,7 +590,14 @@ def main():
     cfg = load_config()
     if getattr(args, "template", None):
         cfg.template = args.template
-    args.func(args, cfg)
+    try:
+        args.func(args, cfg)
+    except (MemoryError, RuntimeError) as e:
+        if isinstance(e, MemoryError) or re.search(r"memory|malloc", str(e), re.I):  # Metal: "Insufficient Memory"
+            from . import progress
+
+            progress.out_of_memory()
+        raise
 
 
 if __name__ == "__main__":

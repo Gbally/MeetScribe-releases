@@ -85,7 +85,7 @@
  "Choose a meeting recording to transcribe": "Elige la grabación de una reunión para transcribir",
  "Choose a model…": "Elegir un modelo…",
  "Choose a smaller model, or close other apps before long meetings.": "Elige un modelo más pequeño o cierra las demás apps antes de las reuniones largas.",
- "Choose a transcript from Teams, Zoom, Google Meet, Granola… (.vtt, .srt, .docx, .txt)": "Elige una transcripción de Teams, Zoom, Google Meet, Granola… (.vtt, .srt, .docx, .txt)",
+ "Choose a transcript from Teams, Zoom, Google Meet, Granola… (.vtt, .srt, .sbv, .docx, .txt, .md)": "Elige una transcripción de Teams, Zoom, Google Meet, Granola… (.vtt, .srt, .sbv, .docx, .txt, .md)",
  "Choose…": "Elegir…",
  "Click this icon in the menu bar, then the red button when a meeting starts. Your notes appear there when it ends.": "Haz clic en este icono de la barra de menús y luego en el botón rojo cuando empiece una reunión. Tus notas aparecen ahí al terminar.",
  "Click to install.": "Haz clic para instalar.",

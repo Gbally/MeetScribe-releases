@@ -85,7 +85,7 @@
  "Choose a meeting recording to transcribe": "Choose a meeting recording to transcribe",
  "Choose a model…": "Choose a model…",
  "Choose a smaller model, or close other apps before long meetings.": "Choose a smaller model, or close other apps before long meetings.",
- "Choose a transcript from Teams, Zoom, Google Meet, Granola… (.vtt, .srt, .docx, .txt)": "Choose a transcript from Teams, Zoom, Google Meet, Granola… (.vtt, .srt, .docx, .txt)",
+ "Choose a transcript from Teams, Zoom, Google Meet, Granola… (.vtt, .srt, .sbv, .docx, .txt, .md)": "Choose a transcript from Teams, Zoom, Google Meet, Granola… (.vtt, .srt, .sbv, .docx, .txt, .md)",
  "Choose…": "Choose…",
  "Click this icon in the menu bar, then the red button when a meeting starts. Your notes appear there when it ends.": "Click this icon in the menu bar, then the red button when a meeting starts. Your notes appear there when it ends.",
  "Click to install.": "Click to install.",

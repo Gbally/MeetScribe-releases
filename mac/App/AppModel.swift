@@ -834,13 +834,6 @@ final class AppModel: ObservableObject {
             : tr("Not enough memory for %@ on this Mac. Choose a smaller notes model in Settings → AI models, then try again.", modelName(w.model))
     }
 
-    /// A better notes model than the one in use fits this Mac.
-    var betterNotesModel: CatalogModel? {
-        guard let best = ModelCatalog.recommended(catalog.notes, for: .current), best.repo != notesModel else { return nil }
-        let current = catalog.notes.first { $0.repo == notesModel }
-        return (current == nil || best.quality > current!.quality) ? best : nil
-    }
-
     func loadInstalledModels() {
         guard phase == .ready else { return }
         Task {
@@ -1278,7 +1271,7 @@ final class AppModel: ObservableObject {
         NSApp.activate(ignoringOtherApps: true)
         let panel = NSOpenPanel()
         panel.allowedContentTypes = ["vtt", "srt", "sbv", "docx", "txt", "md"].compactMap { UTType(filenameExtension: $0) }
-        panel.message = tr("Choose a transcript from Teams, Zoom, Google Meet, Granola… (.vtt, .srt, .docx, .txt)")
+        panel.message = tr("Choose a transcript from Teams, Zoom, Google Meet, Granola… (.vtt, .srt, .sbv, .docx, .txt, .md)")
         if panel.runModal() == .OK, let url = panel.url { enqueue(.processFile(url)) }
     }
 

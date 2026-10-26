@@ -85,7 +85,7 @@
  "Choose a meeting recording to transcribe": "文字起こしする会議の録音を選択",
  "Choose a model…": "モデルを選択…",
  "Choose a smaller model, or close other apps before long meetings.": "より小さいモデルを選ぶか、長い会議の前にほかのアプリを終了してください。",
- "Choose a transcript from Teams, Zoom, Google Meet, Granola… (.vtt, .srt, .docx, .txt)": "Teams、Zoom、Google Meet、Granola などの文字起こしを選択（.vtt、.srt、.docx、.txt）",
+ "Choose a transcript from Teams, Zoom, Google Meet, Granola… (.vtt, .srt, .sbv, .docx, .txt, .md)": "Teams、Zoom、Google Meet、Granola などの文字起こしを選択（.vtt、.srt、.sbv、.docx、.txt、.md）",
  "Choose…": "選択…",
  "Click this icon in the menu bar, then the red button when a meeting starts. Your notes appear there when it ends.": "メニューバーのこのアイコンをクリックし、会議が始まったら赤いボタンを押します。終了するとメモがそこに表示されます。",
  "Click to install.": "クリックしてインストール。",

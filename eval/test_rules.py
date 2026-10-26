@@ -260,6 +260,23 @@ def test_session_dirs():
         assert new_session_dir(cfg, "Standup", when).name == "2026-10-23_0900_Standup-2"
 
 
+def test_not_now_not_done_not_availability():
+    """Done right now in the meeting, already done, or where someone will be: not to-dos. For later, it is."""
+    tr = "\n".join(["[00:00:10] Ana: I can take a screenshot. Let me do that.",
+                    "[00:00:20] Ana: Let me try this, it should work.",
+                    "[00:00:30] Ben: Oh yes, I did that this morning.",
+                    "[00:00:40] Ana: I will be busy with the migration project next week.",
+                    "[00:00:50] Ana: Let me send you the deck after the call.",
+                    "[00:01:00] Ben: I can just mention it to Paul in my call this afternoon."])
+    raw = "\n".join('{"owner": "%s", "task": "%s", "due": "", "at": "%s", "quote": "%s"}' % x for x in [
+        ("Ana", "take a screenshot", "00:00:10", "I can take a screenshot"), ("Ana", "try something", "00:00:20", "Let me try this"),
+        ("Ben", "do it", "00:00:30", "I did that this morning"), ("Ana", "be busy with the migration project", "00:00:40", "I will be busy with the migration project"),
+        ("Ana", "send the deck", "00:00:50", "Let me send you the deck after the call")])
+    assert [a["task"] for a in sm.check_actions(raw, tr, D)] == ["send the deck"]
+    found = [c["sentence"] for c in sm.unclaimed(tr, [], D)]
+    assert found == ["Let me send you the deck after the call.", "I can just mention it to Paul in my call this afternoon."], found
+
+
 def test_other_languages():
     """Spanish, German, Portuguese and Italian: deadlines read, asked / volunteered tasks given to
     the right person, commitments found for the second look, decisions told from tasks."""

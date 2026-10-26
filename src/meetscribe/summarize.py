@@ -327,6 +327,22 @@ BEHAVIOUR = re.compile(r"^(faire attention|be careful|pay attention|try to|try a
                        r"tener cuidado|intentar|ser m[aá]s|mantenerse en contacto|aufpassen|versuchen|darauf achten|"
                        r"in kontakt bleiben|tomar cuidado|tentar|ser mais|manter contato|fare attenzione|provare a|"
                        r"cercare di|essere pi[uù]|restare in contatto)", re.I)
+# Saying where one will be, not a task ("I'll be busy with the X project", "I'll be online next week", "take a day off").
+AVAILABILITY = re.compile(r"^(be (busy|online|offline|away|off|out|back|available|around|free|reachable|on (holiday|leave|vacation))|"
+                          r"rest\b|take (a |the |some |at least a )?(day|days|week|time) off|have (today|tomorrow)|"
+                          r"[eê]tre (occup|absent|en cong|dispo|joignable))|"
+                          r"\b(remain|stay)s? (un)?available\b|\b(be|remain|stay) (unavailable|offline|out of office)\b|"
+                          r"\b(i|we)('ll| will|'m going to| am going to)? be (busy|online|offline|away|off|out|back|available|around|"
+                          r"free|reachable|on (holiday|leave|vacation))\b|\btake (a |the |some |at least a )?(day|days|time) off\b|"
+                          r"\bje serai (occup|absent|en cong|dispo|joignable)", re.I)
+# Done right now in the meeting ("let me see", "let me try this", "I'll send it to you now") — unless it's for later.
+IMMEDIATE = re.compile(r"\b(let me (see|try|show|share|do that|do it|log|open|find|pull|bring up|read|go back|scroll|zoom|think|"
+                       r"ask you|start|quickly|just)|let's (see|have a look|try)|(right )?now\W*$|je (vous |te )?montre|"
+                       r"laisse[zr]?-moi (voir|regarder|essayer|chercher))", re.I)
+LATER = re.compile(r"\b(after|later|afterwards|tomorrow|tonight|next|by|before|come back|get back|follow up|apr[eè]s|demain|"
+                   r"plus tard|reviens|revenir)\b", re.I)
+# Already done ("I did it this morning"): not a to-do.
+DONE = re.compile(r"\b(i|we) (did|already|have already|'ve already|just did|have done|'ve done)\b|\bj'ai (d[ée]j[àa] |fait)", re.I)
 # "je vais en parler à l'équipe" copied as the task: the subject goes ("en parler à l'équipe").
 SUBJECT = re.compile(r"^(je vais |je m'en |je |j'|i'll |i will |i'm going to |we'll |we will |on va |nous allons |"
                      r"voy a |yo |ich werde |ich |eu vou |vou |vado a )", re.I)  # not "eu"/"io": "EU compliance check"
@@ -347,7 +363,7 @@ def check_actions(raw: str, transcript: str, meeting) -> list[dict]:
         task, owner = str(item.get("task", "")).strip(), str(item.get("owner", "")).strip()
         task = SUBJECT.sub("", task).strip()
         quote = set(_norm_words(str(item.get("quote", ""))))
-        if not task or len(quote) < 2 or BEHAVIOUR.match(task):
+        if not task or len(quote) < 2 or BEHAVIOUR.match(task) or AVAILABILITY.match(task):
             continue
         scores = [len(quote & w) / len(quote) for w in words_of]
         best = max(scores, default=0.0)
@@ -374,7 +390,12 @@ def check_actions(raw: str, transcript: str, meeting) -> list[dict]:
         # Peter mentioned"), ask him something else and ask something of everyone ("please…").
         t_line, speaker, text = lines[best_i]
         sentences = re.split(r"(?<=[.?!])\s+", text)
-        ask = sentences[max(range(len(sentences)), key=lambda j: len(quote & set(_norm_words(sentences[j]))))]
+        k = max(range(len(sentences)), key=lambda j: len(quote & set(_norm_words(sentences[j]))))
+        ask = sentences[k]
+        now = ask + " " + (sentences[k + 1] if k + 1 < len(sentences) else "")  # "I can do a screenshot. Let me do that."
+        if (IMMEDIATE.search(now) and not LATER.search(ask) and not any(d > meeting for d in _dates_said([ask], meeting))
+                if meeting else False) or DONE.search(ask) or AVAILABILITY.search(ask):
+            continue  # done in the meeting, already done, or where the speaker will be — not a to-do
         tokens = " ".join(re.findall(r"[a-z0-9]+|[,?]", _plain_text(ask)))  # "sarah , can you"
         if owner.lower() == speaker.lower():
             asked = [sp for sp in speakers if sp.lower() != speaker.lower() and _norm_words(sp)[:1]
@@ -427,7 +448,8 @@ IN_MEETING = re.compile(r"\b(say|talk|tell|present|explain|speak|start|think|ask
 
 # Someone taking something on ("I'll…", "we will…", "je m'en occupe"). The first pass misses
 # some of these in a long stretch; the ones no extracted task comes from get a second look.
-TAKES_ON = re.compile(r"\b(i'll|i will|i'm going to|i am going to|let me|leave it with me|i'm on it|i can (do|take|run|send|check)|"
+TAKES_ON = re.compile(r"\b(i'll|i will|i'm going to|i am going to|let me|leave it with me|i'm on it|"
+                      r"i can (just )?(do|take|run|send|check|mention|raise|bring|flag|ask|tell|forward|share)|"
                       r"i'm happy to|happy to (do|take|run)|je veux bien|"
                       r"we'll|we will|we're going to|we are going to|je vais|je m'en (occupe|charge)|"
                       r"je peux (le |la |les )?(faire|prendre|envoyer|regarder|préparer)|on va|nous allons|"
@@ -470,6 +492,10 @@ def unclaimed(transcript: str, checked: list[dict], meeting) -> list[dict]:
                     continue
                 if IN_MEETING.search(plain) and not any(d > meeting for d in dates):
                     continue  # "Chloe will say more about that", "I'll ask the questions today": done in the meeting
+                now = part + " " + (sentences[k + 1] if j == len(parts) - 1 and k + 1 < len(sentences) else "")
+                if (IMMEDIATE.search(now) and not LATER.search(part) and not any(d > meeting for d in dates)) \
+                        or DONE.search(part) or AVAILABILITY.search(part):
+                    continue  # "let me try this", "I did it this morning", "I'll be busy with the X project"
                 words = content(part)
                 if any(q and words and max(len(q & words) / len(q), len(q & words) / len(words)) >= 0.6
                        for q in quotes.get(t, [])):
@@ -999,7 +1025,8 @@ def final_decisions(checked: list[str], own: list[str], actions: list[dict]) -> 
 
     # Each list is cleaned first: when both give a decision, the wording kept must be one that stays.
     keep = lambda items: [d for d in (x.replace("\n", " ").strip() for x in items)
-                          if d and not OPEN.search(d) and not HOLLOW.search(d) and not NO_DECISION.search(d) and not repeats_task(d)]
+                          if d and not OPEN.search(d) and not HOLLOW.search(d) and not NO_DECISION.search(d)
+                          and not AVAILABILITY.search(d) and not repeats_task(d)]
     checked, own = keep(checked), keep(own)
     if DECISIONS_MODE == "notes":
         return own

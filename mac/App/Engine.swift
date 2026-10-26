@@ -40,6 +40,7 @@ enum Engine {
         env["PYTHONUNBUFFERED"] = "1"
         env["PYTHONDONTWRITEBYTECODE"] = "1" // never write into the (signed) app bundle
         env["UV_PROJECT_ENVIRONMENT"] = venv.path
+        env["UV_SYSTEM_CERTS"] = "1" // trust what macOS trusts: company networks that inspect HTTPS add their certificate there
         env["UV_PYTHON_INSTALL_DIR"] = support.appendingPathComponent("python").path
         env["UV_CACHE_DIR"] = support.appendingPathComponent("uv-cache").path
         env["UV_PYTHON_PREFERENCE"] = "only-managed"

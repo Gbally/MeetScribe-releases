@@ -323,6 +323,15 @@ struct ModelsPane: View {
                 if let p = d.progress { ProgressView(value: p) } else { ProgressView().progressViewStyle(.linear) }
                 Caption(d.status)
             }
+        } else if let err = model.modelDownloadError {
+            Section {
+                Text(err).font(.caption).foregroundColor(.red).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        if model.phase != .ready {
+            Section {
+                Caption("Not set up yet: the models you choose here are downloaded during the one-time setup.")
+            }
         }
         Section("Notes model") {
             ForEach(model.catalog.notes) { m in modelRow(m, speech: false) }
@@ -399,8 +408,8 @@ struct ModelsPane: View {
             if !inUse {
                 let installed = model.installedModels[m.repo] != nil
                 VStack(alignment: .trailing, spacing: 4) {
-                    Button(installed ? tr("Use") : tr("Download and use")) { model.useModel(m, speech: speech) }
-                        .disabled(model.modelDownload != nil || !fits)
+                    Button(installed || model.phase == .needsSetup ? tr("Use") : tr("Download and use")) { model.useModel(m, speech: speech) }
+                        .disabled(model.modelDownload != nil || !fits || model.phase == .settingUp)
                     if installed {
                         Button("Delete") { model.deleteModel(m.repo) }
                             .buttonStyle(.borderless).font(.caption).foregroundColor(.secondary)

@@ -116,6 +116,7 @@ final class AppModel: ObservableObject {
     @Published var catalog = ModelCatalog.load()
     @Published var installedModels: [String: Double] = [:]   // repo → GB on disk
     @Published var modelDownload: (repo: String, progress: Double?, status: String)?
+    @Published var modelDownloadError: String?
     @Published var settingsTab: SettingsTab = .general
     /// The UI language; changing it redraws every window (views are keyed by it).
     @Published private(set) var uiLanguage = AppLanguage.current
@@ -313,7 +314,7 @@ final class AppModel: ObservableObject {
         Task {
             setupStatus = tr("Installing the engine (Python + packages)…")
             let sync = await Engine.run(Engine.uv, ["sync", "--frozen", "--no-install-project", "--project", Engine.engineSource.path]) { _ in }
-            guard sync.ok else { return failSetup(tr("Couldn't install the engine.") + "\n" + sync.errorTail) }
+            guard sync.ok else { return failSetup(tr("Couldn't install the engine.") + "\n" + Self.withNetworkHint(sync.errorTail)) }
 
             // Pick the models that fit this Mac, and keep them (a later catalog only recommends).
             if settings.llmModel == nil { settings.llmModel = ModelCatalog.recommended(catalog.notes, for: .current)?.repo }
@@ -327,7 +328,7 @@ final class AppModel: ObservableObject {
                     self.setupStatus = text
                 }
             }
-            guard setup.ok else { return failSetup(tr("Download failed.") + "\n" + setup.errorTail) }
+            guard setup.ok else { return failSetup(tr("Download failed.") + "\n" + Self.withNetworkHint(setup.errorTail)) }
             Engine.markInstalled()
             phase = .ready
             setupStatus = ""
@@ -343,6 +344,14 @@ final class AppModel: ObservableObject {
                 refreshCalendar()
             }
         }
+    }
+
+    /// An error, plus what to do when the network refused the download's certificate (a company
+    /// proxy that inspects HTTPS with a certificate macOS doesn't trust).
+    static func withNetworkHint(_ error: String) -> String {
+        let signs = ["certificate", "UnknownIssuer", "CERTIFICATE_VERIFY_FAILED", "SSL"]
+        guard signs.contains(where: { error.localizedCaseInsensitiveContains($0) }) else { return error }
+        return error + "\n\n" + tr("This network checks secure connections with its own certificate (often a company network). Ask your IT team to install it in Keychain Access, or set up MeetScribe on another network (e.g. your phone's hotspot) — afterwards it works on any network.")
     }
 
     private func failSetup(_ message: String) {
@@ -854,8 +863,10 @@ final class AppModel: ObservableObject {
             if self.memoryWarning?.speech == speech { self.memoryWarning = nil }  // the model it was about is no longer used
             Engine.writeConfig(self.settings)
         }
-        if installedModels[model.repo] != nil { apply(); return }
-        guard modelDownload == nil else { return }
+        // Before the one-time setup, the choice is only noted: the setup downloads that model.
+        if installedModels[model.repo] != nil || phase == .needsSetup { apply(); return }
+        guard modelDownload == nil, phase == .ready else { return }
+        modelDownloadError = nil
         modelDownload = (model.repo, nil, tr("Starting download…"))
         Task {
             let result = await Engine.meetscribe(["models", "download", model.repo]) { [weak self] line in
@@ -865,7 +876,12 @@ final class AppModel: ObservableObject {
                 self.modelDownload = d
             }
             modelDownload = nil
-            if result.ok { Uninstaller.rememberDownload(model.repo); apply() } else { show(tr("Download failed: %@", result.errorTail)) }
+            if result.ok {
+                Uninstaller.rememberDownload(model.repo); apply()
+            } else {
+                modelDownloadError = tr("Download failed: %@", Self.withNetworkHint(result.errorTail))  // shown in Settings
+                show(tr("Download failed: %@", result.errorTail))
+            }
             loadInstalledModels()
         }
     }

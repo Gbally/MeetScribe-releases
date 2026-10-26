@@ -529,6 +529,12 @@ def cmd_summarize(args, cfg: Config):
 
 
 def main():
+    try:  # company networks that inspect HTTPS: trust the certificates macOS trusts (their Keychain)
+        import truststore
+
+        truststore.inject_into_ssl()
+    except Exception:  # noqa: BLE001 — without it, downloads use Python's own certificates as before
+        pass
     p = argparse.ArgumentParser(prog="meetscribe", description="Local meeting transcription + notes")
     sub = p.add_subparsers(dest="cmd", required=True)
 

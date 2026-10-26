@@ -581,6 +581,7 @@ dependencies = [
     { name = "sherpa-onnx" },
     { name = "sherpa-onnx-core" },
     { name = "soundfile" },
+    { name = "truststore" },
 ]
 
 [package.metadata]
@@ -591,6 +592,7 @@ requires-dist = [
     { name = "sherpa-onnx", specifier = ">=1.13.8" },
     { name = "sherpa-onnx-core", specifier = ">=1.13.8" },
     { name = "soundfile", specifier = ">=0.14.0" },
+    { name = "truststore", specifier = ">=0.10.5" },
 ]
 
 [[package]]

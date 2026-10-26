@@ -10,6 +10,7 @@ dependencies = [
     "sherpa-onnx>=1.13.8",
     "sherpa-onnx-core>=1.13.8",
     "soundfile>=0.14.0",
+    "truststore>=0.10.5",
 ]
 
 [project.scripts]

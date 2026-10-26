@@ -54,6 +54,12 @@ def guess_names(utterances, invited: list[str], me: str) -> dict[str, str]:
     names = {k: (v[0].split()[0] if len(v) == 1 else v[0]) for k, v in first.items()}
     if not names:
         return {}
+    # Surnames, for people spoken to formally ("Frau Vogel", "Mr Brandt", "señora Ruiz") → their first name.
+    last = {}
+    for k, v in first.items():
+        if len(v) == 1 and len(v[0].split()) > 1:
+            last.setdefault(_plain(v[0].split()[-1]), []).append(k)
+    surnames = {s: ks[0] for s, ks in last.items() if len(ks) == 1 and s not in names}
 
     def addressed(text: str) -> list[str]:
         """Names someone is spoken TO: "Emma, can you…", "…, Léa?", "Hi David" — not just mentioned
@@ -63,12 +69,17 @@ def guess_names(utterances, invited: list[str], me: str) -> dict[str, str]:
         for m in re.finditer(r"\b([A-ZÀ-Ý][a-zà-ÿ]+(?:-[A-ZÀ-Ý][a-zà-ÿ]+)?)\b", text):  # also "Jean-Marc"
             word, after = _plain(m[1]), text[m.end():m.end() + 3].lstrip()  # "Léa ?" (French spacing)
             before = _plain(text[max(0, m.start() - 12):m.start()])
-            if re.search(r"(thanks|thank you|merci)[ ,]*$", before) and after[:1] != "?":
+            if re.search(r"(thanks|thank you|merci|gracias|danke|obrigad[oa]|grazie)[ ,]*$", before) and after[:1] != "?":
                 continue  # "Thanks Lisa" answers Lisa, who spoke before ("Thanks, Tom?" does hand over)
-            vocative = after[:1] in ",?!" or re.search(r"(hi|hello|hey|bonjour|salut|et toi|and you)\W*$", before)
+            vocative = after[:1] in ",?!" or re.search(r"\b(hi|hello|hey|bonjour|salut|et toi|and you|hola|buenas|hallo|guten tag|ola|oi|bom dia|"
+                                                               r"ciao|buongiorno|salve|y tu|und du|e voce|e tu)\W*$", before)
             for k in names:
                 if vocative and (word == k or _close(word, k)) and k not in out:
                     out.append(k)
+            titled = re.search(r"\b(herr|frau|mr|mrs|ms|miss|monsieur|madame|senor|senora|senhor|senhora|signor|signora|"
+                               r"signore|dottor|dott|sr|sra)\.?\s*$", before)
+            if word in surnames and titled and after[:1] in ",?!." and surnames[word] not in out:
+                out.append(surnames[word])  # "Guten Tag, Frau Vogel, …" speaks to Katrin Vogel
         return out
 
     votes: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
@@ -77,7 +88,8 @@ def guess_names(utterances, invited: list[str], me: str) -> dict[str, str]:
             continue
         t = _plain(u.text)
         for k in names:  # "it's Marc", "this is Marc", "c'est Marc", "ici Marc"
-            if re.search(rf"\b(i'?m|i am|it'?s|this is|c'est|ici|moi c'est)\s+{re.escape(k)}\b", t):
+            if re.search(rf"\b(i'?m|i am|it'?s|this is|c'est|ici|moi c'est|soy|me llamo|ich bin|hier ist|hier spricht|sou|eu sou|"
+                          rf"aqui e|sono|mi chiamo|qui e)\s+{re.escape(k)}\b", t):
                 votes[u.speaker][k] += 3
         for k in addressed(u.text):  # someone speaking to Marc isn't Marc
             votes[u.speaker][k] -= 1

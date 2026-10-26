@@ -156,6 +156,9 @@ def test_final_decisions():
     got = sm.final_decisions(checked, own, acts)  # the same decision from both lists: kept once, in either wording
     assert len(got) == 4 and "final choice" in got[0] and got[1:] == [
         "Unreal stays as a fallback", "Move Orbis deal to Q1", "Partners are welcome at the party."], got
+    got = sm.final_decisions([], ["No formal decisions were recorded; the meeting focused on reporting issues.", "Aucune décision prise.",
+                                  "No new hires until January"], [])
+    assert got == ["No new hires until January"], got
 
 
 def test_merge_decisions():
@@ -257,6 +260,37 @@ def test_session_dirs():
         assert new_session_dir(cfg, "Standup", when).name == "2026-10-23_0900_Standup-2"
 
 
+def test_other_languages():
+    """Spanish, German, Portuguese and Italian: deadlines read, asked / volunteered tasks given to
+    the right person, commitments found for the second look, decisions told from tasks."""
+    for text, want in [("el lunes", "2026-10-26"), ("mañana", "2026-10-24"), ("esta mañana", "2026-10-23"), ("antes de fin de mes", "2026-10-31"),
+                       ("el 12 de noviembre", "2026-11-12"), ("bis Freitag", "2026-10-30"), ("heute morgen", "2026-10-23"),
+                       ("nächste Woche", "2026-10-26"), ("12. November", "2026-11-12"), ("até sexta-feira", "2026-10-30"),
+                       ("na segunda-feira", "2026-10-26"), ("entro mercoledì", "2026-10-28"), ("venerdì prossimo", "2026-10-30"),
+                       ("dentro de dos semanas", "2026-11-06")]:
+        assert str(parse_due(text, D)) == want, (text, parse_due(text, D))
+    es = "\n".join(["[00:00:36] Guillaume: Javier, ¿puedes llamar al banco el lunes y presionar un poco?",
+                    "[00:00:40] Javier: Sí, los llamo el lunes a primera hora."])
+    raw = "\n".join(['{"owner": "Guillaume", "task": "llamar al banco", "due": "el lunes", "at": "00:00:36", "quote": "puedes llamar al banco el lunes"}',
+                     '{"owner": "Guillaume", "task": "llamar al banco", "due": "lunes", "at": "00:00:40", "quote": "los llamo el lunes a primera hora"}'])
+    got = sm.check_actions(raw, es, D)
+    assert [(a["owner"], str(parse_due(a["due"], D))) for a in got] == [("Javier", "2026-10-26")] * 2, got
+    tr = "\n".join(["[00:01:00] Guillaume: Ich schicke Ihnen bis Freitag ein neues Angebot.",
+                    "[00:02:00] Sara: Perfetto, preparo io il test A B e lo lancio lunedì.",
+                    "[00:03:00] Mariana: Combinado, eu te mando até sexta."])
+    found = [c["speaker"] for c in sm.unclaimed(tr, [], D)]
+    assert found == ["Guillaume", "Sara", "Mariana"], found
+    assert sm.DECIDES.search("Entonces la apertura se queda el doce de noviembre.") and sm.DECIDES.search("Dann bleibt die Schulung im Dezember.")
+    assert sm.SETTLED.search("Le sfide tra amici restano per il prossimo trimestre") and not sm.SETTLED.search("The decision will be sent")
+    acts = [{"owner": "Carmen", "task": "enviar el borrador de la campaña de correo"}]
+    assert sm.final_decisions(["Carmen enviará el borrador de la campaña de correo el miércoles", "Presupuesto repartido a partes iguales"],
+                              [], acts) == ["Presupuesto repartido a partes iguales"]
+    u = [U("Guillaume", "Guten Tag. Frau Vogel, was denken Sie über das Angebot?", 0), U("Speaker 1", "Ich finde es zu teuer für unser Budget.", 3),
+         U("Guillaume", "Und Sie, Herr Brandt?", 6), U("Speaker 2", "Ich sehe das genauso, ehrlich gesagt.", 9),
+         U("Guillaume", "Frau Vogel, wann entscheiden Sie?", 12), U("Speaker 1", "Im Vorstand am zwölften November.", 15)]
+    assert names.guess_names(u, ["Katrin Vogel", "Stefan Brandt"], "Guillaume") == {"Speaker 1": "Katrin", "Speaker 2": "Stefan"}
+
+
 def test_chinese_japanese():
     """No spaces between words: their quotes are checked on pairs of characters, so the to-dos and
     decisions said are kept (they all went before) — and a made-up one still goes."""
@@ -276,6 +310,11 @@ def test_chinese_japanese():
     raw = '{"owner": "李明", "task": "给供应商打电话并定下合同", "due": "", "at": "00:00:40", "quote": "我周一给供应商打电话，把合同定下来。"}'
     assert [a["owner"] for a in sm.check_actions(raw, zh, D)] == ["李明"]
     assert sm._norm_words("l'équipe a décidé ﬁn 5,000") == ["l", "equipe", "a", "decide", "fin", "5", "000"]
+    raw = '{"owner": "田中", "task": "プロバイダーに電話する", "due": "月曜日", "at": "00:00:40", "quote": "月曜日にプロバイダーに電話して契約をまとめます。"}'
+    assert [a["due"] for a in sm.check_actions(raw, ja, D)] == ["月曜日"]  # the deadline is read, so it's kept
+    for text, want in [("月曜日", "2026-10-26"), ("11月12日", "2026-11-12"), ("明日の午後", "2026-10-24"), ("下周五", "2026-10-30"),
+                       ("星期三", "2026-10-28"), ("月底", "2026-10-31")]:
+        assert str(parse_due(text, D)) == want, (text, parse_due(text, D))
 
 
 def test_out_of_memory():

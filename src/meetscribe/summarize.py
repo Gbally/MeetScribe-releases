@@ -285,12 +285,19 @@ def _dates_said(texts: list[str], meeting) -> set:
     return found
 
 
-# Someone committing themselves in the sentence ("I'll…", "je vais…", "we will…").
+# What people say when they take something on, in the first person ("I'll call", "je l'envoie", "los llamo el lunes",
+# "ich schicke", "eu ligo", "preparo io"): Spanish, Portuguese and Italian often drop the pronoun.
+COMMIT_VERBS = (r"(llamo|mando|env[ií]o|preparo|hago|hablo|actualizo|reviso|escribo|organizo|compruebo|aviso|comparto|"
+                r"termino|me encargo|me ocupo|ligo|fa[çc]o|falo|atualizo|escrevo|compartilho|cuido|chamo|chiamo|invio|faccio|"
+                r"parlo|aggiorno|controllo|scrivo|organizzo|avviso|condivido|finisco|lancio|mi occupo|ci penso io)")
 FIRST_PERSON = re.compile(r"\b(i'll|i will|i'm going to|i am going to|i can|let me|we'll|we will|we're going to|"
-                          r"je vais|je m'en|je peux|je (le|la|les|lui|leur|te|vous) |je [lt]'|je fais|on va|nous allons)", re.I)
+                          r"je vais|je m'en|je peux|je (le|la|les|lui|leur|te|vous) |je [lt]'|je fais|on va|nous allons|"
+                          r"voy a|vamos a|yo|lo hago|vou|vamos|eu (vou|te|lhe)|io|vado a|ich|wir (werden|machen|schicken|k[üu]mmern)|"
+                          rf"(lo|la|los|las|le|les|te|se|o|a|os|as|lhe|lo|li|gli|ti|ve) {COMMIT_VERBS}|{COMMIT_VERBS})\b", re.I)
 
 REQUEST = re.compile(r"\b(can you|could you|would you|will you|please|tu peux|tu pourrais|peux-tu|pourrais-tu|"
-                     r"vous pouvez|est-ce que tu)\b", re.I)
+                     r"vous pouvez|est-ce que tu|puedes|podr[ií]as|pod[eé]is|puede usted|por favor|kannst du|k[öo]nnen sie|"
+                     r"k[öo]nntest du|k[öo]nnten sie|bitte|voc[eê] pode|pode|poderia|puoi|potresti|pu[oò] |per favore)\b", re.I)
 
 
 def _action_lines(raw: str) -> list[dict]:
@@ -316,9 +323,13 @@ def _action_lines(raw: str) -> list[dict]:
 # Resolutions about one's own behaviour, not tasks ("je vais faire attention", "I'll try to be clearer").
 BEHAVIOUR = re.compile(r"^(faire attention|be careful|pay attention|try to|try and|essayer|keep in mind|garder en t[eê]te|"
                        r"r[ée]fl[ée]chir|think about|be more|[eê]tre plus|take care to|veiller [àa]|"
-                       r"(be|stay|keep|get) in touch|rester en contact)", re.I)  # "we'll be in touch": a goodbye
+                       r"(be|stay|keep|get) in touch|rester en contact|"  # "we'll be in touch": a goodbye
+                       r"tener cuidado|intentar|ser m[aá]s|mantenerse en contacto|aufpassen|versuchen|darauf achten|"
+                       r"in kontakt bleiben|tomar cuidado|tentar|ser mais|manter contato|fare attenzione|provare a|"
+                       r"cercare di|essere pi[uù]|restare in contatto)", re.I)
 # "je vais en parler à l'équipe" copied as the task: the subject goes ("en parler à l'équipe").
-SUBJECT = re.compile(r"^(je vais |je m'en |je |j'|i'll |i will |i'm going to |we'll |we will |on va |nous allons )", re.I)
+SUBJECT = re.compile(r"^(je vais |je m'en |je |j'|i'll |i will |i'm going to |we'll |we will |on va |nous allons |"
+                     r"voy a |yo |ich werde |ich |eu vou |vou |vado a )", re.I)  # not "eu"/"io": "EU compliance check"
 
 
 def check_actions(raw: str, transcript: str, meeting) -> list[dict]:
@@ -411,14 +422,17 @@ Lines:
 
 # Things done in the meeting itself ("I'll start", "let me think out loud", "Chloe will say more").
 IN_MEETING = re.compile(r"\b(say|talk|tell|present|explain|speak|start|think|ask (you|most|a few|some)|give you|"
-                        r"walk (you|us) through|dire|parler|presenter|expliquer|commencer)\b")
+                        r"walk (you|us) through|dire|parler|presenter|expliquer|commencer|empiezo|empezamos|presento|explico|"
+                        r"fange an|stelle vor|erklare|comeco|apresento|comincio|inizio|spiego)\b")
 
 # Someone taking something on ("I'll…", "we will…", "je m'en occupe"). The first pass misses
 # some of these in a long stretch; the ones no extracted task comes from get a second look.
 TAKES_ON = re.compile(r"\b(i'll|i will|i'm going to|i am going to|let me|leave it with me|i'm on it|i can (do|take|run|send|check)|"
                       r"i'm happy to|happy to (do|take|run)|je veux bien|"
                       r"we'll|we will|we're going to|we are going to|je vais|je m'en (occupe|charge)|"
-                      r"je peux (le |la |les )?(faire|prendre|envoyer|regarder|préparer)|on va|nous allons)\b", re.I)
+                      r"je peux (le |la |les )?(faire|prendre|envoyer|regarder|préparer)|on va|nous allons|"
+                      r"voy a|vamos a|lo hago yo|yo me encargo|ich werde|wir werden|ich k[üu]mmere mich|ich mache|ich schicke|"
+                      rf"ich rufe|ich kl[äa]re|ich lasse|ich bereite|vou|vamos|eu cuido|vado a|me ne occupo|{COMMIT_VERBS})\b", re.I)
 
 
 def unclaimed(transcript: str, checked: list[dict], meeting) -> list[dict]:
@@ -439,16 +453,19 @@ def unclaimed(transcript: str, checked: list[dict], meeting) -> list[dict]:
             if sentence.rstrip().endswith("?"):
                 continue
             # Parts: a new clause with its own subject ("…, and I'll deploy…"), not "the plan and the quote".
-            parts = re.split(r",?\s+(?:and|then|so|et|puis|donc)\s+(?=(?:i|i'll|i'm|we|we'll|we're|je|j'|on|nous)\b)|;\s*",
+            parts = re.split(r",?\s+(?:and|then|so|et|puis|donc|y|e|und|dann|poi|quindi|entonces)\s+"
+                             r"(?=(?:i|i'll|i'm|we|we'll|we're|je|j'|on|nous|yo|ich|wir|eu|io|noi)\b)|;\s*",
                              sentence, flags=re.I)
             for j, part in enumerate(parts):
                 plain = _plain_text(part)
                 if len(plain.split()) < 3:
                     continue
                 third = any(m[1] in names for m in re.finditer(
-                    r"\b([a-z]+) (will|is going to|runs|takes|handles|leads|va|doit|s'occupe|prend|gere)\b", plain))
+                    r"\b([a-z]+) (will|is going to|runs|takes|handles|leads|va|doit|s'occupe|prend|gere|se encarga|asume|"
+                    r"lleva|wird|ubernimmt|kummert sich|vai|assume|cuida|si occupa|prende|gestisce)\b", plain))
                 dates = _dates_said([part], meeting) if meeting else set()
-                dated = re.search(r"\b(i|i'm|we|we're|je|j|nous)\b", plain) and any(d >= meeting for d in dates)
+                dated = (re.search(r"\b(i|i'm|we|we're|je|j|nous|yo|nosotros|ich|wir|io|noi)\b", plain)
+                         or re.search(COMMIT_VERBS, plain)) and any(d >= meeting for d in dates)
                 if not (TAKES_ON.search(part) or third or dated):
                     continue
                 if IN_MEETING.search(plain) and not any(d > meeting for d in dates):
@@ -486,7 +503,9 @@ def second_look(llm, lang: str, transcript: str, checked: list[dict], meeting) -
 
 STOP = set("""a an the to of for on in at by with and or is be it this that our we you they he she i
 le la les un une des de du d l et ou en au aux pour par avec sur dans ce cette son sa ses leur
-the his her their qui que them those these him us lui eux ceux cela sont est ete etre sera seront ont""".split())
+the his her their qui que them those these him us lui eux ceux cela sont est ete etre sera seront ont
+los las del una unos unas con para por que esta este eso der die das den dem des ein eine einen einem und oder mit
+fur auf zum zur von dass uma umas dos das com pelo pela gli della delle dei degli una con per nel nella che""".split())
 
 
 # Words that say nothing about WHICH task it is: two tasks sharing only these aren't the same.
@@ -495,7 +514,22 @@ ask tell set start finish follow next week today tomorrow monday tuesday wednesd
 january february march april may june july august september october november december lundi mardi
 mercredi jeudi vendredi janvier fevrier mars avril mai juin juillet aout septembre octobre novembre
 decembre semaine prochaine prepare envoie envoyer faire fait demande before after noon morning
-afternoon evening tonight end month soon avant apres matin soir midi fin mois""".split())
+afternoon evening tonight end month soon avant apres matin soir midi fin mois
+preparar enviar mandar hacer revisar vorbereiten schicken senden machen erledigen fazer preparare inviare
+mandare semana woche settimana proxima proximo nachste nachsten prossima prossimo manana morgen domani hoy
+heute oggi hoje amanha tarde mes monat mese""".split())
+
+
+def _date_words(*tables) -> set[str]:
+    """The weekday or month names of every language dates are read in (dates.py), without accents."""
+    import unicodedata
+
+    return {unicodedata.normalize("NFKD", w).encode("ascii", "ignore").decode() for t in tables for w in t if len(w) > 3}
+
+
+from .dates import MONTHS as _MONTH_NAMES, WEEKDAYS as _WEEKDAY_NAMES  # noqa: E402
+
+GENERIC |= _date_words(_MONTH_NAMES, _WEEKDAY_NAMES)
 
 
 def _content(task: str) -> set[str]:
@@ -711,7 +745,11 @@ DECIDES = re.compile(r"\b(decided|decision|let's (go|do|keep|move|try|say|stick|
                      r"stays|remains|is dropped|we drop|forget it|moves? to|postpone|from now on|(from|starting) (next|monday|"
                      r"tomorrow|january|today)|the rule is|we keep|keep it|no change|"
                      r"d[ée]cid|on garde|on retient|on part sur|on reste|on abandonne|abandonn|on laisse|attendra|"
-                     r"[àa] partir d|on teste|on le teste|valid[ée]|approuv|on passe [àa]|report[ée]|on repousse|act[ée])", re.I)
+                     r"[àa] partir d|on teste|on le teste|valid[ée]|approuv|on passe [àa]|report[ée]|on repousse|act[ée]|"
+                     r"decis|acordamos|de acuerdo|nos quedamos|se queda|mantenemos|aprobad|descartamos|aplazamos|retras|"
+                     r"pospon|beschlossen|beschlie[ßs]en|entschieden|vereinbart|einverstanden|bleibt|bleiben|verschoben|"
+                     r"verschieben|genehmigt|machen wir so|combinado|fica |ficam|mantemos|aprovad|adiad|adiar|vamos com|"
+                     r"d'accordo|resta |restano|rimane|manteniamo|approvat|rimandiamo|rinviat|mettiamo da parte|partiamo con)", re.I)
 
 
 def check_decisions(raw: str, transcript: str) -> list[dict]:
@@ -753,6 +791,7 @@ def _decision_words(text: str) -> set[str]:
 
 MONTHS = set("""january february march april may june july august september october november december
 janvier fevrier mars avril mai juin juillet aout septembre octobre novembre decembre""".split())
+MONTHS |= _date_words(_MONTH_NAMES)
 
 
 def _marks(text: str) -> set[str]:
@@ -894,7 +933,8 @@ def _drop_task_decisions(body: str, actions: list[dict]) -> str:
     for line in body.splitlines():
         if re.match(r"^#{1,4}\s", line):
             in_decisions = "decision" in line.lower()
-        m = re.match(r"^\s*[-*•]\s+\**([A-Za-zÀ-ÿ]+)(?: \d+)?\**(?: \([A-Z]{2}\))?\s+(to|will|shall|must|va|doit)\b", line)
+        m = re.match(r"^\s*[-*•]\s+\**([A-Za-zÀ-ÿ]+)(?: \d+)?\**(?: \([A-Z]{2}\))?\s+(to|will|shall|must|va|doit|wird|soll|muss|"
+                     r"vai|deve|debe|se encarga)\b", line)
         if in_decisions and m and m[1].lower() in tasks:  # also "Speaker 1 (FR) will…"
             words = _content(line[m.end():])
             if any(t and len(words & t) >= min(2, len(t)) for t in tasks[m[1].lower()]):
@@ -913,17 +953,24 @@ DECISIONS_MODE = "union"  # "union": the checked decisions, then the notes' own 
 SETTLED = re.compile(r"\b(decided|agreed|approv|stays|remains|unchanged|dropped|moves?\b|moved\b|postpon|defer|kept|keep|"
                      r"limited|restricted|blocked|priority|rule|d[ée]cid|reste|garde|abandonn|report|repouss|d[ée]cal|limit[ée]|"
                      r"bloqu|conserv|retenu|"
-                     r"valid[ée]|approuv|act[ée]|priorit|r[eè]gle)", re.I)
+                     r"valid[ée]|approuv|act[ée]|priorit|r[eè]gle|decis[oaie]\b|mantien|se queda|queda |aprob|descart|retras|pospuest|"
+                     r"regla|limitad|beschlossen|entschieden|bleibt|verschoben|genehmigt|gestrichen|regel|begrenzt|fica |"
+                     r"mantid|aprov|adiad|cancelad|regra|resta\b|restano|rimane|mantenut|rimandat|rinviat|annullat|regola|da parte)", re.I)
 # A deadline for someone's work ("by Monday", "d'ici mercredi", "due Friday"): to-dos have them, decisions don't.
-DEADLINE = re.compile(r"\b(by|due|before|until|d'ici|avant|pour le|pour vendredi|pour lundi)\s+(the\s+|le\s+)?"
-                      r"(monday|tuesday|wednesday|thursday|friday|next|tomorrow|tonight|today|end|\d|january|february|march|"
-                      r"april|may|june|july|august|september|october|november|december|lundi|mardi|mercredi|jeudi|vendredi|"
-                      r"demain|ce soir|la fin|fin|\d|janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[uû]t|septembre|"
-                      r"octobre|novembre|d[ée]cembre)", re.I)
+DEADLINE = re.compile(r"\b(by|due|before|until|d'ici|avant|pour le|pour vendredi|pour lundi|para el|antes del?|hasta el|"
+                      r"bis zum|bis|sp[äa]testens|at[ée]( o| a)?|entro( il| la)?|per il|prima di)\s+(the\s+|le\s+|el\s+|la\s+|il\s+)?"
+                      r"((" + "|".join(sorted(map(re.escape, [*_WEEKDAY_NAMES, *_MONTH_NAMES]), key=len, reverse=True)) +
+                      r")\b|next|tomorrow|tonight|today|end|\d|demain|ce soir|la fin|fin|ma[ñn]ana|morgen|amanh[ãa]|domani|"
+                      r"finales de|fine (del|della|mese|settimana)|ende (der|des))", re.I)  # "\b": "until marketing" isn't March
 # Lines that only say something was settled, not what ("The reference deadline is set").
 HOLLOW = re.compile(r"(\b(is|are|has been|have been|was|were)\s+(set|requested|scheduled|defined|established|planned|fixed|"
                     r"noted|discussed|mentioned)\s*\.?$|\b(deadline|due date|date|[ée]ch[ée]ance)\b.*\b(is|are) (set|fixed|scheduled)\b)", re.I)
-OPEN = re.compile(r"\b(not (yet )?decided|undecided|to be decided|still open|tbd|pas (encore )?d[ée]cid|[àa] d[ée]cider|reste ouvert)", re.I)
+# "No formal decisions were recorded; the meeting focused on…": says there's none, it isn't one.
+NO_DECISION = re.compile(r"^\W*(no|none|nothing|aucune?|rien|ning[uú]n[ao]?|nada|keine?|nichts|nenhum[ao]?|nessun[ao]?)\b.{0,40}"
+                         r"\b(decision|decided|d[ée]cision|d[ée]cid|decisi[oó]n|decis|entscheid|beschlo|decis[aãoõ])", re.I)
+OPEN = re.compile(r"\b(not (yet )?decided|undecided|to be decided|still open|tbd|pas (encore )?d[ée]cid|[àa] d[ée]cider|reste ouvert|"
+                  r"no (se ha |est[aá] )?decidid|sin decidir|por decidir|noch nicht entschieden|noch offen|ainda n[aã]o (foi )?decidid|"
+                  r"n[aã]o (foi )?decidid|a decidir|em aberto|non (ancora )?decis|da decidere|ancora aperto)", re.I)
 
 
 def final_decisions(checked: list[str], own: list[str], actions: list[dict]) -> list[str]:
@@ -940,7 +987,8 @@ def final_decisions(checked: list[str], own: list[str], actions: list[dict]) -> 
         if SETTLED.search(text):
             return False
         words = _content(text)
-        m = re.match(r"^\**([A-Za-zÀ-ÿ]+)(?: \d+)?\**(?: \([A-Z]{2}\))?\s+(to|will|shall|must|is to|needs to|va|doit|"
+        m = re.match(r"^\**([A-Za-zÀ-ÿ]+)(?: \d+)?\**(?: \([A-Z]{2}\))?\s+(to|will|shall|must|is to|needs to|va|doit|wird|soll|"
+                     r"muss|vai|deve|debe|se encarga|\w{3,}r[áà]|"
                      r"s'engage|\w{3,}ra)\b", text, re.I)  # "… va envoyer", "… demandera"
         if m and m[1].lower() in by_owner:  # "Emma will send the list…" when that's her to-do
             return any(words & t for t in by_owner[m[1].lower()])
@@ -951,7 +999,7 @@ def final_decisions(checked: list[str], own: list[str], actions: list[dict]) -> 
 
     # Each list is cleaned first: when both give a decision, the wording kept must be one that stays.
     keep = lambda items: [d for d in (x.replace("\n", " ").strip() for x in items)
-                          if d and not OPEN.search(d) and not HOLLOW.search(d) and not repeats_task(d)]
+                          if d and not OPEN.search(d) and not HOLLOW.search(d) and not NO_DECISION.search(d) and not repeats_task(d)]
     checked, own = keep(checked), keep(own)
     if DECISIONS_MODE == "notes":
         return own

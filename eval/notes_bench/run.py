@@ -35,11 +35,11 @@ def arm_name(repo: str) -> str:
     return name
 
 
-def home_for(out: Path, repo: str) -> Path:
+def home_for(out: Path, repo: str, languages: str = "en,fr") -> Path:
     home = out / "homes" / arm_name(repo)
     home.mkdir(parents=True, exist_ok=True)
     (home / "config.toml").write_text(
-        f'notes_dir = "{out / "notes"}"\nme = "Guillaume"\nlanguage = "en,fr"\nsummary_language = "auto"\n'
+        f'notes_dir = "{out / "notes"}"\nme = "Guillaume"\nlanguage = "{languages}"\nsummary_language = "auto"\n'
         f'summary_style = "standard"\ntemplate = "general"\nllm_model = "{repo}"\n'
         f'whisper_model = "mlx-community/whisper-large-v3-turbo"\n')
     if not (home / "models").exists():
@@ -78,7 +78,11 @@ def main():
             base.mkdir(parents=True, exist_ok=True)
             subprocess.run([sys.executable, str(HERE / "make_audio.py"), sc, str(base)], check=True)
         if not (base / "transcript.json").exists():
-            code, secs = run_engine(homes[a.model[0]], base / "process.log", "process", str(base), "--no-summary")
+            # The meeting's own languages, as set in Settings (en,fr for the French/English ones)
+            langs = "en,fr" if sc == "engine" else ",".join(sorted({lang for _, lang, _ in SCENARIOS[sc]["turns"]} | {"en"}))
+            home = home_for(out, a.model[0], langs)
+            code, secs = run_engine(home, base / "process.log", "process", str(base), "--no-summary")
+            home_for(out, a.model[0])
             with open(times, "a") as f:
                 f.write(f"{sc} transcribe exit={code} seconds={secs:.0f}\n")
             if code:

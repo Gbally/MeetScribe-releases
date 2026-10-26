@@ -1,6 +1,6 @@
 # Notes benchmark
 
-Measures what the notes get right on meetings whose content is known exactly: 10 synthetic
+Measures what the notes get right on meetings whose content is known exactly: 14 synthetic
 meetings spoken by the macOS voices (and an optional 30-minute one), each with its truth — the
 to-dos (owner, deadline), decisions, figures, risks, topics, and who spoke when.
 
@@ -16,6 +16,10 @@ to-dos (owner, deadline), decisions, figures, risks, topics, and who spoke when.
 | `client_bilingue` | EN call, then a FR debrief | 4 | 3 min | Client call |
 | `pipeline` | EN | 5 | 3 min | General |
 | `retro` | FR/EN mixed | 5 | 3 min | Workshop |
+| `proyecto_es` | ES | 4 | 2 min | General |
+| `kunde_de` | DE, client spoken to formally ("Frau Vogel") | 3 | 2 min | Client call |
+| `one_on_one_pt` | PT (Brazil) | 2 | 2 min | 1:1 |
+| `workshop_it` | IT | 4 | 2 min | Workshop |
 | `engine` (`--engine`) | EN/FR, 3 people | 3 | 30 min | Workshop |
 
 ## Run
@@ -28,6 +32,7 @@ downloaded):
     --model mlx-community/Qwen3.5-4B-4bit --rounds 3
 ```
 
+- Each meeting is transcribed with its own languages (as set in Settings).
 - `--model` again to compare models; `--templates both` to also score the General template;
   `--meetings standup,interview` for a subset; `--engine` for the 30-min meeting.
 - About 1–2 min per meeting and round on an M2 (8 GB); the audio is made once, the

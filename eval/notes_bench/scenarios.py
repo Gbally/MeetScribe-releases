@@ -726,3 +726,212 @@ SCENARIOS["retro"] = dict(
                ("rotating retro facilitator", [r"rotat|retro"])],
     ),
 )
+
+# ---------------------------------------------------------------- 11. Proyecto (ES, 4 personas)
+ES = lambda v: f"{v} (Spanish (Spain))"
+SCENARIOS["proyecto_es"] = dict(
+    title="", template="general", me="Guillaume", lead=6,
+    calendar=["Lucía Fernández", "Javier Ortega", "Carmen Ruiz"],
+    people={
+        "G": dict(name="Guillaume", voice={"es": ES("Eddy")}, track="mic"),
+        "L": dict(name="Lucía", voice={"es": "Mónica"}, track="system", gain=0.7),
+        "J": dict(name="Javier", voice={"es": ES("Reed")}, track="system", gain=0.65),
+        "C": dict(name="Carmen", voice={"es": "Paulina"}, track="system", gain=0.7),
+    },
+    turns=[
+        ("G", "es", "Buenos días a todos. Hoy revisamos el lanzamiento de la nueva tienda online. Lucía, ¿empiezas tú con el calendario?"),
+        ("L", "es", "Claro. El catálogo ya está cargado, faltan las fotos de unos doscientos productos. El fotógrafo termina el seis de noviembre."),
+        ("G", "es", "¿Y la pasarela de pago?"),
+        ("J", "es", "Funciona en pruebas, pero el banco todavía no nos ha dado las claves de producción. Sin eso no podemos abrir. Es el mayor riesgo ahora mismo."),
+        ("G", "es", "Javier, ¿puedes llamar al banco el lunes y presionar un poco?"),
+        ("J", "es", "Sí, los llamo el lunes a primera hora."),
+        ("C", "es", "Sobre el presupuesto de marketing: tenemos quince mil euros. Propongo gastar diez mil en redes sociales y cinco mil en correo electrónico."),
+        ("L", "es", "Yo pondría más en correo, nuestra lista tiene cuarenta mil clientes y convierte mucho mejor."),
+        ("G", "es", "Vale. Decidimos repartir a partes iguales: siete mil quinientos para redes y siete mil quinientos para correo."),
+        ("C", "es", "De acuerdo. Preparo la campaña de correo y te mando el borrador el miércoles."),
+        ("G", "es", "Perfecto. Otra cosa: la fecha de apertura. ¿Mantenemos el doce de noviembre?"),
+        ("L", "es", "Si el banco responde la semana que viene, sí."),
+        ("G", "es", "Entonces la apertura se queda el doce de noviembre. Si el lunes que viene no hay claves, la retrasamos una semana."),
+        ("J", "es", "Una pregunta: ¿quién atiende el chat de clientes el primer fin de semana? Todavía no lo sabemos."),
+        ("G", "es", "Buena pregunta, lo vemos en la próxima reunión."),
+        ("C", "es", "Otro riesgo: el almacén solo puede preparar trescientos pedidos al día. Si la campaña funciona demasiado bien, no damos abasto."),
+        ("G", "es", "Lo apunto. Yo hablo con el almacén esta tarde para ver si pueden reforzar el equipo."),
+        ("L", "es", "Y yo actualizo el plan del proyecto con todo esto y lo comparto antes de fin de mes."),
+        ("G", "es", "Genial. La próxima reunión es dentro de dos semanas. Gracias a todos."),
+    ],
+    truth=dict(
+        speakers=3,
+        tasks=[
+            ({"javier"}, [r"banco|bank|clave|key"], "2026-10-26", "Javier: llamar al banco el lunes"),
+            ({"carmen"}, [r"correo|email|campa|borrador|draft"], "2026-10-28", "Carmen: borrador campaña de correo el miércoles"),
+            ({"guillaume"}, [r"almac|almat|warehouse|refuerz|equipo"], "2026-10-23", "Guillaume: hablar con el almacén esta tarde"),
+            ({"lucia", "lucía"}, [r"plan"], "2026-10-31", "Lucía: actualizar el plan antes de fin de mes"),
+            ({"lucia", "lucía"}, [r"foto|photo"], None, "~ fotógrafo termina el 6 nov"),
+        ],
+        decisions=[
+            ("presupuesto a partes iguales", [r"7[ .,]?500|partes iguales|equal|mitad|half"]),
+            ("apertura el 12 de noviembre", [r"12 (de )?nov|nov\w* 12"]),
+            ("retraso de una semana si no hay claves", [r"retras|semana|delay|week"]),
+            ("próxima reunión en dos semanas", [r"dos semanas|two weeks|2 semanas|proxima reunion"]),
+        ],
+        figures=[("6 nov", [r"\b6 (de )?nov|nov\w* 6\b"]), ("200 productos", [r"\b200\b|doscientos"]), ("15 000 €", [r"15[ .,]?000|15 ?k|quince mil"]),
+                 ("7 500 €", [r"7[ .,]?500"]), ("40 000 clientes", [r"40[ .,]?000|cuarenta mil"]), ("300 pedidos al día", [r"\b300\b|trescientos"]),
+                 ("12 nov", [r"12 (de )?nov|nov\w* 12"])],
+        risks=[("claves del banco", [r"banco|bank|clave|key"]), ("capacidad del almacén", [r"almac|warehouse|300|pedido"])],
+        topics=[("calendario / fotos", [r"foto|catalog|calendar"]), ("pasarela de pago", [r"pago|pasarela|payment|banco"]),
+                ("presupuesto marketing", [r"presupuesto|budget|marketing|7[ .,]?500"]), ("fecha de apertura", [r"apertura|lanzamiento|12 (de )?nov|launch|opening"]),
+                ("almacén", [r"almac|warehouse|pedido"])],
+    ),
+)
+
+# ---------------------------------------------------------------- 12. Kundengespräch (DE, 3 Personen)
+DE = lambda v: f"{v} (German (Germany))"
+SCENARIOS["kunde_de"] = dict(
+    title="", template="client", me="Guillaume", lead=6,
+    calendar=["Katrin Vogel", "Stefan Brandt"],
+    people={
+        "G": dict(name="Guillaume", voice={"de": DE("Eddy")}, track="mic"),
+        "K": dict(name="Katrin", voice={"de": "Anna"}, track="system", gain=0.7),
+        "S": dict(name="Stefan", voice={"de": DE("Reed")}, track="system", gain=0.65),
+    },
+    turns=[
+        ("G", "de", "Guten Tag, Frau Vogel, guten Tag, Herr Brandt. Danke für Ihre Zeit. Heute geht es um die Verlängerung des Wartungsvertrags."),
+        ("K", "de", "Gerne. Wir sind mit der Software zufrieden, aber die Reaktionszeit bei Störungen ist zu lang. Letzten Monat haben wir zweimal über sechs Stunden gewartet."),
+        ("G", "de", "Das verstehe ich. Wir können die Reaktionszeit auf zwei Stunden garantieren, mit dem Premium-Paket."),
+        ("S", "de", "Was kostet das Premium-Paket?"),
+        ("G", "de", "Achtzehntausend Euro pro Jahr, statt zwölftausend heute."),
+        ("K", "de", "Das ist viel. Unser Budget liegt bei fünfzehntausend Euro."),
+        ("G", "de", "Ich verstehe. Ich kann mit meiner Geschäftsführung über einen Rabatt sprechen. Ich schicke Ihnen bis Freitag ein neues Angebot."),
+        ("S", "de", "Gut. Außerdem brauchen wir eine Schulung für unsere zehn neuen Mitarbeiter."),
+        ("G", "de", "Das ist kein Problem. Die Schulung ist im Vertrag enthalten. Wir machen sie im Dezember."),
+        ("K", "de", "Einverstanden, dann bleibt die Schulung im Dezember."),
+        ("S", "de", "Ich schicke Ihnen morgen die Liste der Teilnehmer."),
+        ("K", "de", "Noch etwas: Unsere IT-Abteilung macht sich Sorgen um den Datenschutz. Die Server müssen in der EU stehen."),
+        ("G", "de", "Unsere Server stehen in Frankfurt. Ich lasse Ihnen die Zertifikate bis Mittwoch zukommen."),
+        ("K", "de", "Sehr gut. Und die Entscheidung über die Verlängerung treffen wir im Vorstand am zwölften November."),
+        ("G", "de", "Verstanden. Gibt es noch offene Fragen?"),
+        ("S", "de", "Ja, ob die Migration auf die neue Version im Preis enthalten ist, wissen wir noch nicht."),
+        ("G", "de", "Das kläre ich und gebe Ihnen nächste Woche Bescheid. Vielen Dank, auf Wiederhören."),
+    ],
+    truth=dict(
+        speakers=2,
+        tasks=[
+            ({"guillaume"}, [r"angebot|offer|rabatt|discount|proposal"], "2026-10-30", "Guillaume: neues Angebot bis Freitag"),
+            ({"stefan"}, [r"liste|teilnehmer|participant|list"], "2026-10-24", "Stefan: Teilnehmerliste morgen"),
+            ({"guillaume"}, [r"zertifikat|certific"], "2026-10-28", "Guillaume: Zertifikate bis Mittwoch"),
+            ({"guillaume"}, [r"migration|version|preis|price|klaer|clarif"], "2026-10-26", "Guillaume: Migration klären, nächste Woche"),
+        ],
+        decisions=[
+            ("Schulung im Dezember", [r"schulung|training|dezember|december"]),
+            ("Entscheidung im Vorstand am 12. November", [r"vorstand|board|12\.? nov|nov\w* 12"]),
+        ],
+        figures=[("6 Stunden", [r"(6|sechs) stunden|(6|six) hours|\b6 h"]), ("2 Stunden", [r"(2|zwei) stunden|(2|two) hours|\b2 h"]),
+                 ("18 000 €", [r"18[ .,]?000|18 ?k"]), ("12 000 €", [r"12[ .,]?000|12 ?k"]), ("15 000 €", [r"15[ .,]?000|15 ?k"]),
+                 ("10 Mitarbeiter", [r"\b10\b|zehn"]), ("12. November", [r"12\.? nov|nov\w* 12"])],
+        risks=[("Reaktionszeit", [r"reaktion|response|stoerung|storung|incident"]), ("Datenschutz / EU-Server", [r"datenschutz|privacy|eu|server|dsgvo|gdpr"]),
+               ("Budget unter dem Preis", [r"budget|15[ .,]?000|preis|price"])],
+        topics=[("Wartungsvertrag", [r"wartung|vertrag|contract|verlaenger|renew"]), ("Premium-Paket / Preis", [r"premium|18[ .,]?000|preis|price"]),
+                ("Schulung", [r"schulung|training"]), ("Datenschutz", [r"datenschutz|privacy|server|frankfurt"])],
+    ),
+)
+
+# ---------------------------------------------------------------- 13. Conversa individual (PT-BR, 2 pessoas)
+PT = lambda v: f"{v} (Portuguese (Brazil))"
+SCENARIOS["one_on_one_pt"] = dict(
+    title="", template="one_on_one", me="Guillaume", lead=5,
+    calendar=["Mariana Costa"],
+    people={
+        "G": dict(name="Guillaume", voice={"pt": PT("Eddy")}, track="mic"),
+        "M": dict(name="Mariana", voice={"pt": "Luciana"}, track="system", gain=0.7),
+    },
+    turns=[
+        ("G", "pt", "Oi Mariana, tudo bem? Vamos fazer nossa conversa mensal. Como você está se sentindo com a carga de trabalho?"),
+        ("M", "pt", "Sinceramente, um pouco sobrecarregada. Estou com três projetos ao mesmo tempo e o relatório trimestral também."),
+        ("G", "pt", "Entendo. Vamos tirar o relatório trimestral de você. O Pedro assume a partir de agora."),
+        ("M", "pt", "Ótimo, isso já ajuda muito."),
+        ("G", "pt", "Quero te dar um retorno: a apresentação para o cliente na semana passada foi excelente. Eles elogiaram a clareza."),
+        ("M", "pt", "Obrigada! Eu me preparei bastante."),
+        ("G", "pt", "Um ponto a melhorar: os prazos das estimativas. No último projeto você estimou duas semanas e levou quatro."),
+        ("M", "pt", "É verdade. Eu vou incluir uma margem nas próximas estimativas."),
+        ("G", "pt", "Sobre sua carreira: você ainda tem interesse em liderar uma equipe?"),
+        ("M", "pt", "Sim, muito. Gostaria de fazer um curso de liderança."),
+        ("G", "pt", "Temos um orçamento de três mil reais para formação por pessoa. Pode escolher um curso e me mandar até sexta-feira."),
+        ("M", "pt", "Combinado, eu te mando até sexta."),
+        ("G", "pt", "E eu vou falar com o RH na segunda-feira sobre um plano de desenvolvimento para você."),
+        ("M", "pt", "Perfeito. Uma dúvida: ainda não sei se vou poder trabalhar de casa dois dias por semana no ano que vem."),
+        ("G", "pt", "Isso ainda não foi decidido pela diretoria. Eu te aviso assim que souber. Nossa próxima conversa fica para daqui a um mês."),
+    ],
+    truth=dict(
+        speakers=1,
+        tasks=[
+            ({"mariana"}, [r"curso|course|formac|training"], "2026-10-30", "Mariana: escolher um curso, mandar até sexta"),
+            ({"guillaume"}, [r"\brh\b|\bhr\b|plano|plan|desenvolvimento"], "2026-10-26", "Guillaume: falar com o RH na segunda"),
+            ({"pedro"}, [r"relatorio|report|trimestral"], None, "~ Pedro assume o relatório"),
+            ({"mariana"}, [r"margem|margin|estimativ|estimat"], None, "~ Mariana: margem nas estimativas"),
+        ],
+        decisions=[
+            ("Pedro assume o relatório trimestral", [r"pedro|relatorio|report"]),
+            ("próxima conversa em um mês", [r"um mes|one month|1 mes|proxima conversa|next"]),
+        ],
+        figures=[("3 projetos", [r"(3|tres) projetos|(3|three) projects"]), ("2 → 4 semanas", [r"(4|quatro) semanas|(4|four) weeks"]),
+                 ("3 000 reais", [r"3[ .,]?000|tres mil|r\$"]), ("2 dias por semana", [r"(2|dois) dias|(2|two) days"])],
+        risks=[("sobrecarga", [r"sobrecarreg|carga|overload|workload"]), ("estimativas", [r"estimativ|estimat|prazo"])],
+        topics=[("carga de trabalho", [r"carga|sobrecarreg|workload|projeto"]), ("retorno / apresentação", [r"apresenta|presentation|retorno|feedback"]),
+                ("carreira / liderança", [r"lideran|leader|carreira|career|curso"]), ("trabalho remoto", [r"casa|remot|home"])],
+    ),
+)
+
+# ---------------------------------------------------------------- 14. Workshop (IT, 4 persone)
+IT = lambda v: f"{v} (Italian (Italy))"
+SCENARIOS["workshop_it"] = dict(
+    title="", template="workshop", me="Guillaume", lead=6,
+    calendar=["Giulia Romano", "Marco Bianchi", "Sara Conti"],
+    people={
+        "G": dict(name="Guillaume", voice={"it": IT("Eddy")}, track="mic"),
+        "GI": dict(name="Giulia", voice={"it": "Alice"}, track="system", gain=0.7),
+        "M": dict(name="Marco", voice={"it": IT("Reed")}, track="system", gain=0.65),
+        "S": dict(name="Sara", voice={"it": IT("Flo")}, track="system", gain=0.7, pitch=1.05),
+    },
+    turns=[
+        ("G", "it", "Ciao a tutti. Oggi facciamo un brainstorming per ridurre gli abbandoni nell'app di fitness. Al momento perdiamo il quaranta per cento degli utenti dopo il primo mese."),
+        ("GI", "it", "Io proporrei un programma di benvenuto di sette giorni, con un piccolo obiettivo ogni giorno."),
+        ("M", "it", "Bella idea. Io invece aggiungerei le sfide tra amici, la gente si allena di più in gruppo."),
+        ("S", "it", "E le notifiche personalizzate? Oggi mandiamo la stessa notifica a tutti alle otto di mattina."),
+        ("G", "it", "Tutte buone idee. Marco, quanto lavoro sono le sfide tra amici?"),
+        ("M", "it", "Almeno sei settimane, serve anche la parte social."),
+        ("GI", "it", "Il programma di benvenuto invece si fa in due settimane."),
+        ("G", "it", "Allora decidiamo così: partiamo con il programma di benvenuto. Le sfide tra amici restano per il prossimo trimestre."),
+        ("S", "it", "E le notifiche?"),
+        ("G", "it", "Le notifiche personalizzate le testiamo su un gruppo di mille utenti, con un test A B."),
+        ("S", "it", "Perfetto, preparo io il test A B e lo lancio lunedì."),
+        ("GI", "it", "Io scrivo i testi dei sette giorni del programma entro mercoledì."),
+        ("M", "it", "Un'altra idea: un abbonamento annuale scontato del venti per cento."),
+        ("G", "it", "Interessante, ma ne dobbiamo parlare con il reparto finanza. Per ora la mettiamo da parte."),
+        ("M", "it", "D'accordo. Allora io faccio una stima tecnica delle sfide tra amici per la fine del mese."),
+        ("GI", "it", "Rischio: se il programma di benvenuto è troppo lungo, gli utenti lo saltano."),
+        ("G", "it", "Giusto. Io organizzo una sessione con cinque utenti per testarlo la settimana prossima. Grazie a tutti."),
+    ],
+    truth=dict(
+        speakers=3,
+        tasks=[
+            ({"sara"}, [r"test a ?b|\ba ?b\b|notific"], "2026-10-26", "Sara: test A/B lunedì"),
+            ({"giulia"}, [r"testi|text|programma|program|benvenuto|welcome"], "2026-10-28", "Giulia: testi del programma entro mercoledì"),
+            ({"marco"}, [r"stima|estimat|sfid|challenge"], "2026-10-31", "Marco: stima delle sfide per fine mese"),
+            ({"guillaume"}, [r"sessione|session|utenti|user|test"], "2026-10-26", "Guillaume: sessione con 5 utenti la settimana prossima"),
+        ],
+        decisions=[
+            ("partire con il programma di benvenuto", [r"benvenuto|welcome|onboarding|programma"]),
+            ("sfide tra amici al prossimo trimestre", [r"sfid|challenge|trimestre|quarter"]),
+            ("notifiche testate su 1000 utenti", [r"notific|1[ .,]?000|mille|a ?b"]),
+            ("abbonamento annuale messo da parte", [r"abbonamento|subscription|annual|annuale|parte|park"]),
+        ],
+        ideas=[("programma di benvenuto", [r"benvenuto|welcome|onboarding"]), ("sfide tra amici", [r"sfid|challenge|amici|friend"]),
+               ("notifiche personalizzate", [r"notific"]), ("abbonamento annuale scontato", [r"abbonamento|subscription|annual|annuale"])],
+        figures=[("40 %", [r"40 ?%|40 per ?cento|quaranta"]), ("7 giorni", [r"(7|sette) giorni|(7|seven) days|7-day|7 day"]),
+                 ("6 settimane", [r"(6|sei) settimane|(6|six) weeks"]), ("2 settimane", [r"(2|due) settimane|(2|two) weeks"]),
+                 ("1000 utenti", [r"1[ .,]?000|mille"]), ("20 %", [r"20 ?%|20 per ?cento|venti"]), ("5 utenti", [r"(5|cinque) utenti|(5|five) users"])],
+        risks=[("programma troppo lungo", [r"lung|long|salt|skip"])],
+        topics=[("abbandoni", [r"abbandon|churn|40"]), ("programma di benvenuto", [r"benvenuto|welcome|onboarding"]),
+                ("sfide tra amici", [r"sfid|challenge"]), ("notifiche", [r"notific"]), ("abbonamento", [r"abbonamento|subscription"])],
+    ),
+)

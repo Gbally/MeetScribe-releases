@@ -1,7 +1,7 @@
 {
- "version": "0.6.1",
- "build": 95,
- "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.6.1/MeetScribe-0.6.1.dmg",
- "sha256": "3eafef0ccd41b7ec07e4345344c59e4c131f7a25dd21578f4d7867dd3d5f1d1e",
- "notes": "Notes 15 % faster, decisions checked against the transcript, alerts when a model runs out of memory, Japanese and Chinese to-dos, .sbv import and more transcript formats."
+ "version": "0.6.2",
+ "build": 101,
+ "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.6.2/MeetScribe-0.6.2.dmg",
+ "sha256": "060f81e4330ea7af80d81f6d53425ff26789872e84a8b7e2455c5194cb115b8d",
+ "notes": "Works on company networks that inspect HTTPS. To-dos, deadlines and decisions in Spanish, German, Portuguese and Italian; Chinese and Japanese to-dos with their dates. Formal names recognised (Frau Vogel). .sbv and .md listed in the import picker."
 }

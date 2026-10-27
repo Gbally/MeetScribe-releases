@@ -1,0 +1,7 @@
+{
+ "version": "0.6.4-test.111",
+ "build": 111,
+ "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.6.4-test.111/MeetScribe-0.6.4-test.111.dmg",
+ "sha256": "e5f66aeda16b10dcd8e699a33be6a267da26fe0c7c4c387ade15be01c557d5f3",
+ "notes": "Fix: the model menu for better notes is empty after an update."
+}

@@ -1,7 +1,7 @@
 {
- "version": "0.6.2",
- "build": 101,
- "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.6.2/MeetScribe-0.6.2.dmg",
- "sha256": "060f81e4330ea7af80d81f6d53425ff26789872e84a8b7e2455c5194cb115b8d",
- "notes": "Works on company networks that inspect HTTPS. To-dos, deadlines and decisions in Spanish, German, Portuguese and Italian; Chinese and Japanese to-dos with their dates. Formal names recognised (Frau Vogel). .sbv and .md listed in the import picker."
+ "version": "0.6.3",
+ "build": 105,
+ "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.6.3/MeetScribe-0.6.3.dmg",
+ "sha256": "05f5245e94871b8d0054de2176b87cb160619ba3362b4e2d328f461418acca0a",
+ "notes": "Fewer noisy to-dos: things done during the meeting, already done, or about someone's availability are left out. People greeted by name are recognised even without a calendar."
 }

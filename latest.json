@@ -1,7 +1,7 @@
 {
- "version": "0.6.3",
- "build": 105,
- "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.6.3/MeetScribe-0.6.3.dmg",
- "sha256": "05f5245e94871b8d0054de2176b87cb160619ba3362b4e2d328f461418acca0a",
- "notes": "Fewer noisy to-dos: things done during the meeting, already done, or about someone's availability are left out. People greeted by name are recognised even without a calendar."
+ "version": "0.6.4",
+ "build": 109,
+ "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.6.4/MeetScribe-0.6.4.dmg",
+ "sha256": "09b2e31565aff76c4c9b6da269f4d538396c761e3968b7deedc9ebccd72c20cc",
+ "notes": "Notes when you're away: quick notes now, better ones with a bigger model at lunch or when the Mac is locked. Compare models on a meeting (Regenerate in a copy with\u2026). Option to receive test versions."
 }

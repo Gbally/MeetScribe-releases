@@ -332,7 +332,7 @@ AVAILABILITY = re.compile(r"^(be (busy|online|offline|away|off|out|back|availabl
                           r"at the (show|office|event|conference|fair|stand|exhibition))|"
                           r"rest\b|take (a |the |some |at least a )?(day|days|week|time) off|have (today|tomorrow)|"
                           r"[eê]tre (occup|absent|en cong|dispo|joignable))|"
-                          r"\b(remain|stay)s? (un)?available\b|\b(be|remain|stay) (unavailable|offline|out of office)\b|"
+                          r"\b(remain|stay)s? (un)?available\b|\bunavailable\b|\bout of (the )?office\b|"
                           r"\b(i|we)('ll| will|'m going to| am going to)? be (busy|online|offline|away|off|out|back|available|around|"
                           r"free|reachable|on (holiday|leave|vacation))\b|\btake (a |the |some |at least a )?(day|days|time) off\b|"
                           r"\bje serai (occup|absent|en cong|dispo|joignable)", re.I)

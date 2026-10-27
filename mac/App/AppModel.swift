@@ -335,6 +335,7 @@ final class AppModel: ObservableObject {
             guard setup.ok else { return failSetup(tr("Download failed.") + "\n" + Self.withNetworkHint(setup.errorTail)) }
             Engine.markInstalled()
             phase = .ready
+            loadInstalledModels()  // skipped at launch while the engine was being set up (e.g. after an update)
             setupStatus = ""
             resumedUnprocessed = false
             resumeUnprocessed()
@@ -1282,9 +1283,11 @@ final class AppModel: ObservableObject {
 
     /// The notes models downloaded on this Mac, for "Regenerate in a copy with…".
     var installedNotesModels: [(repo: String, name: String)] {
-        let listed = catalog.notes.filter { installedModels[$0.repo] != nil }.map { ($0.repo, $0.name) }
-        let custom = installedModels.keys.filter { r in !catalog.notes.contains { $0.repo == r } && r == notesModel }
-        return listed + custom.map { ($0, modelName($0)) }
+        // The models in use are downloaded even before the list is known.
+        let have = Set(installedModels.keys).union([notesModel, settings.laterModel].compactMap { $0 }.filter { !$0.isEmpty })
+        let listed = catalog.notes.filter { have.contains($0.repo) }.map { ($0.repo, $0.name) }
+        let custom = have.filter { r in !catalog.notes.contains { $0.repo == r } && (r == notesModel || r == settings.laterModel) }
+        return listed + custom.sorted().map { ($0, modelName($0)) }
     }
 
     /// New notes with another model in a copy of the meeting ("… (Qwen3.5 9B)"), the original kept as it is.

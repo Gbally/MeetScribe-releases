@@ -343,6 +343,7 @@ struct ModelsPane: View {
             customInUse(speech: true)
         }
         CustomModelSection()
+            .onAppear { model.loadInstalledModels() }
         let listed = Set((model.catalog.notes + model.catalog.speech).map(\.repo))
         let unused = model.installedModels.filter { repo, _ in
             repo != model.notesModel && repo != model.speechModel && repo.hasPrefix("mlx-community/") && !listed.contains(repo)
@@ -651,6 +652,7 @@ struct LaterNotesSection: View {
                 Caption("Only when the Mac is on power. Transcripts are always made right away. If you come back while notes are being written, that meeting is finished and the next ones wait. To write them now: the button in MeetScribe's window.")
             }
         }
+        .onAppear { model.loadInstalledModels() }
     }
 
     func windowRow(_ i: Int) -> some View {

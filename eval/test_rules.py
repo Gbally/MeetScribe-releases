@@ -275,6 +275,14 @@ def test_not_now_not_done_not_availability():
     assert [a["task"] for a in sm.check_actions(raw, tr, D)] == ["send the deck"]
     found = [c["sentence"] for c in sm.unclaimed(tr, [], D)]
     assert found == ["Let me send you the deck after the call.", "I can just mention it to Paul in my call this afternoon."], found
+    for text in ["So let me reset your password. I've just done that.", "I've forwarded it to you over the weekend.", "Oh yes, I did that this morning."]:
+        assert sm.DONE.search(text), text
+    for text in ["Yes, and I can set up the server, I've done it before.", "I've asked IT and I'll chase them next week."]:
+        assert not (sm.DONE.search(text) and not sm.STILL_TO_DO.search(text)), text
+    assert sm.AVAILABILITY.match("be at the show all day") and not sm.AVAILABILITY.match("book the stand for the show")
+    u = [U("Guillaume", "Hello, Jesper.", 0), U("Guillaume", "How are you?", 2), U("Speaker 1", "Good, thanks. Did you get Simon sorted?", 4),
+         U("Guillaume", "Hi everyone, let's start.", 9), U("Speaker 2", "Sure, I can go first today.", 12)]
+    assert names.guess_names(u, [], "Guillaume") == {"Speaker 1": "Jesper"}  # no calendar: the person greeted by name
 
 
 def test_other_languages():

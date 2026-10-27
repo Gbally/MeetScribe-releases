@@ -38,6 +38,11 @@ def _hands_over(text: str, name: str) -> bool:
     return len(re.findall(r"\w+", rest)) <= 3
 
 
+# Greeted, but not people ("Hi everyone", "Hello guys", "Morning team").
+GREETED_NOT_NAMES = set("""everyone everybody all guys team folks there you both sir madam ladies gentlemen people friends
+tous tout toutes equipe todos todas equipo alle leute tutti ragazzi pessoal gente""".split())
+
+
 def guess_names(utterances, invited: list[str], me: str) -> dict[str, str]:
     """{"Speaker 1": "Sarah", …} for the labels the transcript gives clear evidence about.
     `invited`: the calendar attendees (full names); the first name is used when it's unique."""
@@ -45,6 +50,10 @@ def guess_names(utterances, invited: list[str], me: str) -> dict[str, str]:
     # to a second voice — that would merge two people in the transcript.
     taken = {_plain(me.split()[0]) if me else ""}
     taken |= {_plain(u.speaker.split()[0]) for u in utterances if not UNNAMED.match(u.speaker)}
+    if not invited:  # no calendar: the people greeted by name ("Hello, Jesper", "Hi Simon") are the candidates
+        invited = sorted({m[2] for u in utterances for m in re.finditer(
+            r"\b(hello|hi|hey|morning|bonjour|salut|hola|hallo|ciao|buongiorno|ol[aá]|oi)\W+([A-ZÀ-Ý][a-zà-ÿ]{2,})\b", u.text, re.I)
+            if m[2][:1].isupper() and _plain(m[2]) not in GREETED_NOT_NAMES})
     first = {}
     for full in invited:
         parts = full.split()
@@ -94,7 +103,11 @@ def guess_names(utterances, invited: list[str], me: str) -> dict[str, str]:
         for k in addressed(u.text):  # someone speaking to Marc isn't Marc
             votes[u.speaker][k] -= 1
         if i and utterances[i - 1].speaker != u.speaker and u.start - utterances[i - 1].end < 8:
-            tail = utterances[i - 1].text[-160:]  # "… Sarah, can you …?" → Sarah answers
+            # "… Sarah, can you …?" → Sarah answers. The turn before may be cut in pieces ("Hello, Jesper." "How are you?").
+            j = i - 1
+            while j and utterances[j - 1].speaker == utterances[i - 1].speaker and utterances[j].start - utterances[j - 1].end < 4:
+                j -= 1
+            tail = " ".join(x.text for x in utterances[j:i])[-160:]
             called = addressed(tail)
             # A reply of a few words ("Perfect, thanks.") is too short to be sure whose voice it
             # is: it counts half.

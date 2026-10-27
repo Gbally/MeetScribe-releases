@@ -328,7 +328,8 @@ BEHAVIOUR = re.compile(r"^(faire attention|be careful|pay attention|try to|try a
                        r"in kontakt bleiben|tomar cuidado|tentar|ser mais|manter contato|fare attenzione|provare a|"
                        r"cercare di|essere pi[uù]|restare in contatto)", re.I)
 # Saying where one will be, not a task ("I'll be busy with the X project", "I'll be online next week", "take a day off").
-AVAILABILITY = re.compile(r"^(be (busy|online|offline|away|off|out|back|available|around|free|reachable|on (holiday|leave|vacation))|"
+AVAILABILITY = re.compile(r"^(be (busy|online|offline|away|off|out|back|available|around|free|reachable|on (holiday|leave|vacation)|"
+                          r"at the (show|office|event|conference|fair|stand|exhibition))|"
                           r"rest\b|take (a |the |some |at least a )?(day|days|week|time) off|have (today|tomorrow)|"
                           r"[eê]tre (occup|absent|en cong|dispo|joignable))|"
                           r"\b(remain|stay)s? (un)?available\b|\b(be|remain|stay) (unavailable|offline|out of office)\b|"
@@ -337,12 +338,16 @@ AVAILABILITY = re.compile(r"^(be (busy|online|offline|away|off|out|back|availabl
                           r"\bje serai (occup|absent|en cong|dispo|joignable)", re.I)
 # Done right now in the meeting ("let me see", "let me try this", "I'll send it to you now") — unless it's for later.
 IMMEDIATE = re.compile(r"\b(let me (see|try|show|share|do that|do it|log|open|find|pull|bring up|read|go back|scroll|zoom|think|"
-                       r"ask you|start|quickly|just)|let's (see|have a look|try)|(right )?now\W*$|je (vous |te )?montre|"
+                       r"ask you|start|quickly|just|reset|check)|let's (see|have a look|try)|\b(right )?now\b|je (vous |te )?montre|"
                        r"laisse[zr]?-moi (voir|regarder|essayer|chercher))", re.I)
 LATER = re.compile(r"\b(after|later|afterwards|tomorrow|tonight|next|by|before|come back|get back|follow up|apr[eè]s|demain|"
                    r"plus tard|reviens|revenir)\b", re.I)
 # Already done ("I did it this morning"): not a to-do.
-DONE = re.compile(r"\b(i|we) (did|already|have already|'ve already|just did|have done|'ve done)\b|\bj'ai (d[ée]j[àa] |fait)", re.I)
+DONE = re.compile(r"^(?!.*\bbefore\b)(.*\b(i|we) (just )?(did|already)\b|.*\b(i|we)('ve| have) (just|already) \w+|"
+                  r".*\b(i|we)('ve| have) \w+ed (it |that |this |them )?(to|over) (you|them|him|her)\b|.*\bj'ai (d[ée]j[àa]|fait))",
+                  re.I)  # "I've just done that", "I've forwarded it to you" — not "I've done it before"
+# … unless something is still to come in the same sentence ("I've asked IT and I'll chase them next week").
+STILL_TO_DO = re.compile(r"\b(will|'ll|going to|gonna|tomorrow|next|later|then i)\b", re.I)
 # "je vais en parler à l'équipe" copied as the task: the subject goes ("en parler à l'équipe").
 SUBJECT = re.compile(r"^(je vais |je m'en |je |j'|i'll |i will |i'm going to |we'll |we will |on va |nous allons |"
                      r"voy a |yo |ich werde |ich |eu vou |vou |vado a )", re.I)  # not "eu"/"io": "EU compliance check"
@@ -394,7 +399,7 @@ def check_actions(raw: str, transcript: str, meeting) -> list[dict]:
         ask = sentences[k]
         now = ask + " " + (sentences[k + 1] if k + 1 < len(sentences) else "")  # "I can do a screenshot. Let me do that."
         if (IMMEDIATE.search(now) and not LATER.search(ask) and not any(d > meeting for d in _dates_said([ask], meeting))
-                if meeting else False) or DONE.search(ask) or AVAILABILITY.search(ask):
+                if meeting else False) or (DONE.search(now) and not STILL_TO_DO.search(ask)) or AVAILABILITY.search(ask):
             continue  # done in the meeting, already done, or where the speaker will be — not a to-do
         tokens = " ".join(re.findall(r"[a-z0-9]+|[,?]", _plain_text(ask)))  # "sarah , can you"
         if owner.lower() == speaker.lower():
@@ -494,7 +499,7 @@ def unclaimed(transcript: str, checked: list[dict], meeting) -> list[dict]:
                     continue  # "Chloe will say more about that", "I'll ask the questions today": done in the meeting
                 now = part + " " + (sentences[k + 1] if j == len(parts) - 1 and k + 1 < len(sentences) else "")
                 if (IMMEDIATE.search(now) and not LATER.search(part) and not any(d > meeting for d in dates)) \
-                        or DONE.search(part) or AVAILABILITY.search(part):
+                        or (DONE.search(now) and not STILL_TO_DO.search(part)) or AVAILABILITY.search(part):
                     continue  # "let me try this", "I did it this morning", "I'll be busy with the X project"
                 words = content(part)
                 if any(q and words and max(len(q & words) / len(q), len(q & words) / len(words)) >= 0.6

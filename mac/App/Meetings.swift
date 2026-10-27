@@ -62,6 +62,7 @@ struct MeetingInfo: Codable {
     var duration: Double?
     var calendar: CalendarEvent?
     var template: String?
+    var label: String?  // a copy's name ("Qwen3.5 9B"), added to its title
 }
 
 extension JSONDecoder {
@@ -88,9 +89,11 @@ struct Meeting: Identifiable, Equatable {
     var done: Set<Int>
     /// Lowercased title + notes + transcript, for the search box.
     var searchText = ""
+    /// Waiting for its notes, or for better ones (Settings → Notes → when to write them).
+    var later: LaterNotes?
 
     static func == (a: Meeting, b: Meeting) -> Bool {
-        a.id == b.id && a.notes?.title == b.notes?.title && a.error == b.error
+        a.id == b.id && a.notes?.title == b.notes?.title && a.error == b.error && (a.later == nil) == (b.later == nil)
             && a.hasTranscript == b.hasTranscript && a.done == b.done && a.hasAudio == b.hasAudio
     }
 
@@ -166,6 +169,7 @@ struct Meeting: Identifiable, Equatable {
         text += (notes?.sections ?? []).flatMap(\.items)
         if let t = try? String(contentsOf: folder.appendingPathComponent("transcript.md")) { text.append(t) }
         m.searchText = text.joined(separator: "\n").lowercased()
+        m.later = LaterNotes.read(folder)
         return m
     }
 

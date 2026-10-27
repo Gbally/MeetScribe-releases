@@ -61,14 +61,16 @@ Your recordings, transcripts and notes are plain files in a folder you choose.
 - **Automatic mode** (optional): starts recording when a call app opens the mic, stops when it
   releases it (per-process CoreAudio, macOS 14+).
 - **Meeting types:** General, 1:1, Stand-up, Client call, Interview, Workshop — each with its
-  own sections; "Regenerate as…" to switch.
+  own sections; "Regenerate as…" to switch, "Regenerate in a copy with…" to compare models.
+- **Notes when you're away** (Settings → Notes): the transcript right away, the notes — or quick
+  notes now and better ones with a bigger model — at set times, when the Mac is idle or locked.
 - **Shortcut:** start/stop from anywhere (default ⌃⌥R, changeable in Settings).
 - **Edit:** rename a meeting, fix/add/delete to-dos (notes.md is rebuilt with `meetscribe render`).
 - **Privacy:** audio (and voice samples) deleted after 7 days by default; notes are kept.
 - **Many languages** — 99 spoken languages, even switching mid-meeting; the app itself is in
   English, French, Spanish, Portuguese, Japanese and Chinese.
 - **Updates itself**, picks AI models that fit your Mac's memory (and says so when one runs out of
-  it, with a smaller one to choose), and removes itself cleanly
+  it, with a smaller one to choose), can receive test versions (Settings → About), and removes itself cleanly
   (Settings → Privacy and storage → Remove MeetScribe).
 
 ## Install

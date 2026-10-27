@@ -133,6 +133,8 @@ final class AppModel: ObservableObject {
     /// Kept until it's dismissed or another model is chosen.
     @Published var memoryWarning = MemoryWarning.saved { didSet { MemoryWarning.save(memoryWarning) } }
     private var jobMemory: String?       // the engine's "@@memory notes|speech" during the current job
+    /// A notes model other than the one in Settings for a meeting's next job (a copy, deferred notes).
+    var notesModelFor: [Meeting.ID: String] = [:]
     private var jobTranscribing = false  // the current job's step is a transcription
     private var endReminderSent = false
     private var autoStarted = false
@@ -206,12 +208,14 @@ final class AppModel: ObservableObject {
             Task { @MainActor in self?.toggleRecording() }
         }
         HotkeyCenter.shared.register(settings.hotkey)
+        _ = MacUse.shared  // starts watching for the screen being locked
         briefTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             guard let model = self else { return }
             Task { @MainActor in
                 model.refreshCalendar()
                 model.checkBriefs()
                 model.cleanUpOldAudio()
+                model.writeLaterNotes()
                 await model.refreshCatalogDaily()
             }
         }
@@ -497,8 +501,13 @@ final class AppModel: ObservableObject {
         lastDoneFolder = nil
         jobMemory = nil
         jobTranscribing = false
-        Engine.writeConfig(settings)
+        var config = settings
+        if let id = job.meetingID, let repo = notesModelFor.removeValue(forKey: id) { config.llmModel = repo }
+        Engine.writeConfig(config)
 
+        // Writing notes must not stop because the Mac idles into sleep (e.g. a lunch break).
+        let activity: NSObjectProtocol? = ProcessInfo.processInfo.beginActivity(
+            options: [.idleSystemSleepDisabled, .userInitiated], reason: "Processing a meeting")
         runner = Task {
             let (args, folder) = arguments(for: job)
             if case .ask = job { askResult = nil; askError = nil }
@@ -543,16 +552,25 @@ final class AppModel: ObservableObject {
             } else {
                 // New meetings only: a regenerated one would overwrite what was edited in the notes app.
                 if result.ok, job.isNewMeeting { autoExport(finalFolder ?? lastDoneFolder) }
+                if result.ok, job.isNewMeeting { markForLater(finalFolder ?? lastDoneFolder) }
+                if result.ok, case .resummarize = job, let f = finalFolder, let item = LaterNotes.read(f) {
+                    LaterNotes.clear(f)  // its notes (or better notes) are written
+                    if !item.polish { autoExport(f) }  // the first notes of a meeting waiting for them
+                }
                 notify(job: job, ok: result.ok, folder: finalFolder, memory: failure)
             }
             currentJob = nil
             jobStatus = ""
             jobProgress = nil
+            activity.map { ProcessInfo.processInfo.endActivity($0) }
+            reload()
             runNext()
+            writeLaterNotes()  // the next waiting meeting, if the Mac is still free
         }
     }
 
     private func arguments(for job: Job) -> ([String], URL?) {
+        let later = settings.notesTiming == .later ? ["--no-summary"] : []  // the transcript now, the notes when the Mac is free
         func folder(_ id: Meeting.ID) -> URL {
             if let m = meeting(id) { return m.folder }
             let work = Self.workDir.appendingPathComponent(id)
@@ -562,9 +580,9 @@ final class AppModel: ObservableObject {
         case .process(let id):
             let f = folder(id)
             let title = readInfo(f)?.title ?? ""
-            return (["process", f.path] + (title.isEmpty ? [] : ["--title", title]), f)
+            return (["process", f.path] + (title.isEmpty ? [] : ["--title", title]) + later, f)
         case .processFile(let url):
-            return (["process", url.path], nil)
+            return (["process", url.path] + later, nil)
         case .rename(let id, let mapping):
             return (["rename", folder(id).path] + mapping.map { "\($0.key)=\($0.value)" }, folder(id))
         case .resummarize(let id):
@@ -1260,6 +1278,40 @@ final class AppModel: ObservableObject {
         info.template = template
         writeInfo(m.folder, info)
         enqueue(.resummarize(id))
+    }
+
+    /// The notes models downloaded on this Mac, for "Regenerate in a copy with…".
+    var installedNotesModels: [(repo: String, name: String)] {
+        let listed = catalog.notes.filter { installedModels[$0.repo] != nil }.map { ($0.repo, $0.name) }
+        let custom = installedModels.keys.filter { r in !catalog.notes.contains { $0.repo == r } && r == notesModel }
+        return listed + custom.map { ($0, modelName($0)) }
+    }
+
+    /// New notes with another model in a copy of the meeting ("… (Qwen3.5 9B)"), the original kept as it is.
+    func regenerateInCopy(_ id: Meeting.ID, model repo: String) {
+        guard let m = meeting(id) else { return }
+        let name = modelName(repo)
+        let slug = name.replacingOccurrences(of: "[^A-Za-z0-9.]+", with: "-", options: .regularExpression)
+        let parent = m.folder.deletingLastPathComponent()
+        var copy = parent.appendingPathComponent("\(id)-\(slug)"), n = 1
+        while FileManager.default.fileExists(atPath: copy.path) { n += 1; copy = parent.appendingPathComponent("\(id)-\(slug)-\(n)") }
+        do {
+            try FileManager.default.createDirectory(at: copy, withIntermediateDirectories: true)
+            for file in ["transcript.json", "transcript.md", "speakers.json", "clips.json", "clips"]
+            where FileManager.default.fileExists(atPath: m.url(file).path) {
+                try FileManager.default.copyItem(at: m.url(file), to: copy.appendingPathComponent(file))
+            }
+        } catch {
+            show(tr("Couldn't copy the meeting: %@", error.localizedDescription))
+            return
+        }
+        var info = readInfo(m.folder) ?? MeetingInfo(title: "", started: m.notes?.date ?? ISO8601DateFormatter.local.string(from: m.date))
+        info.template = info.template ?? m.notes?.template
+        info.label = n == 1 ? name : "\(name) \(n)"
+        writeInfo(copy, info)
+        notesModelFor[copy.lastPathComponent] = repo
+        reload()
+        enqueue(.resummarize(copy.lastPathComponent))
     }
 
     func delete(_ id: Meeting.ID) {

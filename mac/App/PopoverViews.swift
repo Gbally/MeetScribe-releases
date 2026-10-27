@@ -167,6 +167,7 @@ struct HomeView: View {
                     case .ready:
                         PermissionsCard()
                         MemoryCard()
+                        LaterNotesCard()
                         hero
                     }
                     if let job = model.currentJob { jobCard(job) }
@@ -667,6 +668,31 @@ struct MemoryCard: View {
                     Button("Choose a model…") { Windows.showSettings(model, tab: .models) }.controlSize(.small)
                     Spacer()
                     Button("Dismiss") { model.memoryWarning = nil }.buttonStyle(.borderless).font(.caption)
+                }
+            }
+        }
+    }
+}
+
+/// Meetings waiting for their notes (or better ones) until the Mac is free — and a button to write them now.
+struct LaterNotesCard: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        let waiting = model.waitingForNotes
+        if !waiting.isEmpty {
+            Card {
+                HStack(alignment: .top) {
+                    Image(systemName: "moon.zzz").foregroundColor(.accentColor)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(waiting.count == 1 ? tr("1 meeting waiting for its notes") : tr("%@ meetings waiting for their notes", "\(waiting.count)"))
+                            .font(.callout.weight(.medium))
+                        Text(tr("Written with %@ when you're not using the Mac.", model.modelName(model.laterNotesModel)))
+                            .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer()
+                    Button("Write now") { model.writeLaterNotes(now: true) }
+                        .controlSize(.small).disabled(model.currentJob != nil || model.isRecording)
                 }
             }
         }

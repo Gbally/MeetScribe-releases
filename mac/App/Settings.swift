@@ -69,6 +69,14 @@ struct AppSettings: Codable, Equatable {
     var whisperModel: String?
     var exportFolderPath = ""    // a notes app's folder (Obsidian vault…) for Markdown copies
     var autoExport = false       // copy every new meeting's notes there
+    // When the notes are written (the transcript always is right away) — see LaterNotes.swift.
+    var notesTiming = NotesTiming.now
+    var laterModel: String?      // the notes model used then; nil = the usual one
+    var laterWindows = [TimeWindow(start: 12 * 60, end: 13 * 60 + 30)]
+    var laterInWindows = true
+    var laterWhenIdle = true
+    var laterIdleMinutes = 10
+    var laterWhenLocked = true
 
     var notesFolder: URL {
         switch storage {
@@ -111,6 +119,13 @@ struct AppSettings: Codable, Equatable {
         whisperModel = try c.decodeIfPresent(String.self, forKey: .whisperModel)
         exportFolderPath = try c.decodeIfPresent(String.self, forKey: .exportFolderPath) ?? ""
         autoExport = try c.decodeIfPresent(Bool.self, forKey: .autoExport) ?? false
+        notesTiming = (try? c.decodeIfPresent(NotesTiming.self, forKey: .notesTiming)) ?? d.notesTiming
+        laterModel = try c.decodeIfPresent(String.self, forKey: .laterModel)
+        laterWindows = (try? c.decodeIfPresent([TimeWindow].self, forKey: .laterWindows)) ?? d.laterWindows
+        laterInWindows = try c.decodeIfPresent(Bool.self, forKey: .laterInWindows) ?? d.laterInWindows
+        laterWhenIdle = try c.decodeIfPresent(Bool.self, forKey: .laterWhenIdle) ?? d.laterWhenIdle
+        laterIdleMinutes = try c.decodeIfPresent(Int.self, forKey: .laterIdleMinutes) ?? d.laterIdleMinutes
+        laterWhenLocked = try c.decodeIfPresent(Bool.self, forKey: .laterWhenLocked) ?? d.laterWhenLocked
         if let days = try c.decodeIfPresent(Int.self, forKey: .audioRetentionDays) {
             audioRetentionDays = days
         } else if (try c.decodeIfPresent(Bool.self, forKey: .keepAudio)) == false {
@@ -134,7 +149,8 @@ struct AppSettings: Codable, Equatable {
         case myName, language, languages, notesLanguage, useCalendar, callReminders, endReminders, notifyWhenReady,
              emailApp, gmailAccount, briefs, dueReminders, autoRecord, defaultTemplate, hotkey, audioRetentionDays, llmModel, whisperModel,
              vocabulary, summaryStyle, teamsOnly, keepAudio, storage, oneDrivePath,
-             customFolderPath, notesFolderPath, exportFolderPath, autoExport
+             customFolderPath, notesFolderPath, exportFolderPath, autoExport, notesTiming, laterModel, laterWindows,
+             laterInWindows, laterWhenIdle, laterIdleMinutes, laterWhenLocked
     }
 
     func encode(to encoder: Encoder) throws {
@@ -164,6 +180,13 @@ struct AppSettings: Codable, Equatable {
         try c.encode(customFolderPath, forKey: .customFolderPath)
         try c.encode(exportFolderPath, forKey: .exportFolderPath)
         try c.encode(autoExport, forKey: .autoExport)
+        try c.encode(notesTiming, forKey: .notesTiming)
+        try c.encodeIfPresent(laterModel, forKey: .laterModel)
+        try c.encode(laterWindows, forKey: .laterWindows)
+        try c.encode(laterInWindows, forKey: .laterInWindows)
+        try c.encode(laterWhenIdle, forKey: .laterWhenIdle)
+        try c.encode(laterIdleMinutes, forKey: .laterIdleMinutes)
+        try c.encode(laterWhenLocked, forKey: .laterWhenLocked)
     }
 }
 

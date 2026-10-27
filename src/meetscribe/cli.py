@@ -304,6 +304,8 @@ def write_notes(session: Path, cfg: Config, template: str = ""):
     created = datetime.fromisoformat(meta["created"]) if "created" in meta else datetime.now()
     ai_title, body = split_title(summarize(to_plain(utterances), cfg, language, context, template, created.date()))
     title = meta.get("title") or ai_title or f"Meeting {created:%Y-%m-%d %H:%M}"
+    if meeting_info(session).get("label"):  # a copy made to compare models: "Weekly sync (Qwen3.5 9B)"
+        title = f"{title} ({meeting_info(session)['label']})"
     notes = {"title": title, "date": created.isoformat(timespec="seconds"), "duration": meta["duration"],
              "participants": list(dict.fromkeys(u.speaker for u in utterances)), "tracks": meta.get("tracks", []),
              "template": template, "guessed_names": meta.get("guessed_names", []), **parse_notes(body)}

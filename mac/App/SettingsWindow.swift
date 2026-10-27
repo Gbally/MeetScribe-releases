@@ -277,6 +277,7 @@ struct NotesPane: View {
             }
             Caption("Applies to new meetings. To redo one: open it → ⋯ → Regenerate notes.")
         }
+        LaterNotesSection()
         ExportSection()
     }
 }
@@ -456,6 +457,7 @@ struct EnginePane: View {
 struct AboutPane: View {
     @EnvironmentObject var model: AppModel
     @ObservedObject private var updater: Updater
+    @AppStorage("testVersions") private var testVersions = false  // read by Updater.testVersions
 
     init() { _updater = ObservedObject(wrappedValue: AppModelHolder.updater) }
 
@@ -484,6 +486,9 @@ struct AboutPane: View {
             default: EmptyView()
             }
             if let page = Releases.pageURL { Link("Release notes", destination: page) }
+            Toggle("Receive test versions", isOn: $testVersions)
+                .onChange(of: testVersions) { _ in Task { await updater.check() } }
+            Caption("Versions with fixes still being tried, before they're released to everyone. Same signature checks as releases.")
         }
         Section("Open source") {
             HStack(alignment: .top, spacing: 12) {
@@ -614,3 +619,59 @@ struct CustomModelSection: View {
     }
 }
 
+
+/// When to write the notes: right away, when the Mac is free, or both (quick, then better ones).
+struct LaterNotesSection: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        Section("When to write the notes") {
+            Picker("Write the notes", selection: $model.settings.notesTiming) {
+                ForEach(NotesTiming.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.radioGroup)
+            if model.settings.notesTiming != .now {
+                Picker(model.settings.notesTiming == .both ? tr("Model for the better notes") : tr("Model"), selection: Binding(
+                    get: { model.laterNotesModel }, set: { model.settings.laterModel = $0 })) {
+                    ForEach(model.installedNotesModels, id: \.repo) { Text($0.name).tag($0.repo) }
+                }
+                Caption("It runs while you're away, so a bigger model is fine: speed doesn't matter then. More models: AI models.")
+                Toggle("At set times", isOn: $model.settings.laterInWindows)
+                if model.settings.laterInWindows {
+                    ForEach(model.settings.laterWindows.indices, id: \.self) { i in windowRow(i) }
+                    Button("Add a time") { model.settings.laterWindows.append(TimeWindow(start: 18 * 60, end: 20 * 60)) }
+                        .buttonStyle(.borderless)
+                }
+                Toggle("When the Mac hasn't been used for a while", isOn: $model.settings.laterWhenIdle)
+                if model.settings.laterWhenIdle {
+                    Stepper(tr("%@ minutes without keyboard or mouse", "\(model.settings.laterIdleMinutes)"),
+                            value: $model.settings.laterIdleMinutes, in: 2...60, step: 1)
+                }
+                Toggle("When the screen is locked", isOn: $model.settings.laterWhenLocked)
+                Caption("Only when the Mac is on power. Transcripts are always made right away. If you come back while notes are being written, that meeting is finished and the next ones wait. To write them now: the button in MeetScribe's window.")
+            }
+        }
+    }
+
+    func windowRow(_ i: Int) -> some View {
+        HStack {
+            DatePicker(tr("From"), selection: time(\.start, i), displayedComponents: .hourAndMinute)
+            DatePicker(tr("to"), selection: time(\.end, i), displayedComponents: .hourAndMinute)
+            Button { model.settings.laterWindows.remove(at: i) } label: { Image(systemName: "minus.circle") }
+                .buttonStyle(.borderless).help("Remove this time")
+        }
+    }
+
+    /// A window's start or end (minutes from midnight) as a time of day for the picker.
+    func time(_ key: WritableKeyPath<TimeWindow, Int>, _ i: Int) -> Binding<Date> {
+        Binding(get: {
+            guard i < model.settings.laterWindows.count else { return Date() }
+            let m = model.settings.laterWindows[i][keyPath: key]
+            return Calendar.current.date(bySettingHour: m / 60, minute: m % 60, second: 0, of: Date()) ?? Date()
+        }, set: { d in
+            guard i < model.settings.laterWindows.count else { return }
+            let c = Calendar.current.dateComponents([.hour, .minute], from: d)
+            model.settings.laterWindows[i][keyPath: key] = (c.hour ?? 0) * 60 + (c.minute ?? 0)
+        })
+    }
+}

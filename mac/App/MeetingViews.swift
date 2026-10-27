@@ -61,6 +61,13 @@ struct MeetingView: View {
                                 }
                             }
                             .disabled(!m.hasTranscript)
+                            Menu("Regenerate in a copy with…") {
+                                ForEach(model.installedNotesModels, id: \.repo) { x in
+                                    Button(x.name + (x.repo == model.notesModel ? " ✓" : "")) { model.regenerateInCopy(id, model: x.repo) }
+                                }
+                            }
+                            .disabled(!m.hasTranscript || model.installedNotesModels.isEmpty)
+                            .help("Keeps these notes and writes new ones with another model next to them, to compare")
                             Button("Transcribe again") { model.enqueue(.process(id)) }.disabled(!m.hasAudio)
                         }
                         Divider()
@@ -115,6 +122,12 @@ struct MeetingView: View {
                     Label("Processing failed", systemImage: "exclamationmark.triangle.fill").foregroundColor(.orange)
                     Text(err).font(.caption).textSelection(.enabled)
                     if m.hasAudio { Button("Try again") { model.enqueue(.process(id)) } }
+                }
+            } else if let later = m.later {
+                Card {
+                    Label(later.polish ? tr("Better notes will be written when you're not using the Mac.")
+                          : tr("The notes will be written when you're not using the Mac."), systemImage: "moon.zzz").font(.callout)
+                    Button("Write now") { model.writeLaterNotes(now: true) }.disabled(model.currentJob != nil || model.isRecording)
                 }
             } else if m.notes == nil && m.hasAudio && !m.hasTranscript {
                 Card {

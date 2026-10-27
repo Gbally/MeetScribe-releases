@@ -25,6 +25,11 @@ final class Updater: ObservableObject {
     @Published var lastChecked: Date?
 
     static var currentBuild: Int { Int(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0") ?? 0 }
+    /// Settings → About: also offer test versions (latest-beta.json), published to try fixes before a release.
+    static var testVersions: Bool {
+        get { UserDefaults.standard.bool(forKey: "testVersions") }
+        set { UserDefaults.standard.set(newValue, forKey: "testVersions") }
+    }
     private var timer: Timer?
 
     func start() {
@@ -36,17 +41,25 @@ final class Updater: ObservableObject {
     }
 
     func check() async {
-        guard let url = Releases.url("latest.json"), state != .downloading, state != .installing else { return }
+        guard state != .downloading, state != .installing else { return }
         state = .checking
-        var req = URLRequest(url: url)
-        req.cachePolicy = .reloadIgnoringLocalCacheData
         defer { if state == .checking { state = .idle } }
-        guard let (data, resp) = try? await URLSession.shared.data(for: req),
-              (resp as? HTTPURLResponse)?.statusCode == 200,
-              let info = try? JSONDecoder().decode(ReleaseInfo.self, from: data) else { return }
+        guard let release = await Self.fetch("latest.json") else { return }
+        // A test version counts only when it's newer than the release (the next release replaces it).
+        let test = Self.testVersions ? await Self.fetch("latest-beta.json") : nil
+        let info = [release, test].compactMap { $0 }.max { $0.build < $1.build }!
         lastChecked = Date()
         available = info.build > Self.currentBuild ? info : nil
         announce()
+    }
+
+    private static func fetch(_ file: String) async -> ReleaseInfo? {
+        guard let url = Releases.url(file) else { return nil }
+        var req = URLRequest(url: url)
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return try? JSONDecoder().decode(ReleaseInfo.self, from: data)
     }
 
     /// One notification per new version (clicking it opens Settings → About).

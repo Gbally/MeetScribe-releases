@@ -285,6 +285,43 @@ def test_not_now_not_done_not_availability():
     assert names.guess_names(u, [], "Guillaume") == {"Speaker 1": "Jesper"}  # no calendar: the person greeted by name
 
 
+def test_leaving_showing_asking_done_since():
+    """Leaving the call, showing something, a plain question, a promise already kept, "I just sent":
+    not to-dos. Asking someone, offering, and later tasks still are."""
+    tr = "\n".join(["[00:00:10] Simon: I'll just leave you guys to it.",
+                    "[00:00:20] Simon: And I'll give an example, which was the wheels.",
+                    "[00:00:30] Jesper: Is that Asad and Yunus?",
+                    "[00:00:40] Jesper: So I will write that up first thing in the morning. And I did that.",
+                    "[00:00:50] Selen: I just sent a whole list of bearing suppliers.",
+                    "[00:01:00] Selen: Jake, can you order ten bearings?",
+                    "[00:01:10] Jake: Shall I send the stock sheet to Kiara?",
+                    "[00:01:20] Jake: I'll drop you an email after the call."])
+    raw = "\n".join('{"owner": "%s", "task": "%s", "due": "", "at": "%s", "quote": "%s"}' % x for x in [
+        ("Simon", "leave the team", "00:00:10", "I'll just leave you guys to it"), ("Simon", "give an example", "00:00:20", "I'll give an example"),
+        ("Jesper", "identify the people", "00:00:30", "Is that Asad and Yunus"), ("Jesper", "write up the discussion", "00:00:40", "I will write that up first thing"),
+        ("Selen", "send the list of suppliers", "00:00:50", "I just sent a whole list of bearing suppliers"),
+        ("Jake", "order ten bearings", "00:01:00", "can you order ten bearings"), ("Jake", "send the stock sheet", "00:01:10", "Shall I send the stock sheet"),
+        ("Jake", "email Selen", "00:01:20", "I'll drop you an email after the call")])
+    assert [a["task"] for a in sm.check_actions(raw, tr, D)] == ["order ten bearings", "send the stock sheet", "email Selen"]
+    found = [c["sentence"] for c in sm.unclaimed(tr, [], D)]
+    assert found == ["I'll drop you an email after the call."], found
+    assert not sm.DONE.search("I just wanted to send you the deck.") and not sm.DONE_SINCE.search("We did the slides last week.")
+
+
+def test_faint_mic():
+    """The room heard by the mic (much quieter than your voice) goes; your quieter words stay."""
+    import numpy as np
+    from meetscribe.transcript import drop_faint
+    sr, audio = 16000, np.zeros(16000 * 40, dtype=np.float32)
+    words = []
+    for k in range(8):  # your voice every 4 s, one in four 6 dB quieter; the room in between, 26 dB down
+        t = k * 4.0
+        audio[int(t * sr): int((t + 1) * sr)] = 0.2 * (0.5 if k % 4 == 3 else 1) * np.sin(np.arange(sr) * 0.05)
+        audio[int((t + 2) * sr): int((t + 2.6) * sr)] = 0.01 * np.sin(np.arange(int(0.6 * sr)) * 0.05)
+        words += [Word(t, t + 1, " mine"), Word(t + 2, t + 2.6, " room")]
+    assert [w.text for w in drop_faint(words, audio)] == [" mine"] * 8
+
+
 def test_other_languages():
     """Spanish, German, Portuguese and Italian: deadlines read, asked / volunteered tasks given to
     the right person, commitments found for the second look, decisions told from tasks."""

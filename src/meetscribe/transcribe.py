@@ -5,6 +5,7 @@ languages (setting `language = "en,fr"`), we detect the language every few secon
 choosing among the allowed languages — and transcribe each stretch in its own language.
 """
 
+import re
 from dataclasses import dataclass
 
 import numpy as np
@@ -140,6 +141,8 @@ def _transcribe(audio, model, language, vocabulary) -> tuple[list[Word], str]:
         if prompt and text.startswith("vocabulary:"):  # Whisper repeating its prompt over silence
             continue
         for w in seg.get("words", []):
+            if prompt and re.fullmatch(r"\s*vocabulary[,:.]", w["word"].lower()):
+                continue  # the prompt's first word leaking into speech: "Vocabulary, I'm lucky as well"
             words.append(Word(float(w["start"]), float(w["end"]), w["word"], lang))
     return words, lang
 

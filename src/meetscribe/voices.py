@@ -98,6 +98,7 @@ def identify(prints: dict[int, np.ndarray], exclude: set[str] = frozenset()) -> 
 
 def enroll(name: str, prints: list[np.ndarray]) -> None:
     lib = load_library()
+    name = next((n for n in lib if n.lower() == name.lower()), name)  # "jesper" is Jesper's voice
     samples = lib.get(name, []) + [p.round(5).tolist() for p in prints]
     lib[name] = samples[-MAX_SAMPLES:]
     save_library(lib)

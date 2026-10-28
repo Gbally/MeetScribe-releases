@@ -344,8 +344,19 @@ LATER = re.compile(r"\b(after|later|afterwards|tomorrow|tonight|next|by|before|c
                    r"plus tard|reviens|revenir)\b", re.I)
 # Already done ("I did it this morning"): not a to-do.
 DONE = re.compile(r"^(?!.*\bbefore\b)(.*\b(i|we) (just )?(did|already)\b|.*\b(i|we)('ve| have) (just|already) \w+|"
-                  r".*\b(i|we)('ve| have) \w+ed (it |that |this |them )?(to|over) (you|them|him|her)\b|.*\bj'ai (d[ée]j[àa]|fait))",
-                  re.I)  # "I've just done that", "I've forwarded it to you" — not "I've done it before"
+                  r".*\b(i|we)('ve| have) \w+ed (it |that |this |them )?(to|over) (you|them|him|her)\b|.*\bj'ai (d[ée]j[àa]|fait)|"
+                  r".*\b(i|we) just (?!want|need|wonder|hope|thought|realis|realiz|notic)(sent|\w+ed)\b)",
+                  re.I)  # "I've just done that", "I've forwarded it to you", "I just sent the list" — not "I've done it before"
+# Said right after the promise: "I will do that first thing in the morning. And I did that."
+DONE_SINCE = re.compile(r"^(and |which |so )?(i|we) (already )?(did|have done|'ve done)( (that|it|this|so))?( already)?\W*$", re.I)
+# Not tasks but the meeting itself: leaving it ("I'll leave you to it", "I'm going to go and do other
+# things"), showing something ("I'll give an example", "I'll put the one up that I have").
+HERE_AND_NOW = re.compile(r"\b(leave you( guys| all)?( to it)?|let you (guys |all )?go|jump (off|out)( of (this|the) call)?|"
+                          r"hop off|leave (the|this) (call|meeting)|do other things|give (you )?(an|a quick|one) example|"
+                          r"share my screen|show (you )?my screen|put (the one|this one|that one|one) up|je vous laisse|je te laisse|"
+                          r"partage[rz]? mon [ée]cran|donner un exemple|vous donne un exemple)\b", re.I)
+# A question is not a promise ("Is that Asad and Yunus?") unless it asks someone ("can you…?") or offers ("shall I…?").
+OFFER = re.compile(r"\b(shall i|should i|do you want me to|want me to|je (peux|dois)|est-ce que je)\b", re.I)
 # … unless something is still to come in the same sentence ("I've asked IT and I'll chase them next week").
 STILL_TO_DO = re.compile(r"\b(will|'ll|going to|gonna|tomorrow|next|later|then i)\b", re.I)
 # "je vais en parler à l'équipe" copied as the task: the subject goes ("en parler à l'équipe").
@@ -398,9 +409,12 @@ def check_actions(raw: str, transcript: str, meeting) -> list[dict]:
         k = max(range(len(sentences)), key=lambda j: len(quote & set(_norm_words(sentences[j]))))
         ask = sentences[k]
         now = ask + " " + (sentences[k + 1] if k + 1 < len(sentences) else "")  # "I can do a screenshot. Let me do that."
+        nxt = sentences[k + 1] if k + 1 < len(sentences) else ""
+        question = ask.rstrip().endswith("?") and not (REQUEST.search(ask) or FIRST_PERSON.search(ask) or OFFER.search(ask))
         if (IMMEDIATE.search(now) and not LATER.search(ask) and not any(d > meeting for d in _dates_said([ask], meeting))
-                if meeting else False) or (DONE.search(now) and not STILL_TO_DO.search(ask)) or AVAILABILITY.search(ask):
-            continue  # done in the meeting, already done, or where the speaker will be — not a to-do
+                if meeting else False) or (DONE.search(now) and not STILL_TO_DO.search(ask)) or AVAILABILITY.search(ask) \
+                or DONE_SINCE.search(nxt) or HERE_AND_NOW.search(ask) or question:
+            continue  # done in the meeting, already done, where the speaker will be, or a question — not a to-do
         tokens = " ".join(re.findall(r"[a-z0-9]+|[,?]", _plain_text(ask)))  # "sarah , can you"
         if owner.lower() == speaker.lower():
             asked = [sp for sp in speakers if sp.lower() != speaker.lower() and _norm_words(sp)[:1]
@@ -498,8 +512,10 @@ def unclaimed(transcript: str, checked: list[dict], meeting) -> list[dict]:
                 if IN_MEETING.search(plain) and not any(d > meeting for d in dates):
                     continue  # "Chloe will say more about that", "I'll ask the questions today": done in the meeting
                 now = part + " " + (sentences[k + 1] if j == len(parts) - 1 and k + 1 < len(sentences) else "")
+                nxt = sentences[k + 1] if j == len(parts) - 1 and k + 1 < len(sentences) else ""
                 if (IMMEDIATE.search(now) and not LATER.search(part) and not any(d > meeting for d in dates)) \
-                        or (DONE.search(now) and not STILL_TO_DO.search(part)) or AVAILABILITY.search(part):
+                        or (DONE.search(now) and not STILL_TO_DO.search(part)) or AVAILABILITY.search(part) \
+                        or DONE_SINCE.search(nxt) or HERE_AND_NOW.search(part):
                     continue  # "let me try this", "I did it this morning", "I'll be busy with the X project"
                 words = content(part)
                 if any(q and words and max(len(q & words) / len(q), len(q & words) / len(words)) >= 0.6

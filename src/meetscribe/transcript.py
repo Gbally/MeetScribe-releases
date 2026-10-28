@@ -5,6 +5,8 @@ import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+import numpy as np
+
 from .diarize import Turn
 from .transcribe import Word
 
@@ -112,6 +114,32 @@ def drop_echo(mic: list[Word], system: list[Word], window: float = 1.0) -> list[
                 kept.extend(run)
         i = j
     return kept
+
+
+def drop_faint(words: list[Word], audio: np.ndarray, below: float = 16.0, sr: int = 16_000) -> list[Word]:
+    """The mic also catches the room: people talking nearby, the call from the speakers, a car.
+    Whisper makes fragments of it ("I have a good I have a good", "they're out of dog") that the
+    echo check can't match. They are far quieter than your own voice: drop the stretches of words
+    more than `below` dB under your usual level."""
+    runs: list[list[Word]] = []
+    for w in words:
+        if runs and w.start - runs[-1][-1].end < 1.0:
+            runs[-1].append(w)
+        else:
+            runs.append([w])
+    if len(runs) < 5:
+        return words
+
+    def level(run: list[Word]) -> float:
+        seg = audio[int(run[0].start * sr): int(max(run[-1].end, run[0].start + 0.3) * sr)]
+        frames = seg[: len(seg) // 480 * 480].reshape(-1, 480)  # 30 ms
+        if not len(frames):
+            return -99.0
+        return float(20 * np.log10(np.percentile(np.sqrt((frames ** 2).mean(1)), 90) + 1e-9))
+
+    levels = [level(r) for r in runs]
+    usual = np.percentile(np.repeat(levels, [len(r) for r in runs]), 90)  # your voice, by word
+    return [w for r, lv in zip(runs, levels) if lv >= usual - below for w in r]
 
 
 def merge(*tracks: list[Utterance]) -> list[Utterance]:

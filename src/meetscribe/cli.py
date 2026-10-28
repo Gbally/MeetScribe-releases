@@ -76,7 +76,7 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
     from .audio import is_silent, load_audio
     from .diarize import speakers as diarized_speakers
     from .transcribe import transcribe
-    from .transcript import drop_echo, group_words, merge, save_json, speaker_for
+    from .transcript import drop_echo, drop_faint, group_words, merge, save_json, speaker_for
 
     from .voices import embed, enroll, identify, save_session_prints, speaker_prints
 
@@ -200,7 +200,10 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
                 words, lang = transcribe(audio, cfg.whisper_model, cfg.language, vocabulary, own_mic=True)
                 languages.add(lang)
                 own = drop_echo(words, system_words)
-                print(f"   {len(own)} words ({len(words) - len(own)} dropped as speaker echo)")
+                heard = drop_faint(own, audio)
+                print(f"   {len(heard)} words ({len(words) - len(own)} dropped as speaker echo, "
+                      f"{len(own) - len(heard)} as background)")
+                own = heard
                 tagged(group_words(own, lambda w: cfg.me), "mic")
                 audio_by_track["mic"] = audio
                 # Learn your own voice too (helps in-room meetings and imported recordings).
@@ -433,6 +436,9 @@ def cmd_rename(args, cfg: Config):
     for old in mapping:
         if old not in known:
             sys.exit(f"No speaker called '{old}'. Speakers: {', '.join(sorted(known))}")
+    # "jesper" typed for someone already called Jesper: the same person, spelled as before.
+    spelled = {sp.lower(): sp for sp in known if sp not in mapping}
+    mapping = {old: spelled.get(new.lower(), new) for old, new in mapping.items()}
     for u in utterances:
         u.speaker = mapping.get(u.speaker, u.speaker)
     # Names guessed from the calendar are confirmed (or corrected) once you name them.

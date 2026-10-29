@@ -76,7 +76,7 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
     from .audio import is_silent, load_audio
     from .diarize import speakers as diarized_speakers
     from .transcribe import transcribe
-    from .transcript import drop_echo, drop_faint, group_words, merge, save_json, speaker_for
+    from .transcript import drop_caption_names, drop_echo, drop_faint, group_words, merge, save_json, speaker_for
 
     from .voices import embed, enroll, identify, save_session_prints, speaker_prints
 
@@ -212,7 +212,7 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
                 if cfg.me != "Me" and sum(len(x) for x in spans) > 16000 * 5:
                     enroll(cfg.me, [embed(np.concatenate(spans)[: 16000 * 60])])
 
-    utterances = merge(*tracks)
+    utterances = drop_caption_names(merge(*tracks))
     if not utterances:
         sys.exit("No speech found in the recording.")
     # "Speaker N" → a name from the calendar invitations, when the transcript makes it clear.
@@ -312,6 +312,7 @@ def write_notes(session: Path, cfg: Config, template: str = ""):
     notes = {"title": title, "date": created.isoformat(timespec="seconds"), "duration": meta["duration"],
              "participants": list(dict.fromkeys(u.speaker for u in utterances)), "tracks": meta.get("tracks", []),
              "template": template, "guessed_names": meta.get("guessed_names", []), **parse_notes(body)}
+    (session / "notes.original.json").unlink(missing_ok=True)  # the edits it kept were of the old notes
     save_notes(session, notes)
     print(f"   notes ready in {time.time() - t0:.0f}s")
 

@@ -53,6 +53,10 @@ def diarize(audio: np.ndarray, num_speakers: int = 0, threshold: float = 0.5) ->
     return turns
 
 
+CRUMB = 10.0  # seconds of speech: too little for a reliable voiceprint
+MAIN_VOICE = 30.0
+
+
 def consolidate(turns: list[Turn], prints: dict, max_speakers: int = 0, same: float = 0.7) -> list[Turn]:
     """Clean up over-split diarization: one person often comes out as several "speakers" (a
     change of tone, a noisy stretch, VoIP compression). Speakers whose voiceprints match
@@ -92,6 +96,16 @@ def consolidate(turns: list[Turn], prints: dict, max_speakers: int = 0, same: fl
                 break
         else:
             break
+    # Crumbs: a "speaker" with a few seconds of speech in a long call is mostly one of the main
+    # voices in another tone (36 speakers for 6 people in a 50-min call). Its voiceprint is too
+    # short to match well, so it joins the main voice it is clearly closest to; a crumb alike to
+    # none, or to two main voices as much, stays apart (someone who only said hello).
+    main = [g for g in groups if weight[g] >= MAIN_VOICE]
+    if len(main) >= 2:
+        for small in [g for g in groups if weight[g] < CRUMB]:
+            sims = sorted(((float(centre[small] @ centre[m]), m) for m in main), reverse=True)
+            if sims[0][0] >= 0.4 and sims[0][0] - sims[1][0] >= 0.1:
+                groups[sims[0][1]] += groups.pop(small)
     owner = {spk: g for g, members in groups.items() for spk in members}
 
     merged = [Turn(t.start, t.end, owner[t.speaker]) for t in turns if t.speaker in owner]

@@ -1206,6 +1206,10 @@ final class AppModel: ObservableObject {
               var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
         change(&json)
         guard let out = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted]) else { return }
+        // The notes as the model wrote them, kept at the first edit: with the corrected ones, a
+        // "what the model wrote → what it should have" pair (for testing and training the models).
+        let original = m.url("notes.original.json")
+        if !FileManager.default.fileExists(atPath: original.path) { try? data.write(to: original) }
         try? out.write(to: m.url("notes.json"), options: .atomic)
         let folder = m.folder
         reload()

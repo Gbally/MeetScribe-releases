@@ -305,6 +305,7 @@ def test_leaving_showing_asking_done_since():
     assert [a["task"] for a in sm.check_actions(raw, tr, D)] == ["order ten bearings", "send the stock sheet", "email Selen"]
     found = [c["sentence"] for c in sm.unclaimed(tr, [], D)]
     assert found == ["I'll drop you an email after the call."], found
+    assert sm.HERE_AND_NOW.search("I'll leave that to you guys if that's all right.") and not sm.HERE_AND_NOW.search("Leave it with me.")
     assert not sm.DONE.search("I just wanted to send you the deck.") and not sm.DONE_SINCE.search("We did the slides last week.")
 
 
@@ -320,6 +321,42 @@ def test_faint_mic():
         audio[int((t + 2) * sr): int((t + 2.6) * sr)] = 0.01 * np.sin(np.arange(int(0.6 * sr)) * 0.05)
         words += [Word(t, t + 1, " mine"), Word(t + 2, t + 2.6, " room")]
     assert [w.text for w in drop_faint(words, audio)] == [" mine"] * 8
+
+
+def test_caption_names():
+    """Full names Whisper invents at the start of a sentence go; greetings and real names stay."""
+    from meetscribe.transcript import drop_caption_names
+    u = [U("Jake", "Jake Leibbrandt, So all of the parts are here.", 0), U("Fahri", "Fahri Fahriyad- Absolutely. We will.", 3),
+         U("Lisa", "Thanks Lisa, Emma from IT joins us too.", 6), U("Aisha", "Hi Oliver, I'm Aisha.", 9),
+         U("Ben", "Hive AI, I think the AI part is the key.", 12), U("Yunus", "Jurgen Lerner,", 15)]
+    assert [x.text for x in drop_caption_names(u)] == [
+        "So all of the parts are here.", "Absolutely. We will.", "Thanks Lisa, Emma from IT joins us too.",
+        "Hi Oliver, I'm Aisha.", "Hive AI, I think the AI part is the key."]
+
+
+def test_crumb_speakers():
+    """A few seconds of "another speaker" join the main voice they are clearly closest to; a
+    crumb alike to none, or to two voices as much, stays apart."""
+    import numpy as np
+    from meetscribe.diarize import Turn, consolidate
+    rng = np.random.default_rng(0)
+    a, b, other = (v / np.linalg.norm(v) for v in rng.normal(size=(3, 192)))
+    mix = lambda *vs: sum(vs) / np.linalg.norm(sum(vs))
+    prints = {0: a, 1: b, 2: mix(a, 0.8 * rng.normal(size=192) / 14), 3: other, 4: mix(a, b, other)}
+    turns = [Turn(0, 120, 0), Turn(120, 240, 1), Turn(240, 243, 2), Turn(243, 246, 3), Turn(246, 249, 4)]
+    out = consolidate(turns, prints)
+    who = {t.start: t.speaker for t in out}
+    assert who[240] == who[0] and len({who[0], who[120], who[243], who[246]}) == 4, who
+
+
+def test_whisper_stall():
+    """Whisper that stops moving ends the job with a message instead of running forever."""
+    import subprocess
+    code = ("import time, meetscribe.progress as p; p.STALL = 1; b = p._WhisperBar(10); b.__enter__(); "
+            "b.update(1); time.sleep(5); print('still running')")
+    r = subprocess.run([sys.executable, "-c", code], env={"PYTHONPATH": str(ROOT / "src")}, capture_output=True, text=True,
+                       timeout=30)
+    assert r.returncode == 3 and "stopped responding" in r.stderr and "still running" not in r.stdout, (r.returncode, r.stderr[-300:])
 
 
 def test_other_languages():

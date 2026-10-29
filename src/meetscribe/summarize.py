@@ -349,9 +349,10 @@ DONE = re.compile(r"^(?!.*\bbefore\b)(.*\b(i|we) (just )?(did|already)\b|.*\b(i|
                   re.I)  # "I've just done that", "I've forwarded it to you", "I just sent the list" — not "I've done it before"
 # Said right after the promise: "I will do that first thing in the morning. And I did that."
 DONE_SINCE = re.compile(r"^(and |which |so )?(i|we) (already )?(did|have done|'ve done)( (that|it|this|so))?( already)?\W*$", re.I)
-# Not tasks but the meeting itself: leaving it ("I'll leave you to it", "I'm going to go and do other
-# things"), showing something ("I'll give an example", "I'll put the one up that I have").
-HERE_AND_NOW = re.compile(r"\b(leave you( guys| all)?( to it)?|let you (guys |all )?go|jump (off|out)( of (this|the) call)?|"
+# Not tasks but the meeting itself: leaving it or handing over ("I'll leave you to it", "I'll leave
+# that to you guys", "I'm going to go and do other things"), showing something ("I'll give an
+# example", "I'll put the one up that I have").
+HERE_AND_NOW = re.compile(r"\b(leave you( guys| all)?( to it)?|leave (that|this|it) (to|with) you|let you (guys |all )?go|jump (off|out)( of (this|the) call)?|"
                           r"hop off|leave (the|this) (call|meeting)|do other things|give (you )?(an|a quick|one) example|"
                           r"share my screen|show (you )?my screen|put (the one|this one|that one|one) up|je vous laisse|je te laisse|"
                           r"partage[rz]? mon [ée]cran|donner un exemple|vous donne un exemple)\b", re.I)

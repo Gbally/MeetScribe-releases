@@ -142,6 +142,37 @@ def drop_faint(words: list[Word], audio: np.ndarray, below: float = 16.0, sr: in
     return [w for r, lv in zip(runs, levels) if lv >= usual - below for w in r]
 
 
+GREETINGS = set("""hi hello hey thanks thank dear welcome bye good morning merci bonjour salut bonsoir coucou hola gracias
+buenos guten danke hallo ciao grazie buongiorno ola obrigado obrigada oi""".split())
+CAPTION_NAME = re.compile(r"(?:^|(?<=[.?!] ))([A-ZÀ-Ý][\w'’]+) ([A-ZÀ-Ý][\w'’]+)([,-])(?: (?=[A-ZÀ-Ý])|\s*$)")
+
+
+def drop_caption_names(utterances: list[Utterance]) -> list[Utterance]:
+    """Whisper, trained on captioned videos, sometimes starts a sentence with an invented full
+    name, as captions do ("Jake Leibbrandt, So all of the parts", "Fahri Fahriyad- Absolutely").
+    A name ending in "-" goes; one ending in "," only when its second word is said nowhere else
+    in the meeting ("Hi Oliver, I'm Aisha" and "Hive AI, I think" stay)."""
+    words: dict[str, int] = {}
+    for u in utterances:
+        for w in re.findall(r"[\w'’]+", u.text.lower()):
+            words[w] = words.get(w, 0) + 1
+    found = [m for u in utterances for m in CAPTION_NAME.finditer(u.text)]
+    in_names: dict[str, int] = {}
+    for m in found:
+        in_names[m[2].lower()] = in_names.get(m[2].lower(), 0) + 1
+
+    people = {w for u in utterances for w in u.speaker.lower().split()}
+
+    def invented(m: re.Match) -> bool:
+        if m[1].lower() in GREETINGS or m[2].lower() in people:
+            return False  # "Thanks Lisa, Emma joins us too"
+        return m[3] == "-" or words.get(m[2].lower(), 0) <= in_names.get(m[2].lower(), 0)
+
+    for u in utterances:
+        u.text = CAPTION_NAME.sub(lambda m: "" if invented(m) else m[0], u.text).strip()
+    return [u for u in utterances if u.text]
+
+
 def merge(*tracks: list[Utterance]) -> list[Utterance]:
     return sorted((u for t in tracks for u in t), key=lambda u: u.start)
 

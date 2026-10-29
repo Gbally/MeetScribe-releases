@@ -4,7 +4,11 @@ The job is split into weighted stages (estimated seconds of work); each stage re
 0..1 fraction. Whisper's internal progress bar is redirected here.
 """
 
+import faulthandler
 import json
+import os
+import sys
+import threading
 import time
 import types
 
@@ -43,20 +47,45 @@ def update(fraction: float) -> None:
         _last_print, _last_value = now, value
 
 
+STALL = 600  # seconds without Whisper moving on: one 30-s window takes seconds, never minutes
+
+
+def _watch() -> None:
+    """Whisper once stopped moving, at a quarter of a 2-min meeting, for 10 hours (not seen again
+    in 12 runs of the same audio). Rather than a job that never ends: say so, and stop — the
+    meeting can be transcribed again. The Python stacks go to the log for a closer look."""
+    while True:
+        time.sleep(min(15, STALL / 4))
+        since = _WhisperBar.moved
+        if since and time.monotonic() - since > STALL:
+            faulthandler.dump_traceback(sys.stderr, all_threads=True)
+            print(f"Transcription stopped responding (no progress for {STALL // 60} minutes). "
+                  "Try “Transcribe again”.", file=sys.stderr, flush=True)
+            os._exit(3)
+
+
 class _WhisperBar:
     """Stands in for tqdm inside mlx_whisper; `span` maps its 0..1 into part of the stage."""
     span = (0.0, 1.0)
+    moved = 0.0  # when Whisper last moved on (0: not running)
+    _watcher = None
 
     def __init__(self, total=0, **_):
         self.total, self.n = total or 1, 0
 
     def __enter__(self):
+        _WhisperBar.moved = time.monotonic()
+        if _WhisperBar._watcher is None:
+            _WhisperBar._watcher = threading.Thread(target=_watch, daemon=True)
+            _WhisperBar._watcher.start()
         return self
 
     def __exit__(self, *_):
+        _WhisperBar.moved = 0.0
         return False
 
     def update(self, n):
+        _WhisperBar.moved = time.monotonic()
         self.n += n
         lo, hi = _WhisperBar.span
         update(lo + (hi - lo) * self.n / self.total)

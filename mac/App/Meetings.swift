@@ -4,6 +4,7 @@
 //   meeting.json      written by the app (title typed by the user, start time, duration)
 //   mic.caf / system.caf   the recording
 //   transcript.md/.json, notes.md, notes.json   written by the engine
+//   notes.original.json   the notes as the model wrote them, kept when they are first edited
 //   todo.json         which action items were ticked off in the app
 //   error.txt         why processing failed
 

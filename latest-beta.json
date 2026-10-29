@@ -1,7 +1,7 @@
 {
- "version": "0.6.4-test.113",
- "build": 113,
- "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.6.4-test.113/MeetScribe-0.6.4-test.113.dmg",
- "sha256": "68fd29ab51061a37dc25084603141fc0308a8a4b07084822a55695c694dd48a5",
- "notes": "Transcription plus propre (bruits de fond du micro), moins de fausses t\u00e2ches"
+ "version": "0.6.4-test.115",
+ "build": 115,
+ "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.6.4-test.115/MeetScribe-0.6.4-test.115.dmg",
+ "sha256": "b5d14439d814b81fcc4236ddd5b7425ab5b6c0457997d3e1639abb39c1ebdf2c",
+ "notes": "Voix mieux s\u00e9par\u00e9es, noms invent\u00e9s retir\u00e9s, s\u00e9curit\u00e9 anti-blocage, copie des notes d'origine"
 }

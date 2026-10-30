@@ -24,3 +24,6 @@ signing/
 # LoRA experiment outputs
 eval/lora/data/
 eval/lora/adapters/
+
+# AMI corpus and its runs (downloaded by eval/ami_bench/fetch.py)
+eval/ami_bench/data/

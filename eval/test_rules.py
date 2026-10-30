@@ -309,6 +309,49 @@ def test_leaving_showing_asking_done_since():
     assert not sm.DONE.search("I just wanted to send you the deck.") and not sm.DONE_SINCE.search("We did the slides last week.")
 
 
+def test_meeting_itself_and_bare_verbs():
+    """Ending the meeting, watching the clock, lunch, being told something, or a verb alone: not
+    to-dos (seen on the AMI meetings). Real tasks with the same words still are."""
+    tr = "\n".join(["[00:00:10] Kate: Okay, I'll end the meeting there.",
+                    "[00:00:20] Kate: I'll keep an eye on the clock for us.",
+                    "[00:00:30] Ed: I'll show you.",
+                    "[00:00:40] Ed: I'll take the lunch now.",
+                    "[00:00:50] Ed: I'll book a table for the team lunch on Friday.",
+                    "[00:01:00] Kate: I'll send the minutes after the meeting."])
+    raw = "\n".join('{"owner": "%s", "task": "%s", "due": "", "at": "%s", "quote": "%s"}' % x for x in [
+        ("Kate", "end the meeting", "00:00:10", "I'll end the meeting there"),
+        ("Kate", "keep an eye on the clock", "00:00:20", "keep an eye on the clock"),
+        ("Ed", "show", "00:00:30", "I'll show you"), ("Ed", "take the lunch", "00:00:40", "I'll take the lunch now"),
+        ("Ed", "receive further instructions", "00:00:40", "I'll take the lunch now"),
+        ("Ed", "book a table for the team lunch", "00:00:50", "book a table for the team lunch"),
+        ("Kate", "send the minutes", "00:01:00", "I'll send the minutes after the meeting")])
+    got = [a["task"] for a in sm.check_actions(raw, tr, D)]
+    assert got == ["book a table for the team lunch", "send the minutes"], got
+
+
+def test_during_the_meeting_and_vague():
+    """Presenting, rating, taking minutes in the meeting: not to-dos, unless for later. A task that
+    doesn't say what ("do something", "send it") goes once merging is done."""
+    tr = "\n".join(["[00:00:10] Ana: I'll present the prototype now.",
+                    "[00:00:20] Ana: I'll give it a three.",
+                    "[00:00:30] Ana: I'll present the prototype to the board next week.",
+                    "[00:00:40] Tom: I'll do something about it.",
+                    "[00:05:00] Tom: I'll send it.",
+                    "[00:06:00] Ana: And I'll present the demo, I guess."])
+    raw = "\n".join('{"owner": "%s", "task": "%s", "due": "", "at": "%s", "quote": "%s"}' % x for x in [
+        ("Ana", "present the prototype", "00:00:10", "I'll present the prototype now"),
+        ("Ana", "give it a three", "00:00:20", "I'll give it a three"),
+        ("Ana", "present the prototype to the board", "00:00:30", "present the prototype to the board next week"),
+        ("Tom", "do something", "00:00:40", "I'll do something about it"), ("Tom", "send it", "00:05:00", "Tom: I'll send it")])
+    raw += "\n" + json.dumps({"owner": "Ana", "task": "present the demo", "due": "Friday", "at": "00:06:00",
+                              "quote": "I'll present the demo, I guess"})
+    got = [a["task"] for a in sm.check_actions(raw, tr, D)]
+    assert got == ["present the prototype to the board", "do something", "send it", "present the demo"], got
+    merged = [a["task"] for a in sm.merge_actions([A("Ana", "present the prototype to the board", "00:00:30"),
+                                                    A("Tom", "do something", "00:00:40"), A("Tom", "send it", "00:05:00")])]
+    assert merged == ["present the prototype to the board"], merged
+
+
 def test_faint_mic():
     """The room heard by the mic (much quieter than your voice) goes; your quieter words stay."""
     import numpy as np

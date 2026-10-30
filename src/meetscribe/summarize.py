@@ -360,6 +360,20 @@ HERE_AND_NOW = re.compile(r"\b(leave you( guys| all)?( to it)?|leave (that|this|
 OFFER = re.compile(r"\b(shall i|should i|do you want me to|want me to|je (peux|dois)|est-ce que je)\b", re.I)
 # … unless something is still to come in the same sentence ("I've asked IT and I'll chase them next week").
 STILL_TO_DO = re.compile(r"\b(will|'ll|going to|gonna|tomorrow|next|later|then i)\b", re.I)
+# The meeting itself, not something to do after it ("end the meeting", "keep an eye on the clock",
+# "draw it on the board", "take the lunch"), or being told something ("receive further instructions").
+MEETING_ITSELF = re.compile(r"^(end|finish|close|wrap up|run|chair|open) (the |this |our )?(meeting|call|session)\b|"
+                            r"\bkeep an eye on the (clock|time)\b|\b(on|at) the (white)?board\b|"
+                            r"\b(go (to|for)|have|take|at) (the )?lunch\b|^receive\b|"
+                            r"^(terminer|finir|clore|cl[ôo]turer) (la|cette) (r[ée]union|s[ée]ance)\b|\baller d[ée]jeuner\b", re.I)
+# Done in the meeting while it happens ("present the prototype", "rate the design", "give it a
+# three", "take minutes", "go on to phase two") — unless it's for later ("present it to the board
+# next week").
+DURING = re.compile(r"^(present|show|explain|describe|demonstrate|walk (us|you|them|everyone) through|go (on|back|over|through|for)\b|"
+                    r"move on|recap|review (the )?(minutes|points)|talk about|rate|rank|give it (a|an|one|two|three)\b|hold|exit|"
+                    r"close (the|my) (laptop|window|file|presentation)|leave the room|take (a )?notes?\b|take (the )?minutes|"
+                    r"catch up|clean up|pr[ée]senter|montrer|expliquer|d[ée]crire|passer [àa]|r[ée]capituler|"
+                    r"prendre (des )?notes)", re.I)
 # "je vais en parler à l'équipe" copied as the task: the subject goes ("en parler à l'équipe").
 SUBJECT = re.compile(r"^(je vais |je m'en |je |j'|i'll |i will |i'm going to |we'll |we will |on va |nous allons |"
                      r"voy a |yo |ich werde |ich |eu vou |vou |vado a )", re.I)  # not "eu"/"io": "EU compliance check"
@@ -380,8 +394,11 @@ def check_actions(raw: str, transcript: str, meeting) -> list[dict]:
         task, owner = str(item.get("task", "")).strip(), str(item.get("owner", "")).strip()
         task = SUBJECT.sub("", task).strip()
         quote = set(_norm_words(str(item.get("quote", ""))))
-        if not task or len(quote) < 2 or BEHAVIOUR.match(task) or AVAILABILITY.match(task):
+        if not task or len(quote) < 2 or BEHAVIOUR.match(task) or AVAILABILITY.match(task) or MEETING_ITSELF.search(task):
             continue
+        later = bool(str(item.get("due", "")).strip())  # a deadline given: for after the meeting
+        if len(task.split()) < 2 and not re.search(f"[{CJK}]", task) and not later:
+            continue  # a verb alone ("show", "submit", "do"): says nothing of what to do (but "call" by Monday is kept)
         scores = [len(quote & w) / len(quote) for w in words_of]
         best = max(scores, default=0.0)
         said = _seconds(str(item.get("at", ""))) if re.fullmatch(r"\d+:\d{2}:\d{2}", str(item.get("at", ""))) else None
@@ -414,7 +431,9 @@ def check_actions(raw: str, transcript: str, meeting) -> list[dict]:
         question = ask.rstrip().endswith("?") and not (REQUEST.search(ask) or FIRST_PERSON.search(ask) or OFFER.search(ask))
         if (IMMEDIATE.search(now) and not LATER.search(ask) and not any(d > meeting for d in _dates_said([ask], meeting))
                 if meeting else False) or (DONE.search(now) and not STILL_TO_DO.search(ask)) or AVAILABILITY.search(ask) \
-                or DONE_SINCE.search(nxt) or HERE_AND_NOW.search(ask) or question:
+                or DONE_SINCE.search(nxt) or HERE_AND_NOW.search(ask) or question \
+                or (DURING.match(task) and not later and not LATER.search(ask)
+                    and not any(d > meeting for d in _dates_said([ask], meeting)) if meeting else False):
             continue  # done in the meeting, already done, where the speaker will be, or a question — not a to-do
         tokens = " ".join(re.findall(r"[a-z0-9]+|[,?]", _plain_text(ask)))  # "sarah , can you"
         if owner.lower() == speaker.lower():
@@ -657,7 +676,12 @@ def merge_actions(actions: list[dict]) -> list[dict]:
                 same["task"] = a["task"]
         else:
             out.append(dict(a))
-    return out
+    # Left alone after merging, a task that doesn't say what ("do something", "send it", "put
+    # them there") is no use on a to-do list.
+    return [a for a in out if _content(a["task"]) - VAGUE]
+
+
+VAGUE = {"something", "thing", "stuff", "there", "here", "chose", "quelque", "algo", "etwas", "qualcosa", "algum", "alguma"}
 
 
 def actions_table(actions: list[dict]) -> str:

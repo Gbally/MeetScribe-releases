@@ -7,7 +7,7 @@
 # Needs the NVIDIA driver (nvidia-smi). Git is used if it's there, else the repository's zip.
 #
 #   Root\tools      uv, Python 3.12, uv's cache
-#   Root\venv       the training packages (PyTorch with CUDA, transformers, peft, trl, bitsandbytes)
+#   Root\venv       the training packages (PyTorch with CUDA, transformers, peft, trl, bitsandbytes, Triton)
 #   Root\hf         Hugging Face cache (the base model, ~9 GB)
 #   Root\repo       the MeetScribe repository; the corpus goes to repo\eval\ami_bench\data
 #   Root\env.ps1    run ". .\env.ps1" in a new PowerShell to use all this again
@@ -32,6 +32,7 @@ $env:UV_CACHE_DIR = "$Root\tools\uv-cache"
 $env:UV_TOOL_DIR = "$Root\tools\uv-tools"
 $env:HF_HOME = "$Root\hf"
 $env:PYTHONUTF8 = "1"
+$env:TRITON_HOME = "$Root\tools\triton"  # Triton's compiled kernels, else in the user's profile
 
 # uv: one exe, unzipped into tools\uv
 $uv = "$Root\tools\uv\uv.exe"
@@ -65,7 +66,10 @@ if (-not (Test-Path "$Root\venv")) {
 }
 $py = "$Root\venv\Scripts\python.exe"
 & $uv pip install --python $py torch --index-url https://download.pytorch.org/whl/cu128
-& $uv pip install --python $py transformers peft trl accelerate datasets bitsandbytes huggingface_hub
+& $uv pip install --python $py transformers peft trl accelerate datasets bitsandbytes huggingface_hub soundfile
+# Qwen3.5's linear-attention layers: without these kernels transformers falls back to plain PyTorch,
+# ~2 min per training example and more than 8 GB
+& $uv pip install --python $py "triton-windows<3.8" flash-linear-attention
 & $py -c "import torch; print('torch', torch.__version__, '| CUDA:', torch.cuda.is_available(), '|', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'no GPU')"
 
 # The AMI corpus (CC BY 4.0) and the benchmark's 30 meetings
@@ -83,6 +87,7 @@ if (-not $NoModel) {
 `$env:UV_TOOL_DIR = "$Root\tools\uv-tools"
 `$env:HF_HOME = "$Root\hf"
 `$env:PYTHONUTF8 = "1"
+`$env:TRITON_HOME = "$Root\tools\triton"
 `$env:PATH = "$Root\venv\Scripts;$Root\tools\uv;" + `$env:PATH
 "@ | Set-Content "$Root\env.ps1" -Encoding UTF8
 

@@ -30,6 +30,7 @@ ap.add_argument("--set", default="dev", choices=["dev", "test", "all"])
 ap.add_argument("--rounds", type=int, default=2)
 ap.add_argument("--model", default="mlx-community/Qwen3.5-4B-4bit")
 ap.add_argument("--src", type=Path, default=ROOT / "src")
+ap.add_argument("--adapter", type=Path, help="an mlx-lm LoRA adapter (to_mlx.py's output), for every pass")
 a = ap.parse_args()
 
 home = DATA / "home"
@@ -46,13 +47,22 @@ from meetscribe.transcript import load_json, to_plain  # noqa: E402
 
 CACHE = DATA / "cache"
 CACHE.mkdir(exist_ok=True)
+# The adapter's weights, not its folder: a run trained again under the same name gets new answers
+ADAPTER = hashlib.sha256((a.adapter / "adapters.safetensors").read_bytes()).hexdigest() if a.adapter else ""
 
 
 class CachedLLM(S.LLM):
     round = 1
 
+    def _load(self):
+        if self._model is None and a.adapter:
+            from mlx_lm import load
+            self._model, self._tokenizer = load(self.cfg.llm_model, adapter_path=str(a.adapter))
+        super()._load()
+
     def chat(self, prompt, max_tokens=2500, on_token=None, prose=False, temperature=None, transcript=None, last=False):
-        key = hashlib.sha256(json.dumps([self.cfg.llm_model, self.round, prompt, transcript, max_tokens, temperature,
+        model = self.cfg.llm_model + (f"+{ADAPTER}" if a.adapter else "")  # the cache tells them apart
+        key = hashlib.sha256(json.dumps([model, self.round, prompt, transcript, max_tokens, temperature,
                                          prose]).encode()).hexdigest()
         f = CACHE / f"{key}.txt"
         if f.exists():

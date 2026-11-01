@@ -18,7 +18,7 @@ HERE = Path(__file__).resolve().parent
 CORPUS = HERE / "data" / "ami"
 OUT = HERE / "data" / "sessions"
 ROLE = {"PM": "Project Manager", "ID": "Industrial Designer", "UI": "Interface Designer", "ME": "Marketing Expert"}
-WORD = re.compile(r'<w [^>]*starttime="([\d.]+)" endtime="([\d.]+)"([^>]*)>([^<]*)</w>')
+WORD = re.compile(r'<w nite:id="([^"]+)"[^>]*starttime="([\d.]+)" endtime="([\d.]+)"([^>]*)>([^<]*)</w>')
 PAUSE = 1.0
 
 # The 8 meetings of the first look (2026-10-29), then others picked at random (seeded).
@@ -42,17 +42,23 @@ def split() -> tuple[list[str], list[str]]:
     return FIRST + sorted(pool[:12]), sorted(pool[12:22])
 
 
-def convert(mid: str) -> None:
+def roles(mid: str) -> dict[str, str]:
+    """The meeting's speakers: agent letter ("A") → role ("PM")."""
     meetings = (CORPUS / "corpusResources" / "meetings.xml").read_text(encoding="latin-1")
     block = re.search(rf'observation="{mid}".*?</meeting>', meetings, re.S).group(0)
-    roles = dict(re.findall(r'nxt_agent="(\w)"[^>]*role="(\w+)"', block))
+    return dict(re.findall(r'nxt_agent="(\w)"[^>]*role="(\w+)"', block))
+
+
+def utterances(mid: str) -> list[dict]:
+    """The transcript's utterances. Each also has "words": its words' corpus ids and where each
+    one starts and ends in "text" (train_data.py finds the annotated lines with them)."""
     turns = []
-    for agent, role in roles.items():
+    for agent, role in roles(mid).items():
         f = CORPUS / "words" / f"{mid}.{agent}.words.xml"
         if not f.exists():
             continue
         cur = None
-        for start, end, attrs, word in WORD.findall(f.read_text(encoding="latin-1")):
+        for wid, start, end, attrs, word in WORD.findall(f.read_text(encoding="latin-1")):
             start, end, word = float(start), float(end), html.unescape(word)
             punc = 'punc="true"' in attrs
             if cur and (punc or start - cur["end"] < PAUSE):
@@ -62,23 +68,31 @@ def convert(mid: str) -> None:
                 if cur:
                     turns.append(cur)
                 cur = {"start": start, "end": end, "speaker": ROLE.get(role, role), "text": word, "lang": "en",
-                       "track": "meeting"}
+                       "track": "meeting", "words": []}
+            cur["words"].append((wid, len(cur["text"]) - len(word), len(cur["text"])))
         if cur:
             turns.append(cur)
     turns.sort(key=lambda u: u["start"])
-    utterances = []
+    out = []
     for u in turns:  # the same speaker twice in a row: one utterance
-        if utterances and utterances[-1]["speaker"] == u["speaker"]:
-            utterances[-1]["text"] += " " + u["text"]
-            utterances[-1]["end"] = u["end"]
+        if out and out[-1]["speaker"] == u["speaker"]:
+            shift = len(out[-1]["text"]) + 1
+            out[-1]["words"] += [(w, a + shift, b + shift) for w, a, b in u["words"]]
+            out[-1]["text"] += " " + u["text"]
+            out[-1]["end"] = u["end"]
         else:
-            utterances.append(u)
+            out.append(u)
+    return out
+
+
+def convert(mid: str) -> None:
+    utts = [{k: v for k, v in u.items() if k != "words"} for u in utterances(mid)]
     summary = (CORPUS / "abstractive" / f"{mid}.abssumm.xml").read_text(encoding="latin-1")
     d = OUT / mid
     d.mkdir(parents=True, exist_ok=True)
     (d / "transcript.json").write_text(json.dumps(
         {"title": "", "languages": ["en"], "tracks": ["meeting"], "guessed_names": [],
-         "duration": utterances[-1]["end"], "created": "2005-01-10T10:00:00", "utterances": utterances},
+         "duration": utts[-1]["end"], "created": "2005-01-10T10:00:00", "utterances": utts},
         indent=1, ensure_ascii=False))
     (d / "truth.json").write_text(json.dumps(
         {name: section(summary, name) for name in ("actions", "decisions", "abstract")}, indent=1))

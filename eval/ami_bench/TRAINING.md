@@ -46,6 +46,42 @@ models in `hf\`, outputs under the root.
 4. **Credit.** An adapter trained on AMI ships with the credit in README.md (CC BY 4.0, University
    of Edinburgh) and in the app's About.
 
+## Done on the PC (2026-11-01)
+
+```powershell
+python eval\ami_bench\train_data.py   # → data\train\train.jsonl, valid.jsonl, report.json
+python eval\ami_bench\train.py NAME   # → ..\runs\NAME: the adapter, args.json, log.json
+python eval\ami_bench\run_hf.py NAME [--adapter ..\runs\RUN] [--meetings ID…]   # the to-do steps here, scored
+python eval\ami_bench\to_mlx.py ..\runs\RUN   # → RUN\mlx, for run.py --adapter on the Mac
+```
+
+- **Data** (`train_data.py`). The corpus links each summary sentence to the dialogue acts it was
+  written from (`extractive/*.summlink.xml` + `dialogueActs/`, now kept by `fetch.py`): 190 of the
+  230 actions have a line. 108 scenario meetings outside the split (11 held out for validation),
+  cut by `_parts` with the Qwen tokenizer: 411 parts, 63 with to-dos, ~3.1k tokens each. Owners are
+  the four roles; group tasks ("all participants will…") and odd wordings aren't written, and the
+  parts that hold them are left out, as are the empty parts of a meeting with an action linked to
+  no line. The quotes are sometimes off (the annotators' links are loose): 12 of the to-dos don't
+  pass `check_actions`. Same scenario teams as some dev/test meetings, other meetings.
+- **Training** (`train.py`). Own loop, loss on the answer only, logits only there. Qwen3.5 is a
+  hybrid (linear + full attention): needs `triton-windows` + `flash-linear-attention` (now in
+  `setup_windows.ps1`), and an attention function that repeats K/V for SDPA's memory-efficient
+  kernel (PyTorch on Windows has no flash attention; the default fell back to the math kernel and
+  spilled past 8 GB at ~2 min per example). Now ~4.5 s per example, 5.3 GB at 4k tokens.
+- **First run, `runs/r16-e2`** (rank 16, alpha 32, lr 1e-4, 2 epochs, parts with to-dos ×2, 106
+  steps, 71 min). Validation loss: parts with to-dos 0.56 → 0.35 (flat from step 60), parts
+  without 5.8 → 0.01. **It learnt to stay silent**: on the 6 validation parts with to-dos it
+  answers on 1 (rightly), P(empty answer) 0.4–1.0 on the others; on dev TS3006a (`run_hf.py`)
+  0 to-dos where the base finds 3/3 (+13 unmatched), the second look silent too. The format and
+  the content of what it does write are right: it's the calibration.
+- **Next** (not tried):
+  - balance the empty parts: ~1 per part with to-dos instead of 5.5, or weight the loss of the
+    to-do parts up; fewer steps (the to-do loss was flat after ~60);
+  - the adapter only on the extraction pass, not the second look (it never saw that prompt);
+  - score with `run_hf.py` (base vs adapter, same NF4 model on this PC): ~80 s per meeting for the
+    base, so the 20 dev meetings ×2 take about an hour. `to_mlx.py` + `run.py --adapter` on the
+    Mac only for a run that wins here.
+
 ## Rules
 
 - The owner's real meetings never leave the Mac and never go into training data or the repo.

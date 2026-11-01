@@ -12,10 +12,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 URL = "https://groups.inf.ed.ac.uk/ami/AMICorpusAnnotations/ami_public_manual_1.6.2.zip"
-KEEP = ("abstractive/", "words/", "corpusResources/", "LICENCE.txt")  # the rest isn't used
+KEEP = ("abstractive/", "words/", "corpusResources/", "LICENCE.txt",
+        "extractive/", "dialogueActs/")  # these two: the lines behind each summary sentence (train_data.py)
 
 corpus = HERE / "data" / "ami"
-if not (corpus / "abstractive").exists():
+if not (corpus / "extractive").exists():
     print(f"downloading {URL}", flush=True)
     with urllib.request.urlopen(URL) as r:
         z = zipfile.ZipFile(io.BytesIO(r.read()))

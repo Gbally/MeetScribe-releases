@@ -30,7 +30,9 @@ ap.add_argument("--set", default="dev", choices=["dev", "test", "all"])
 ap.add_argument("--rounds", type=int, default=2)
 ap.add_argument("--model", default="mlx-community/Qwen3.5-4B-4bit")
 ap.add_argument("--src", type=Path, default=ROOT / "src")
-ap.add_argument("--adapter", type=Path, help="an mlx-lm LoRA adapter (to_mlx.py's output), for every pass")
+ap.add_argument("--adapter", type=Path, help="an mlx-lm LoRA adapter (to_mlx.py's output), for the extraction passes")
+ap.add_argument("--adapter-scale", type=float, help="the LoRA scale, instead of the adapter's own (weaker: lower)")
+ap.add_argument("--adapter-everywhere", action="store_true", help="… and for the second look too")
 a = ap.parse_args()
 
 home = DATA / "home"
@@ -49,19 +51,33 @@ CACHE = DATA / "cache"
 CACHE.mkdir(exist_ok=True)
 # The adapter's weights, not its folder: a run trained again under the same name gets new answers
 ADAPTER = hashlib.sha256((a.adapter / "adapters.safetensors").read_bytes()).hexdigest() if a.adapter else ""
+if a.adapter_scale is not None:
+    ADAPTER += f"@{a.adapter_scale}"
 
 
 class CachedLLM(S.LLM):
     round = 1
+    adapter_on = True  # off: the LoRA layers' scale at 0, so the base model (as run_hf.py does it)
 
     def _load(self):
         if self._model is None and a.adapter:
             from mlx_lm import load
             self._model, self._tokenizer = load(self.cfg.llm_model, adapter_path=str(a.adapter))
+            self._lora = [(m, m.scale if a.adapter_scale is None else a.adapter_scale)
+                          for _, m in self._model.named_modules() if hasattr(m, "lora_a")]
+            for m, scale in self._lora:
+                m.scale = scale
         super()._load()
 
+    def use_adapter(self, on: bool):
+        if a.adapter and on != self.adapter_on:
+            self._load()
+            for m, scale in self._lora:
+                m.scale = scale if on else 0.0
+            self.adapter_on, self._read = on, None  # the transcript read with the other weights
+
     def chat(self, prompt, max_tokens=2500, on_token=None, prose=False, temperature=None, transcript=None, last=False):
-        model = self.cfg.llm_model + (f"+{ADAPTER}" if a.adapter else "")  # the cache tells them apart
+        model = self.cfg.llm_model + (f"+{ADAPTER}" if a.adapter and self.adapter_on else "")  # the cache tells them apart
         key = hashlib.sha256(json.dumps([model, self.round, prompt, transcript, max_tokens, temperature,
                                          prose]).encode()).hexdigest()
         f = CACHE / f"{key}.txt"
@@ -82,10 +98,12 @@ for r in range(1, a.rounds + 1):  # round by round, so a run cut short still cov
         utterances, meta = load_json(DATA / "sessions" / mid / "transcript.json")
         transcript, meeting = to_plain(utterances), datetime.fromisoformat(meta["created"]).date()
         llm.round, llm._read = r, None
+        llm.use_adapter(True)
         t0 = time.time()
         parts = S._parts(llm, transcript, S.EXTRACT_TOKENS)
         raw, _ = S._extract(llm, "English", parts)
         checked = S.check_actions(raw, transcript, meeting)
+        llm.use_adapter(a.adapter_everywhere)
         actions = S.merge_actions(checked + S.second_look(llm, "English", transcript, checked, meeting))
         (out / f"{mid}-{r}.json").write_text(json.dumps(actions, indent=1, ensure_ascii=False))
         print(f"{mid} round {r}: {len(actions)} to-dos in {time.time() - t0:.0f}s", flush=True)

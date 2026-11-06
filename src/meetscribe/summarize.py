@@ -285,6 +285,36 @@ def _dates_said(texts: list[str], meeting) -> set:
     return found
 
 
+# Words that are dates only sometimes ("I sat down", "march on", "Marco", "segunda" = second): not a deadline alone.
+NOT_ALONE = {"sun", "sat", "wed", "march", "marco", "segunda", "may"}
+
+
+def _due_in(text: str, meeting) -> str:
+    """The deadline a sentence says ("I'll send it by Friday" → "Friday"), when it says one date
+    only, today or later: for a to-do the model gave no deadline although it was said."""
+    from .dates import parse_due
+
+    words = [w for w in (w.strip(".,;:!?\"'()") for w in text.split()) if w]
+    dates, i = {}, 0
+    while i < len(words):
+        alone = words[i].lower() in NOT_ALONE and not (i + 1 < len(words) and words[i + 1][:1].isdigit())
+        n = 0 if alone else next((n for n in (1, 2, 3, 4) if parse_due(" ".join(words[i:i + n]), meeting)), 0)
+        if not n:
+            i += 1
+            continue
+        d = parse_due(" ".join(words[i:i + n]), meeting)
+        while n < 4 and i + n < len(words) and parse_due(" ".join(words[i:i + n + 1]), meeting) not in (None, d):
+            n += 1  # "vendredi" → "vendredi prochain"
+            d = parse_due(" ".join(words[i:i + n]), meeting)
+        span = words[i:i + n]
+        while len(span) > 1 and parse_due(" ".join(span[1:]), meeting) == d:
+            span = span[1:]  # "el informe el lunes" → "lunes"
+        if d >= meeting and not (len(span) == 1 and span[0].lower() in NOT_ALONE):  # "with Marco"
+            dates.setdefault(d, " ".join(span))
+        i += n
+    return next(iter(dates.values())) if len(dates) == 1 else ""
+
+
 # What people say when they take something on, in the first person ("I'll call", "je l'envoie", "los llamo el lunes",
 # "ich schicke", "eu ligo", "preparo io"): Spanish, Portuguese and Italian often drop the pronoun.
 COMMIT_VERBS = (r"(llamo|mando|env[ií]o|preparo|hago|hablo|actualizo|reviso|escribo|organizo|compruebo|aviso|comparto|"
@@ -448,7 +478,9 @@ def check_actions(raw: str, transcript: str, meeting) -> list[dict]:
             if not (first and re.search(rf"\b{re.escape(first)}\b(?! [,?])", tokens)):
                 owner = speaker
         due = str(item.get("due", "")).strip()
-        if due and meeting:
+        if not due and meeting:
+            due = _due_in(ask, meeting)  # said in the very sentence: no need to check it's there
+        elif due and meeting:
             first = (_norm_words(owner) or [""])[0]
             near = [t for _, _, t in lines[max(0, best_i - 1): best_i + 2]]  # the line, the ask, the answer
             near += [t for (_, sp, t), w in zip(lines, words_of)

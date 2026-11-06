@@ -352,6 +352,25 @@ def test_during_the_meeting_and_vague():
     assert merged == ["present the prototype to the board"], merged
 
 
+def test_deadline_said_but_not_given():
+    """The model gave no deadline but the sentence says one: it's taken from there ("by Friday" →
+    "Friday"). Not when it says two dates, or a word that's a date only sometimes ("Marco")."""
+    tr = "\n".join(["[00:00:10] Ana: I'll send the report by Friday.",
+                    "[00:00:20] Tom: Le mando el informe el lunes.",
+                    "[00:00:30] Ana: We met on Monday, and I'll call them on Thursday.",
+                    "[00:00:40] Tom: I sat with Marco and I'll update the plan.",
+                    "[00:00:50] Ana: I'll check the invoices next week."])
+    raw = "\n".join('{"owner": "%s", "task": "%s", "due": "%s", "at": "%s", "quote": "%s"}' % x for x in [
+        ("Ana", "send the report", "", "00:00:10", "I'll send the report by Friday"),
+        ("Tom", "mandar el informe", "", "00:00:20", "Le mando el informe el lunes"),
+        ("Ana", "call them", "", "00:00:30", "and I'll call them on Thursday"),
+        ("Tom", "update the plan", "", "00:00:40", "I sat with Marco and I'll update the plan"),
+        ("Ana", "check the invoices", "next week", "00:00:50", "I'll check the invoices next week")])
+    got = [(a["task"], a["due"]) for a in sm.check_actions(raw, tr, D)]
+    assert got == [("send the report", "Friday"), ("mandar el informe", "lunes"), ("call them", ""),
+                   ("update the plan", ""), ("check the invoices", "next week")], got
+
+
 def test_faint_mic():
     """The room heard by the mic (much quieter than your voice) goes; your quieter words stay."""
     import numpy as np

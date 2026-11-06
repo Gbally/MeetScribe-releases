@@ -4,9 +4,11 @@ or without a train.py adapter. Not the app's MLX model: compare runs of this scr
   python eval/ami_bench/run_hf.py NAME [--adapter RUN_DIR] [--set dev|test|all] [--rounds 1] [--meetings ID…]
 
 Writes data/runs/NAME/ID-ROUND.json and prints the score, like run.py. The decisions pass is left out
-(it doesn't change the to-dos); the extraction passes, checks, second look and merge are the app's."""
+(it doesn't change the to-dos); the extraction passes, checks, second look and merge are the app's.
+The adapter is used for the extraction passes only."""
 
 import argparse
+import contextlib
 import hashlib
 import json
 import re
@@ -43,7 +45,7 @@ CACHE = DATA / "cache"
 CACHE.mkdir(exist_ok=True)
 tok = AutoTokenizer.from_pretrained(a.model)
 model = hf.load(a.model)
-variant = f"hf-nf4:{a.model}"
+base = variant = f"hf-nf4:{a.model}"
 if a.adapter:
     from peft import PeftModel
 
@@ -54,6 +56,7 @@ model.eval()
 
 class HFLLM(S.LLM):
     round = 1
+    adapter = True  # off for the second look: the adapter only learnt the extraction prompt
 
     def count_tokens(self, text: str) -> int:
         return len(tok.encode(text, add_special_tokens=False))
@@ -61,7 +64,8 @@ class HFLLM(S.LLM):
     @torch.no_grad()
     def chat(self, prompt, max_tokens=2500, on_token=None, prose=False, temperature=None, transcript=None, last=False):
         temperature = S.TEMPERATURE if temperature is None else temperature
-        key = hashlib.sha256(json.dumps([variant, self.round, prompt, transcript, max_tokens, temperature,
+        on = bool(a.adapter) and self.adapter
+        key = hashlib.sha256(json.dumps([variant if on else base, self.round, prompt, transcript, max_tokens, temperature,
                                          prose]).encode()).hexdigest()
         f = CACHE / f"{key}.txt"
         if f.exists():
@@ -70,10 +74,11 @@ class HFLLM(S.LLM):
         text = tok.apply_chat_template([{"role": "system", "content": S.SYSTEM}, {"role": "user", "content": head + prompt}],
                                        add_generation_prompt=True, tokenize=False, enable_thinking=False)
         ids = tok(text, add_special_tokens=False, return_tensors="pt")["input_ids"].to("cuda")
-        gen = model.generate(input_ids=ids, attention_mask=torch.ones_like(ids), max_new_tokens=max_tokens,
-                             do_sample=temperature > 0, temperature=temperature or None, top_p=0.8 if temperature else None,
-                             top_k=None, repetition_penalty=1.08 if prose else None, pad_token_id=tok.eos_token_id,
-                             eos_token_id=[tok.convert_tokens_to_ids("<|im_end|>"), tok.eos_token_id])  # the end of the turn
+        with model.disable_adapter() if a.adapter and not on else contextlib.nullcontext():
+            gen = model.generate(input_ids=ids, attention_mask=torch.ones_like(ids), max_new_tokens=max_tokens,
+                                 do_sample=temperature > 0, temperature=temperature or None, top_p=0.8 if temperature else None,
+                                 top_k=None, repetition_penalty=1.08 if prose else None, pad_token_id=tok.eos_token_id,
+                                 eos_token_id=[tok.convert_tokens_to_ids("<|im_end|>"), tok.eos_token_id])  # the end of the turn
         out = re.sub(r"<think>.*?</think>", "", tok.decode(gen[0, ids.shape[1]:], skip_special_tokens=True), flags=re.S).strip()
         f.write_text(out, encoding="utf-8")
         return out
@@ -96,7 +101,9 @@ for r in range(1, a.rounds + 1):
                                temperature=S.EXTRACT_TEMPERATURE)
                       for part in S._parts(llm, transcript, S.EXTRACT_TOKENS))
         checked = S.check_actions(raw, transcript, meeting)
+        llm.adapter = False
         actions = S.merge_actions(checked + S.second_look(llm, "English", transcript, checked, meeting))
+        llm.adapter = True
         (out / f"{mid}-{r}.json").write_text(json.dumps(actions, indent=1, ensure_ascii=False), encoding="utf-8")
         print(f"{mid} round {r}: {len(actions)} to-dos in {time.time() - t0:.0f}s", flush=True)
 

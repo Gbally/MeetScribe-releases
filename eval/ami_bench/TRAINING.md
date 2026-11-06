@@ -74,13 +74,23 @@ python eval\ami_bench\to_mlx.py ..\runs\RUN   # → RUN\mlx, for run.py --adapte
   answers on 1 (rightly), P(empty answer) 0.4–1.0 on the others; on dev TS3006a (`run_hf.py`)
   0 to-dos where the base finds 3/3 (+13 unmatched), the second look silent too. The format and
   the content of what it does write are right: it's the calibration.
-- **Next** (not tried):
-  - balance the empty parts: ~1 per part with to-dos instead of 5.5, or weight the loss of the
-    to-do parts up; fewer steps (the to-do loss was flat after ~60);
-  - the adapter only on the extraction pass, not the second look (it never saw that prompt);
-  - score with `run_hf.py` (base vs adapter, same NF4 model on this PC): ~80 s per meeting for the
-    base, so the 20 dev meetings ×2 take about an hour. `to_mlx.py` + `run.py --adapter` on the
-    Mac only for a run that wins here.
+- **Second run, `runs/r16-bal`** (2026-11-06): `train.py r16-bal --pos-repeat 1 --neg-per-pos 1.5
+  --epochs 3`: the 57 parts with to-dos + 86 of the empty ones, 53 steps. Validation loss: to-dos
+  0.56 → 0.34, empty 5.8 → 0.17. (2 h 34 instead of ~40 min: Chrome held VRAM and the run spilled to
+  shared memory; close everything else on the GPU before a run.) `run_hf.py` now uses the adapter for
+  the extraction passes only, not the second look.
+- **Dev, 20 meetings, `run_hf.py`** (same NF4 model, one round):
+
+  | run | found | right owner | to-dos | unmatched | time |
+  |---|---|---|---|---|---|
+  | `hf-base` | 30/51 (59 %) | 20 (39 %) | 359 | 318 (89 %) | 38 min |
+  | `hf-r16-bal` | 27/51 (53 %) | 25 (49 %) | 85 | 53 (62 %) | 12 min |
+
+  4× fewer to-dos, 6× less noise, 3 found actions lost, more right owners, and faster (shorter
+  answers). A clear win here; the MLX adapter is in `runs/r16-bal/mlx`.
+- **Next**: copy `runs/r16-bal/mlx` to the Mac, `run.py --adapter` on dev (the app's MLX 4-bit
+  model, not NF4: check it holds), then `eval/notes_bench` and the owner's meetings; test once at
+  the end. Maybe try `--neg-per-pos 1` for a bit more recall.
 
 ## Rules
 

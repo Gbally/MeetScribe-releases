@@ -5,7 +5,9 @@
 Writes the adapter to OUT/NAME (default OUT: the folder above the repository, runs/), with
 args.json and the losses in log.json, so runs stay comparable. The loss counts only the answer:
 the prompt is the one LLM.chat sends, with the chat template the app uses (no thinking).
---pos-repeat: each part with to-dos is seen that many times per epoch (most parts have none)."""
+--pos-repeat: each part with to-dos is seen that many times per epoch (most parts have none).
+--neg-per-pos: fewer empty parts. With all of them (5.5 per part with to-dos), r16-e2 learnt to
+answer nothing."""
 
 import argparse
 import json
@@ -29,6 +31,7 @@ ap.add_argument("--epochs", type=float, default=2)
 ap.add_argument("--lr", type=float, default=1e-4)
 ap.add_argument("--accum", type=int, default=8, help="examples per optimizer step")
 ap.add_argument("--pos-repeat", type=int, default=2)
+ap.add_argument("--neg-per-pos", type=float, help="keep this many empty parts per part with to-dos (default: all)")
 ap.add_argument("--max-len", type=int, default=4096)
 ap.add_argument("--max-steps", type=int, default=0, help="stop after N optimizer steps (a quick test)")
 ap.add_argument("--seed", type=int, default=0)
@@ -57,7 +60,11 @@ def examples(name: str) -> list[dict]:
     return [json.loads(line) for line in (DATA / name).read_text(encoding="utf-8").splitlines()]
 
 
-train = [encode(ex) for ex in examples("train.jsonl") for _ in range(a.pos_repeat if ex["messages"][2]["content"] else 1)]
+pos = [ex for ex in examples("train.jsonl") if ex["messages"][2]["content"]]
+neg = [ex for ex in examples("train.jsonl") if not ex["messages"][2]["content"]]
+if a.neg_per_pos is not None:  # the same empty parts for every run with the same seed
+    neg = random.Random(a.seed).sample(neg, min(len(neg), round(len(pos) * a.neg_per_pos)))
+train = [encode(ex) for ex in pos for _ in range(a.pos_repeat)] + [encode(ex) for ex in neg]
 valid = [encode(ex) for ex in examples("valid.jsonl")]
 
 model = hf.load(a.model)

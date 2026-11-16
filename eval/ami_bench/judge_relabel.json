@@ -1,0 +1,382 @@
+[
+ {
+  "meeting": "ES2002b",
+  "todo": "Industrial Designer: add it later",
+  "at": "00:10:40"
+ },
+ {
+  "meeting": "ES2002b",
+  "todo": "Project Manager: put the minutes of this meeting into the project documents folder",
+  "at": "00:32:45"
+ },
+ {
+  "meeting": "ES2003b",
+  "todo": "Marketing Expert: give the frequency what people use most often",
+  "at": "00:32:00"
+ },
+ {
+  "meeting": "ES2005a",
+  "todo": "Project Manager: look at other remote controls",
+  "at": "00:02:50"
+ },
+ {
+  "meeting": "ES2005a",
+  "todo": "Interface Designer: come up with shapes and suggested shades",
+  "at": "00:03:00"
+ },
+ {
+  "meeting": "ES2005b",
+  "todo": "Raj: find out what people would think about teletext",
+  "at": "00:23:44"
+ },
+ {
+  "meeting": "ES2005b",
+  "todo": "Project Manager: forward any specific information to anybody in particular",
+  "at": "00:34:38"
+ },
+ {
+  "meeting": "ES2005c",
+  "todo": "Marketing Expert: put it in shared documents",
+  "at": "00:34:49"
+ },
+ {
+  "meeting": "ES2005c",
+  "todo": "Marketing Expert: send new",
+  "at": "00:34:49"
+ },
+ {
+  "meeting": "ES2007b",
+  "todo": "Industrial Designer: send e-mail to project manager",
+  "at": "00:25:17"
+ },
+ {
+  "meeting": "ES2007c",
+  "todo": "Interface Designer: play with some clay",
+  "at": "00:33:51"
+ },
+ {
+  "meeting": "ES2007c",
+  "todo": "Project Manager: look into the lock key",
+  "at": "00:35:48"
+ },
+ {
+  "meeting": "ES2008a",
+  "todo": "Project Manager: look into TV recorder functions",
+  "at": "00:13:34"
+ },
+ {
+  "meeting": "ES2008a",
+  "todo": "Project Manager: put together agenda",
+  "at": "00:16:16"
+ },
+ {
+  "meeting": "ES2011b",
+  "todo": "Project Manager: check requirements and update",
+  "at": "00:24:34"
+ },
+ {
+  "meeting": "ES2011a",
+  "todo": "Project Manager: come up with some new ones",
+  "at": "00:16:37"
+ },
+ {
+  "meeting": "ES2012c",
+  "todo": "Kate: put what we've discussed into something we can see",
+  "at": "00:32:07"
+ },
+ {
+  "meeting": "ES2012c",
+  "todo": "Kendra: put what we've discussed into something we can see",
+  "at": "00:32:07"
+ },
+ {
+  "meeting": "ES2013b",
+  "todo": "Industrial Designer: do some research for the next meeting",
+  "at": "00:25:12"
+ },
+ {
+  "meeting": "ES2014a",
+  "todo": "Project Manager: get back to the speaker",
+  "at": "00:13:34"
+ },
+ {
+  "meeting": "ES2014b",
+  "todo": "Project Manager: write the minutes of this meeting",
+  "at": "00:38:19"
+ },
+ {
+  "meeting": "ES2014d",
+  "todo": "Project Manager: put some notes down",
+  "at": "00:39:15"
+ },
+ {
+  "meeting": "ES2016a",
+  "todo": "Project Manager: design a better meeting",
+  "at": "00:22:49"
+ },
+ {
+  "meeting": "ES2016b",
+  "todo": "Interface Designer: have a look at the actual appearance",
+  "at": "00:27:27"
+ },
+ {
+  "meeting": "ES2016b",
+  "todo": "Marketing Expert: have some info on a topic",
+  "at": "00:28:38"
+ },
+ {
+  "meeting": "IS1000b",
+  "todo": "Project Manager: work out notes and give them to the team",
+  "at": "00:03:45"
+ },
+ {
+  "meeting": "IS1000b",
+  "todo": "Marketing Expert: email the web page with data",
+  "at": "00:07:17"
+ },
+ {
+  "meeting": "IS1001b",
+  "todo": "Project Manager: summarise meeting in shared folder",
+  "at": "00:00:29"
+ },
+ {
+  "meeting": "IS1001b",
+  "todo": "Marketing Expert: send user requirements to participant one",
+  "at": "00:06:57"
+ },
+ {
+  "meeting": "IS1001b",
+  "todo": "Project Manager: make a summary of the meeting",
+  "at": "00:33:25"
+ },
+ {
+  "meeting": "IS1001d",
+  "todo": "Project Manager: send a summary",
+  "at": "00:01:01"
+ },
+ {
+  "meeting": "IS1002b",
+  "todo": "Project Manager: communicate the message to the team",
+  "at": "00:14:36"
+ },
+ {
+  "meeting": "IS1002b",
+  "todo": "Interface Designer: look into how much the product might increase costs",
+  "at": "00:25:40"
+ },
+ {
+  "meeting": "IS1002b",
+  "todo": "Project Manager: communicate to senior people within the company",
+  "at": "00:32:09"
+ },
+ {
+  "meeting": "IS1002c",
+  "todo": "Industrial Designer: come up with cost estimate",
+  "at": "00:32:16"
+ },
+ {
+  "meeting": "IS1003d",
+  "todo": "Industrial Designer: try versions",
+  "at": "00:32:16"
+ },
+ {
+  "meeting": "IS1004c",
+  "todo": "Interface Designer: model the first prototype",
+  "at": "00:35:53"
+ },
+ {
+  "meeting": "IS1004c",
+  "todo": "Interface Designer: design the prototype",
+  "at": "00:37:12"
+ },
+ {
+  "meeting": "IS1004c",
+  "todo": "Industrial Designer: design the prototype",
+  "at": "00:37:14"
+ },
+ {
+  "meeting": "IS1005c",
+  "todo": "Industrial Designer: work out the five by ten numbers",
+  "at": "00:22:27"
+ },
+ {
+  "meeting": "IS1006b",
+  "todo": "Marketing Expert: check in department for specialist",
+  "at": "00:21:21"
+ },
+ {
+  "meeting": "IS1007c",
+  "todo": "Industrial Designer: check the prices",
+  "at": "00:28:55"
+ },
+ {
+  "meeting": "IS1008a",
+  "todo": "Industrial Designer: let the project manager know who they need from the marketing or technical side",
+  "at": "00:09:25"
+ },
+ {
+  "meeting": "IS1008a",
+  "todo": "Project Manager: send a copy of slides",
+  "at": "00:14:32"
+ },
+ {
+  "meeting": "TS3003a",
+  "todo": "Project Manager: put the minutes from this meeting in our project folder",
+  "at": "00:23:02"
+ },
+ {
+  "meeting": "TS3003b",
+  "todo": "Project Manager: put the minutes in the project document folder",
+  "at": "00:35:05"
+ },
+ {
+  "meeting": "TS3004a",
+  "todo": "Interface Designer: put it exactly on the square",
+  "at": "00:21:47"
+ },
+ {
+  "meeting": "TS3004c",
+  "todo": "Interface Designer: get back on it",
+  "at": "00:05:43"
+ },
+ {
+  "meeting": "TS3004c",
+  "todo": "Interface Designer: check what they exact mean",
+  "at": "00:08:53"
+ },
+ {
+  "meeting": "TS3004c",
+  "todo": "Industrial Designer: check the regular chip",
+  "at": "00:26:27"
+ },
+ {
+  "meeting": "TS3004c",
+  "todo": "Interface Designer: see if I can see any of those",
+  "at": "00:27:27"
+ },
+ {
+  "meeting": "TS3004c",
+  "todo": "Interface Designer: take a look at it",
+  "at": "00:30:33"
+ },
+ {
+  "meeting": "TS3005b",
+  "todo": "Marketing Expert: post the cost information",
+  "at": "00:21:57"
+ },
+ {
+  "meeting": "TS3005b",
+  "todo": "Project Manager: put minutes in project documents folder",
+  "at": "00:39:24"
+ },
+ {
+  "meeting": "TS3005c",
+  "todo": "Interface Designer: look for examples",
+  "at": "00:31:26"
+ },
+ {
+  "meeting": "TS3006b",
+  "todo": "Marketing Expert: look up the options",
+  "at": "00:26:22"
+ },
+ {
+  "meeting": "TS3006b",
+  "todo": "Interface Designer: make a nice menu uh with with pages",
+  "at": "00:32:16"
+ },
+ {
+  "meeting": "TS3006c",
+  "todo": "Industrial Designer: put picture of doubly curved case in group folder",
+  "at": "00:16:21"
+ },
+ {
+  "meeting": "TS3007b",
+  "todo": "Project Manager: update minutes",
+  "at": "00:38:35"
+ },
+ {
+  "meeting": "TS3007c",
+  "todo": "Marketing Expert: consult legal advisor",
+  "at": "00:33:50"
+ },
+ {
+  "meeting": "TS3009a",
+  "todo": "Marketing Expert: investigate Teletubby front",
+  "at": "00:23:33"
+ },
+ {
+  "meeting": "TS3009a",
+  "todo": "Industrial Designer: look into look and feel",
+  "at": "00:24:00"
+ },
+ {
+  "meeting": "TS3009b",
+  "todo": "Industrial Designer: look into the costs of LCD screens",
+  "at": "00:12:55"
+ },
+ {
+  "meeting": "TS3009c",
+  "todo": "Industrial Designer: design something",
+  "at": "00:21:34"
+ },
+ {
+  "meeting": "TS3009c",
+  "todo": "Interface Designer: put drawing in shared folder",
+  "at": "00:27:09"
+ },
+ {
+  "meeting": "TS3009c",
+  "todo": "Project Manager: put something in end report",
+  "at": "00:27:11"
+ },
+ {
+  "meeting": "TS3009c",
+  "todo": "Industrial Designer: design the buttons",
+  "at": "00:32:11"
+ },
+ {
+  "meeting": "TS3011c",
+  "todo": "Industrial Designer: check if scroll-wheels work with single-curved case",
+  "at": "00:28:44"
+ },
+ {
+  "meeting": "TS3011c",
+  "todo": "Interface Designer: have a prototype ready",
+  "at": "00:29:46"
+ },
+ {
+  "meeting": "TS3011c",
+  "todo": "Industrial Designer: put it online",
+  "at": "00:38:18"
+ },
+ {
+  "meeting": "TS3012a",
+  "todo": "Project Manager: put the minutes of every meeting in the project folder",
+  "at": "00:03:24"
+ },
+ {
+  "meeting": "ES2016d",
+  "todo": "Project Manager: do my minutes for the last meeting",
+  "at": "00:24:50"
+ },
+ {
+  "meeting": "ES2016d",
+  "todo": "Project Manager: check with the main boss whether we can, what goes on after that",
+  "at": "00:25:09"
+ },
+ {
+  "meeting": "IS1008c",
+  "todo": "Industrial Designer: find out more about the technology background",
+  "at": "00:07:22"
+ },
+ {
+  "meeting": "IS1008c",
+  "todo": "Project Manager: submit to the management",
+  "at": "00:24:15"
+ },
+ {
+  "meeting": "TS3010c",
+  "todo": "Industrial Designer: come with it",
+  "at": "00:29:00"
+ }
+]

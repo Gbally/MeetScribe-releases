@@ -1,6 +1,7 @@
 """QLoRA on the to-do pass, with the examples of train_data.py (NVIDIA GPU, 8 GB is enough).
 
   python eval/ami_bench/train.py NAME [--rank 16] [--epochs 2] [--lr 1e-4] [--pos-repeat 2] [--max-steps N]
+  python eval/ami_bench/train.py judge-r16 --data eval/ami_bench/judge_set --pos-repeat 1 --epochs 2   # the judge
 
 Writes the adapter to OUT/NAME (default OUT: the folder above the repository, runs/), with
 args.json and the losses in log.json, so runs stay comparable. The loss counts only the answer:
@@ -24,6 +25,7 @@ ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDe
 ap.add_argument("name")
 ap.add_argument("--model", default="Qwen/Qwen3.5-4B")
 ap.add_argument("--out", type=Path, default=HERE.parents[2] / "runs")
+ap.add_argument("--data", type=Path, default=DATA, help="train.jsonl + valid.jsonl (default: train_data.py's; judge_set: judge_data.py's)")
 ap.add_argument("--rank", type=int, default=16)
 ap.add_argument("--alpha", type=int, default=32)
 ap.add_argument("--dropout", type=float, default=0.05)
@@ -57,7 +59,7 @@ def encode(ex: dict) -> tuple[list[int], int]:
 
 
 def examples(name: str) -> list[dict]:
-    return [json.loads(line) for line in (DATA / name).read_text(encoding="utf-8").splitlines()]
+    return [json.loads(line) for line in (a.data / name).read_text(encoding="utf-8").splitlines()]
 
 
 pos = [ex for ex in examples("train.jsonl") if ex["messages"][2]["content"]]
@@ -96,9 +98,11 @@ def validate() -> dict:
     """The loss on the parts with to-dos and on those without, apart: an empty answer is learnt in a few
     steps and would hide the rest."""
     model.eval()
-    losses = {"todos": [], "none": []}
+    losses = {"todos": [], "none": [], "yes": [], "no": []}
     for ids, n in valid:
-        losses["todos" if n > 2 else "none"].append(loss_of(ids, n).item())  # n = 2: "<|im_end|>\n" alone
+        said = tok.decode(ids[-n:]).replace("<|im_end|>", "").strip()  # the judge answers yes or no
+        key = said if said in ("yes", "no") else "todos" if n > 2 else "none"  # n = 2: "<|im_end|>\n" alone
+        losses[key].append(loss_of(ids, n).item())
     model.train()
     return {k: round(sum(v) / len(v), 4) for k, v in losses.items() if v}
 

@@ -26,7 +26,8 @@ SUPPORT = Path.home() / "Library/Application Support/MeetScribe"
 
 ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 ap.add_argument("name")
-ap.add_argument("--set", default="dev", choices=["dev", "test", "all"])
+ap.add_argument("--set", default="dev", choices=["dev", "test", "all", "train"],
+                help="train: the scenario meetings in neither dev nor test (candidates for judge_data.py; not scored)")
 ap.add_argument("--rounds", type=int, default=2)
 ap.add_argument("--model", default="mlx-community/Qwen3.5-4B-4bit")
 ap.add_argument("--src", type=Path, default=ROOT / "src")
@@ -89,7 +90,17 @@ class CachedLLM(S.LLM):
 
 
 split = json.loads((DATA / "split.json").read_text())
-meetings = split["dev"] + split["test"] if a.set == "all" else split[a.set]
+if a.set == "train":
+    sys.path.insert(0, str(HERE))
+    from convert import convert  # noqa: E402
+    held = set(split["dev"] + split["test"])
+    meetings = sorted(m for m in (f.name.split(".")[0] for f in (DATA / "ami" / "abstractive").glob("*.abssumm.xml"))
+                      if m[:2] in ("ES", "IS", "TS") and m not in held)  # as train_data.py
+    for mid in meetings:
+        if not (DATA / "sessions" / mid / "transcript.json").exists():
+            convert(mid)
+else:
+    meetings = split["dev"] + split["test"] if a.set == "all" else split[a.set]
 out = DATA / "runs" / a.name
 out.mkdir(parents=True, exist_ok=True)
 llm = CachedLLM(load_config())
@@ -108,4 +119,5 @@ for r in range(1, a.rounds + 1):  # round by round, so a run cut short still cov
         (out / f"{mid}-{r}.json").write_text(json.dumps(actions, indent=1, ensure_ascii=False))
         print(f"{mid} round {r}: {len(actions)} to-dos in {time.time() - t0:.0f}s", flush=True)
 
-subprocess.run([sys.executable, str(HERE / "score.py"), a.name, "--set", a.set])
+if a.set != "train":
+    subprocess.run([sys.executable, str(HERE / "score.py"), a.name, "--set", a.set])

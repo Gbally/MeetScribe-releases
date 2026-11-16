@@ -92,6 +92,35 @@ python eval\ami_bench\to_mlx.py ..\runs\RUN   # → RUN\mlx, for run.py --adapte
   model, not NF4: check it holds), then `eval/notes_bench` and the owner's meetings; test once at
   the end. Maybe try `--neg-per-pos 1` for a bit more recall.
 
+## Next: a judge instead of an extractor (2026-11-16)
+
+r16-bal, measured on the Mac (MLX 4-bit, 2 rounds, with the deadline rule): AMI dev 39/102 found vs
+37 for the base, 152 to-dos vs 348; but on the owner's 3 real meetings 22/40 found vs 33/40, and on
+the multilingual bench 131/142 vs 136/142 with wrong deadlines. Too silent on real meetings: not
+shipped. Scale 1 instead of 2 wasn't better.
+
+The base model asked yes/no about each of its own to-dos (no training, a few lines of context) already
+did better than r16-bal on the real meetings (24/40 found, 9 junk vs 22 and 12), with a threshold to
+tune instead of a retraining. So: train that judge. It can't make the extraction silent (it only removes),
+its examples are short (~450 tokens) and there are many more of them.
+
+- Data (`judge_data.py`, made on the Mac): the app's MLX 4-bit model's to-dos on the 108 training
+  meetings (`run.py judge-cands --set train`), yes when they say an annotated action, else no; the "no"
+  were read by hand and 76 real small tasks among them made yes (`judge_relabel.json`). 704 examples,
+  195 yes. In the repository: `judge_set/`.
+- Training on the Mac doesn't fit (Qwen3.5's linear attention runs out of GPU memory even at batch 1):
+  on the PC,
+
+  ```powershell
+  git pull
+  python eval\ami_bench\train.py judge-r16 --data eval\ami_bench\judge_set --pos-repeat 1 --epochs 2
+  python eval\ami_bench\to_mlx.py ..\runs\judge-r16
+  ```
+
+  then copy `runs\judge-r16\mlx` to the Mac (`eval/ami_bench/data/adapters/judge-r16`).
+- The 6-bit model (`mlx-community/Qwen3.5-4B-6bit`) finds more (AMI dev 27/51 vs 19/51 in one round)
+  but proposes 386 to-dos vs 163 and takes +56 % time: a judge could keep its gain, the time can't.
+
 ## Rules
 
 - The owner's real meetings never leave the Mac and never go into training data or the repo.

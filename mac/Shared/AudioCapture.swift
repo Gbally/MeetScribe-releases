@@ -24,6 +24,17 @@ final class TrackWriter {
     private var framesWritten: AVAudioFramePosition = 0
     private var peak: Float = 0
     private let lock = NSLock()
+    // Sound or not, second by second, to notice a recording that goes on after the meeting.
+    private var sliceSquares: Double = 0
+    private var sliceSamples = 0
+    private var loudSlices = 0
+    private var slices = 0
+    private var lastSoundFrame: AVAudioFramePosition = 0
+    /// A 20 ms slice louder than this (RMS, −46 dBFS) is loud; a quiet room or a fan stays under it.
+    static let soundRMS = 0.005
+    /// A second is "sound" (someone speaking, something playing) when this many of its 50 slices are
+    /// loud: speech is, typing isn't (each key press is loud for a slice or two).
+    static let loudSlicesPerSecond = 30
 
     init(url: URL, startSeconds: Double) {
         self.url = url
@@ -58,7 +69,22 @@ final class TrackWriter {
             try file.write(from: pcm)
             framesWritten += AVAudioFramePosition(pcm.frameLength)
             let ch = pcm.floatChannelData![0]
-            for i in 0..<Int(pcm.frameLength) { peak = max(peak, abs(ch[i])) }
+            for i in 0..<Int(pcm.frameLength) {
+                peak = max(peak, abs(ch[i]))
+                sliceSquares += Double(ch[i] * ch[i])
+                sliceSamples += 1
+                guard sliceSamples == 320 else { continue }
+                if (sliceSquares / 320).squareRoot() > Self.soundRMS { loudSlices += 1 }
+                sliceSquares = 0
+                sliceSamples = 0
+                slices += 1
+                guard slices == 50 else { continue }
+                if loudSlices >= Self.loudSlicesPerSecond {
+                    lastSoundFrame = framesWritten - AVAudioFramePosition(pcm.frameLength) + AVAudioFramePosition(i)
+                }
+                loudSlices = 0
+                slices = 0
+            }
         } catch {
             NSLog("MeetScribe: write error (\(url.lastPathComponent)): \(error.localizedDescription)")
         }
@@ -96,6 +122,12 @@ final class TrackWriter {
     var seconds: Double {
         lock.lock(); defer { lock.unlock() }
         return Double(framesWritten) / 16_000
+    }
+
+    /// When someone last spoke or something last played on this track (seconds from the start).
+    var lastSound: Double {
+        lock.lock(); defer { lock.unlock() }
+        return Double(lastSoundFrame) / 16_000
     }
 
     func close() {
@@ -313,4 +345,35 @@ final class MeetingRecorder {
     }
 
     var elapsed: Double { hostSeconds() - startSeconds }
+
+    /// When someone last spoke or something last played, on either track (seconds from the start).
+    var lastSound: Double { max(mic?.writer.lastSound ?? 0, system?.writer.lastSound ?? 0) }
+
+    /// After stop(): drops everything after `seconds` (the quiet hours of a forgotten recording).
+    func trim(to seconds: Double) {
+        for url in [mic?.writer.url, system?.writer.url].compactMap({ $0 }) {
+            Self.trim(url, to: AVAudioFramePosition(seconds * 16_000))
+        }
+    }
+
+    static func trim(_ url: URL, to frames: AVAudioFramePosition) {
+        let tmp = url.deletingPathExtension().appendingPathExtension("trim.caf")
+        do {
+            let src = try AVAudioFile(forReading: url, commonFormat: .pcmFormatFloat32, interleaved: false)
+            guard src.length > frames else { return }
+            do {
+                let dst = try AVAudioFile(forWriting: tmp, settings: src.fileFormat.settings, commonFormat: .pcmFormatFloat32, interleaved: false)
+                let buf = AVAudioPCMBuffer(pcmFormat: src.processingFormat, frameCapacity: 160_000)!
+                while src.framePosition < frames {
+                    try src.read(into: buf, frameCount: AVAudioFrameCount(min(160_000, frames - src.framePosition)))
+                    if buf.frameLength == 0 { break }
+                    try dst.write(from: buf)
+                }
+            }  // dst released here: the file is finalized before it replaces the original
+            _ = try FileManager.default.replaceItemAt(url, withItemAt: tmp)
+        } catch {
+            try? FileManager.default.removeItem(at: tmp)
+            NSLog("MeetScribe: couldn't trim \(url.lastPathComponent): \(error.localizedDescription)")
+        }
+    }
 }

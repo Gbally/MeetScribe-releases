@@ -137,6 +137,7 @@ final class AppModel: ObservableObject {
     var notesModelFor: [Meeting.ID: String] = [:]
     private var jobTranscribing = false  // the current job's step is a transcription
     private var endReminderSent = false
+    private var over = MeetingOverWatch()
     private var autoStarted = false
     private var briefed = Set<String>()
     private var briefTimer: Timer?
@@ -195,6 +196,7 @@ final class AppModel: ObservableObject {
             ], intentIdentifiers: []),
             UNNotificationCategory(identifier: "ENDED", actions: [
                 UNNotificationAction(identifier: "STOP", title: "Stop & create notes", options: []),
+                UNNotificationAction(identifier: "KEEP", title: "Keep recording", options: []),
             ], intentIdentifiers: []),
         ])
         callMonitor.onCallStarted = { [weak self] app in
@@ -400,6 +402,7 @@ final class AppModel: ObservableObject {
                 }
                 recordingEvent = event
                 endReminderSent = false
+                over = MeetingOverWatch()
                 recorder = rec
                 activeRecorder = rec
                 recordingID = folder.lastPathComponent
@@ -415,16 +418,18 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func stopRecording(discard: Bool = false) {
+    /// `trimTo`: drop the audio after that many seconds (the quiet tail of a forgotten recording).
+    func stopRecording(discard: Bool = false, trimTo: Double? = nil) {
         guard let rec = recorder else { return }
         recorder = nil
         activeRecorder = nil
         meterTimer?.invalidate()
         let id = rec.folder.lastPathComponent
-        let duration = rec.elapsed
+        let duration = min(rec.elapsed, trimTo ?? .infinity)
         autoStarted = false
         Task {
             await rec.stop()
+            if let trimTo, !discard { rec.trim(to: trimTo) }
             recordingID = nil
             recordingEvent = nil
             if discard {
@@ -452,11 +457,15 @@ final class AppModel: ObservableObject {
         guard let rec = recorder else { return }
         elapsed = rec.elapsed
         // The calendar says the meeting ended 5 minutes ago: offer to stop.
-        if settings.endReminders, let end = recordingEvent?.end, !endReminderSent, Date() > end.addingTimeInterval(300) {
-            endReminderSent = true
-            notify(title: tr("Is “%@” over?", recordingEvent?.title ?? tr("the meeting")),
-                   body: tr("MeetScribe is still recording."), category: "ENDED")
+        if let end = recordingEvent?.end, Date() > end.addingTimeInterval(300) {
+            over.signal = over.signal ?? rec.elapsed
+            if settings.endReminders, !endReminderSent {
+                endReminderSent = true
+                notify(title: tr("Is “%@” over?", recordingEvent?.title ?? tr("the meeting")),
+                       body: tr("MeetScribe is still recording."), category: "ENDED")
+            }
         }
+        checkMeetingOver(rec)
         // Smooth the meters so they don't flicker.
         micLevel = max(rec.mic?.writer.takePeak() ?? 0, micLevel * 0.6)
         systemLevel = max(rec.system?.writer.takePeak() ?? 0, systemLevel * 0.6)
@@ -942,6 +951,11 @@ final class AppModel: ObservableObject {
     }
 
     private func callStarted(app: String) {
+        if let rec = recorder, over.callEnded != nil {  // back in a call: not over after all
+            over.callEnded = nil
+            over.signal = nil
+            over.kept = rec.elapsed
+        }
         guard phase == .ready, recorder == nil else { return }
         if settings.autoRecord {
             startRecording(title: "", auto: true)
@@ -950,10 +964,77 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// The call app released the microphone for 45 s: an automatic recording stops by itself.
+    /// The call app released the microphone for 45 s: an automatic recording stops by itself; one
+    /// started by hand asks, then stops by itself too (checkMeetingOver).
     private func callEnded() {
-        guard isRecording, autoStarted else { return }
-        stopRecording()
+        guard isRecording, let rec = recorder else { return }
+        if autoStarted { return stopRecording() }
+        over.callEnded = rec.elapsed
+        over.signal = over.signal ?? rec.elapsed
+        guard settings.stopWhenOver || settings.endReminders else { return }
+        notify(title: tr("The call has ended — stop recording?"),
+               body: settings.stopWhenOver
+                   ? tr("MeetScribe stops by itself in %@ min unless you keep it going.", "\(Int(MeetingOverWatch.afterCall / 60))")
+                   : tr("MeetScribe is still recording."),
+               category: "ENDED")
+    }
+
+    /// Notices a recording that goes on after the meeting (Stop forgotten): asks, then stops by
+    /// itself and drops the quiet tail. Signals: nothing heard for a long time, the call app gone,
+    /// the calendar meeting over, a very long recording.
+    private func checkMeetingOver(_ rec: MeetingRecorder) {
+        let now = rec.elapsed
+        let heard = max(rec.lastSound, over.kept ?? 0)
+        let quiet = now - heard
+        let cut = heard + 60  // keep a minute after the last sound
+        if quiet < 60 { over.askedQuiet = false }
+        askIfOver(now: now, quiet: quiet)
+        guard settings.stopWhenOver else { return }
+        // 1. Nothing heard for 30 min: whatever else happens, the meeting is over.
+        if quiet >= MeetingOverWatch.quietStop {
+            return autoStop(tr("Nothing heard for %@ min.", "\(Int(quiet / 60))"), trimTo: cut)
+        }
+        // 2. The call ended, or the calendar meeting is over, and then it went quiet.
+        if let signal = over.signal, over.kept.map({ $0 < signal }) ?? true, quiet >= MeetingOverWatch.quietAfterSignal,
+           now - signal >= MeetingOverWatch.quietAfterSignal {
+            return autoStop(tr("The meeting is over and it's been quiet for %@ min.", "\(Int(quiet / 60))"), trimTo: cut)
+        }
+        // 3. The call ended and nobody answered "Keep recording": the notes are of that call.
+        if let ended = over.callEnded, over.kept.map({ $0 < ended }) ?? true, now - ended >= MeetingOverWatch.afterCall {
+            return autoStop(tr("The call ended %@ min ago.", "\(Int((now - ended) / 60))"),
+                            trimTo: quiet >= 60 ? cut : nil)
+        }
+    }
+
+    /// Asks before it comes to stopping: after 10 min of quiet, then every hour past 2 h.
+    private func askIfOver(now: Double, quiet: Double) {
+        guard settings.endReminders || settings.stopWhenOver else { return }
+        if quiet >= MeetingOverWatch.quietAsk, !over.askedQuiet {
+            over.askedQuiet = true
+            notify(title: tr("Is the meeting over?"),
+                   body: settings.stopWhenOver
+                       ? tr("Nothing heard for %@ min. MeetScribe stops by itself after %@ min of quiet.",
+                            "\(Int(quiet / 60))", "\(Int(MeetingOverWatch.quietStop / 60))")
+                       : tr("Nothing heard for %@ min.", "\(Int(quiet / 60))"), category: "ENDED")
+        }
+        let hours = Int(now / 3600)
+        if hours >= 2, hours > over.hoursReminded {
+            over.hoursReminded = hours
+            notify(title: tr("Still recording after %@ h", "\(hours)"),
+                   body: tr("Is the meeting still going on?"), category: "ENDED")
+        }
+    }
+
+    private func autoStop(_ why: String, trimTo: Double?) {
+        notify(title: tr("Recording stopped"), body: why + " " + tr("The notes are on their way."))
+        stopRecording(trimTo: trimTo)
+    }
+
+    /// "Keep recording" on an "Is the meeting over?" notification.
+    func keepRecording() {
+        guard let rec = recorder else { return }
+        over.kept = rec.elapsed
+        over.askedQuiet = false
     }
 
     private func offerToRecord(app: String) {
@@ -976,6 +1057,7 @@ final class AppModel: ObservableObject {
         switch id {
         case "RECORD": startRecording(title: "")
         case "STOP": stopRecording()
+        case "KEEP": keepRecording()
         case "DISCARD": stopRecording(discard: true)
         default:
             if let meeting, meeting.hasPrefix("brief:") {
@@ -1383,4 +1465,19 @@ extension ISO8601DateFormatter {
         f.timeZone = .current
         return f
     }()
+}
+
+
+/// What checkMeetingOver knows about the current recording (seconds from its start).
+struct MeetingOverWatch {
+    static let quietAsk: Double = 10 * 60          // "Is the meeting over?"
+    static let quietStop: Double = 30 * 60         // stops, whatever else happens
+    static let quietAfterSignal: Double = 5 * 60   // stops when quiet this long after the call / calendar end
+    static let afterCall: Double = 10 * 60         // stops this long after the call ended, unless kept
+
+    var signal: Double?        // the call ended or the calendar meeting is over
+    var callEnded: Double?
+    var kept: Double?          // "Keep recording" clicked
+    var askedQuiet = false
+    var hoursReminded = 0
 }

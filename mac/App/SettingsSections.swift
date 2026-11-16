@@ -206,6 +206,7 @@ struct NotificationsSection: View {
             Toggle("When notes are ready", isOn: $model.settings.notifyWhenReady)
             Toggle("When a call starts (“Record this call?”)", isOn: $model.settings.callReminders)
             Toggle("When the calendar meeting is over (“Stop recording?”)", isOn: $model.settings.endReminders)
+            Toggle("Stop by itself when the meeting is over (long quiet, call ended)", isOn: $model.settings.stopWhenOver)
             Toggle("5 min before a meeting: what's still open from last time", isOn: $model.settings.briefs)
             Toggle("The day before my to-dos are due", isOn: $model.settings.dueReminders)
             if let problem = model.notificationProblem {

@@ -56,6 +56,7 @@ struct AppSettings: Codable, Equatable {
     var useCalendar = true       // meeting title + attendees from the calendar
     var callReminders = true     // "Record this meeting?" when a call starts
     var endReminders = true      // "Is the meeting over?" when the calendar event has ended
+    var stopWhenOver = true      // stop by itself when the meeting is clearly over (long quiet, call ended)
     var notifyWhenReady = true   // "Notes ready" notification
     var emailApp = EmailApp.systemDefault
     var gmailAccount = ""        // which Google account opens (several signed in)
@@ -107,6 +108,7 @@ struct AppSettings: Codable, Equatable {
         useCalendar = try c.decodeIfPresent(Bool.self, forKey: .useCalendar) ?? d.useCalendar
         callReminders = try c.decodeIfPresent(Bool.self, forKey: .callReminders) ?? d.callReminders
         endReminders = try c.decodeIfPresent(Bool.self, forKey: .endReminders) ?? d.endReminders
+        stopWhenOver = try c.decodeIfPresent(Bool.self, forKey: .stopWhenOver) ?? d.stopWhenOver
         notifyWhenReady = try c.decodeIfPresent(Bool.self, forKey: .notifyWhenReady) ?? d.notifyWhenReady
         emailApp = (try? c.decodeIfPresent(EmailApp.self, forKey: .emailApp)) ?? d.emailApp
         gmailAccount = try c.decodeIfPresent(String.self, forKey: .gmailAccount) ?? ""
@@ -146,7 +148,7 @@ struct AppSettings: Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case myName, language, languages, notesLanguage, useCalendar, callReminders, endReminders, notifyWhenReady,
+        case myName, language, languages, notesLanguage, useCalendar, callReminders, endReminders, stopWhenOver, notifyWhenReady,
              emailApp, gmailAccount, briefs, dueReminders, autoRecord, defaultTemplate, hotkey, audioRetentionDays, llmModel, whisperModel,
              vocabulary, summaryStyle, teamsOnly, keepAudio, storage, oneDrivePath,
              customFolderPath, notesFolderPath, exportFolderPath, autoExport, notesTiming, laterModel, laterWindows,
@@ -161,6 +163,7 @@ struct AppSettings: Codable, Equatable {
         try c.encode(useCalendar, forKey: .useCalendar)
         try c.encode(callReminders, forKey: .callReminders)
         try c.encode(endReminders, forKey: .endReminders)
+        try c.encode(stopWhenOver, forKey: .stopWhenOver)
         try c.encode(notifyWhenReady, forKey: .notifyWhenReady)
         try c.encode(emailApp, forKey: .emailApp)
         try c.encode(gmailAccount, forKey: .gmailAccount)

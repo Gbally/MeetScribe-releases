@@ -12,6 +12,8 @@ enum Route: Equatable {
 struct RootView: View {
     @EnvironmentObject var model: AppModel
     @State private var route: Route = .home
+    @State private var window: NSWindow?
+    @State private var closedAt: Date?
 
     var body: some View {
         Group {
@@ -34,6 +36,21 @@ struct RootView: View {
             takePendingRoute()
         }
         .onChange(of: model.pendingRoute) { _ in takePendingRoute() }
+        .background(WindowReader { window = $0 })
+        // The menu bar window keeps its page when it closes. Reopened while recording, it shows the
+        // home page (the Stop button) — not the notes you were reading; else after a minute away.
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { n in
+            guard let w = window, n.object as? NSWindow === w else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {  // a dialog of ours also takes the focus: not closed
+                if !w.isVisible { closedAt = Date() }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { n in
+            guard let w = window, n.object as? NSWindow === w, let closed = closedAt else { return }
+            closedAt = nil
+            if model.isRecording || Date().timeIntervalSince(closed) > 60 { route = .home }
+            takePendingRoute()
+        }
         .overlay(alignment: .bottom) {
             if let toast = model.toast {
                 Text(toast).font(.caption).padding(.horizontal, 12).padding(.vertical, 8)
@@ -41,6 +58,19 @@ struct RootView: View {
             }
         }
     }
+}
+
+/// The NSWindow a SwiftUI view is in (the menu bar window), once it has one.
+struct WindowReader: NSViewRepresentable {
+    let found: (NSWindow) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { if let w = view.window { found(w) } }
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {}
 }
 
 extension RootView {

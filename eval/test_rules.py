@@ -411,6 +411,20 @@ def test_crumb_speakers():
     assert who[240] == who[0] and len({who[0], who[120], who[243], who[246]}) == 4, who
 
 
+
+def test_overlap_crumbs():
+    """Two people talking at once come out as a third "speaker" of a few seconds: it goes. Someone
+    who says a few words alone (hello), or a person who often talks over others, stays."""
+    from meetscribe.diarize import Turn, drop_overlap_crumbs, overlaps
+    turns = [Turn(0, 60, 0), Turn(55, 120, 1),           # 0 and 1 overlap 5 s
+             Turn(56, 59, 2), Turn(100, 102, 2),         # 2: 5 s, all over 0 or 1
+             Turn(130, 134, 3),                          # 3: 4 s alone ("hello")
+             Turn(140, 200, 4), Turn(150, 160, 0)]       # 4 talks a lot, 0 over it
+    assert overlaps(turns)[0] == (55, 60)
+    left = {t.speaker for t in drop_overlap_crumbs(turns)}
+    assert left == {0, 1, 3, 4}, left
+    assert drop_overlap_crumbs([Turn(0, 5, 0), Turn(0, 5, 1)]) == [Turn(0, 5, 0), Turn(0, 5, 1)]  # not everyone
+
 def test_whisper_stall():
     """Whisper that stops moving ends the job with a message instead of running forever."""
     import subprocess

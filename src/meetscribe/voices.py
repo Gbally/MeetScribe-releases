@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 
 from .config import HOME
-from .diarize import EMBEDDING_MODEL, Turn
+from .diarize import EMBEDDING_MODEL, Turn, clean, overlaps
 
 VOICES_FILE = HOME / "voices.json"
 MATCH_THRESHOLD = 0.70    # cosine similarity needed to recognise a known voice
@@ -45,16 +45,23 @@ def embed(audio: np.ndarray) -> np.ndarray:
 
 
 def speaker_prints(audio: np.ndarray, turns: list[Turn], max_seconds: float = 60) -> dict[int, np.ndarray]:
-    """One voiceprint per diarized speaker, from up to a minute of their clearest turns."""
+    """One voiceprint per diarized speaker, from up to a minute of their clearest turns: without
+    the moments someone else talks too (a print of two voices matches neither), unless that leaves
+    too little."""
+    both = overlaps(turns)
     prints = {}
     for spk in sorted({t.speaker for t in turns}):
-        mine = sorted((t for t in turns if t.speaker == spk), key=lambda t: t.end - t.start, reverse=True)
+        mine = [t for t in turns if t.speaker == spk]
+        alone = [p for t in mine for p in clean(t, both)]
+        if sum(b - a for a, b in alone) < 2:
+            alone = [(t.start, t.end) for t in mine]
         chunks, total = [], 0.0
-        for t in mine:
-            if t.end - t.start < 1.0 and total > 3:
+        for a, b in sorted(alone, key=lambda p: p[1] - p[0], reverse=True):
+            if b - a < 1.0 and total > 3:
                 continue
-            chunks.append(audio[int(t.start * SR): int(t.end * SR)])
-            total += t.end - t.start
+            b = min(b, a + max_seconds - total)  # one long turn alone: the speaker model takes ~2 min at most
+            chunks.append(audio[int(a * SR): int(b * SR)])
+            total += b - a
             if total >= max_seconds:
                 break
         if total >= 2:  # too little speech gives an unreliable print

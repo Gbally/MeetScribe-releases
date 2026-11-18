@@ -24,9 +24,17 @@ def make_clips(session: Path, utterances, audio_by_track: dict[str, np.ndarray])
     for u in utterances:
         by_speaker.setdefault(u.speaker, []).append(u)
 
+    def talked_over(u) -> float:
+        """How much of it someone else says something at the same time (any track)."""
+        over = sum(max(0.0, min(u.end, o.end) - max(u.start, o.start)) for o in utterances if o.speaker != u.speaker)
+        return over / max(u.end - u.start, 0.1)
+
     for speaker, utts in by_speaker.items():
-        # The longest clear sentences, kept in chronological order.
+        # The longest clear sentences, kept in chronological order; not ones with another voice
+        # over them (you couldn't tell who to name), unless there are no others.
         good = [u for u in utts if u.end - u.start >= 1.5 and len(u.text.split()) >= 4]
+        alone = [u for u in good if talked_over(u) < 0.2]
+        good = alone or good
         good.sort(key=lambda u: min(u.end - u.start, MAX_CLIP), reverse=True)
         picked = sorted(good[:PER_SPEAKER], key=lambda u: u.start)
         for u in picked:

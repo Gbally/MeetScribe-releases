@@ -57,6 +57,54 @@ CRUMB = 10.0  # seconds of speech: too little for a reliable voiceprint
 MAIN_VOICE = 30.0
 
 
+def overlaps(turns: list[Turn]) -> list[tuple[float, float]]:
+    """The stretches where two speakers or more talk at once."""
+    events = sorted([(t.start, 1) for t in turns] + [(t.end, -1) for t in turns])
+    out, n, since = [], 0, None
+    for x, d in events:
+        n += d
+        if n >= 2 and since is None:
+            since = x
+        elif n < 2 and since is not None:
+            if x > since:
+                out.append((since, x))
+            since = None
+    return out
+
+
+def clean(t: Turn, both: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """The parts of a turn where nobody else talks."""
+    parts, s = [], t.start
+    for a, b in both:
+        if b <= s or a >= t.end:
+            continue
+        if a > s:
+            parts.append((s, a))
+        s = max(s, b)
+    if s < t.end:
+        parts.append((s, t.end))
+    return parts
+
+
+def drop_overlap_crumbs(turns: list[Turn]) -> list[Turn]:
+    """Two people talking at once often come out as a third "speaker": a few seconds of mixed
+    voices (in a 53-min call, 4 of 14 speakers had 3–4 s, 54–93 % of it over someone else). Not a
+    person: the app would ask who it is, and nobody could tell from its clips. Such a speaker's
+    turns go, and its words go to whoever was talking then."""
+    both = overlaps(turns)
+    if not both:
+        return turns
+    said: dict[int, float] = {}
+    alone: dict[int, float] = {}
+    for t in turns:
+        said[t.speaker] = said.get(t.speaker, 0.0) + t.end - t.start
+        alone[t.speaker] = alone.get(t.speaker, 0.0) + sum(b - a for a, b in clean(t, both))
+    mixed = {s for s in said if said[s] < CRUMB and alone[s] < 0.5 * said[s]}
+    if not mixed or len(mixed) == len(said):
+        return turns
+    return [t for t in turns if t.speaker not in mixed]
+
+
 def consolidate(turns: list[Turn], prints: dict, max_speakers: int = 0, same: float = 0.7) -> list[Turn]:
     """Clean up over-split diarization: one person often comes out as several "speakers" (a
     change of tone, a noisy stretch, VoIP compression). Speakers whose voiceprints match
@@ -138,5 +186,6 @@ def speakers(audio: np.ndarray, n: int, threshold: float, cap: int = 0) -> tuple
     turns = [Turn(*original(t.start, t.end), t.speaker) for t in diarize(short, n, threshold)]
     turns = [t for t in turns if t.end > t.start]
     if n <= 0 and len({t.speaker for t in turns}) > 1:
+        turns = drop_overlap_crumbs(turns)
         turns = consolidate(turns, speaker_prints(audio, turns), max_speakers=cap)
     return turns, speaker_prints(audio, turns)

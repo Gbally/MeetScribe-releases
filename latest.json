@@ -1,7 +1,7 @@
 {
- "version": "0.6.5",
- "build": 123,
- "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.6.5/MeetScribe-0.6.5.dmg",
- "sha256": "56f8520699f8492bf2498297b64d00f17d2b479b70024ff23b2fdb0a8870eeb9",
- "notes": "Stops by itself when a meeting is over: asks after 10 min of quiet or when the call ends, stops after 30 min of quiet, and cuts the silent end."
+ "version": "0.6.6",
+ "build": 126,
+ "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.6.6/MeetScribe-0.6.6.dmg",
+ "sha256": "8764ca9d828ebe7622792ee1e3bede2729bc17f1bcc57a6a65b38700725a17b9",
+ "notes": "Overlapping voices no longer become extra speakers to name; reopening the menu while recording shows the Stop button."
 }

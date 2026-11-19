@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-10-24",
+  "updated": "2026-11-19",
   "notes": [
     {
       "id": "qwen3-4b",
@@ -40,6 +40,46 @@
         "pt": "As melhores notas em um Mac de 8 GB: tarefas, datas e resumos mais precisos.",
         "ja": "8 GB の Mac で最良のメモ：タスク・日付・要約がより正確。",
         "zh-Hans": "8 GB Mac 上最好的笔记：待办、日期和摘要更准确。"
+      }
+    },
+    {
+      "id": "qwen3.5-4b-mixed",
+      "repo": "mlx-community/Qwen3.5-4B-mixed_4_6",
+      "name": "Qwen3.5 4B (4/6-bit)",
+      "size_gb": 3.3,
+      "min_ram_gb": 8,
+      "recommended_ram_gb": 8,
+      "quality": 3,
+      "speed": 2,
+      "license": "Apache-2.0",
+      "tested": "2026-11-19",
+      "description": "Finds about 20 % more to-dos than Qwen3.5 4B, but also proposes more that aren't; notes take about 25 % longer.",
+      "descriptions": {
+        "fr": "Trouve environ 20 % de tâches en plus que Qwen3.5 4B, mais en propose aussi davantage qui n'en sont pas ; les notes prennent environ 25 % de temps en plus.",
+        "es": "Encuentra alrededor de un 20 % más de tareas que Qwen3.5 4B, pero también propone más que no lo son; las notas tardan alrededor de un 25 % más.",
+        "pt": "Encontra cerca de 20 % mais tarefas que o Qwen3.5 4B, mas também propõe mais que não são; as notas levam cerca de 25 % mais tempo.",
+        "ja": "Qwen3.5 4B より約 20 % 多くタスクを見つけますが、タスクでないものも多めに挙げます。メモの作成は約 25 % 長くかかります。",
+        "zh-Hans": "比 Qwen3.5 4B 多找到约 20% 的待办，但也会多列出一些并非待办的内容；生成笔记的时间约长 25%。"
+      }
+    },
+    {
+      "id": "qwen3.5-4b-6bit",
+      "repo": "mlx-community/Qwen3.5-4B-6bit",
+      "name": "Qwen3.5 4B (6-bit)",
+      "size_gb": 4.1,
+      "min_ram_gb": 8,
+      "recommended_ram_gb": 16,
+      "quality": 3,
+      "speed": 2,
+      "license": "Apache-2.0",
+      "tested": "2026-11-19",
+      "description": "Finds about 40 % more to-dos than Qwen3.5 4B, but also proposes many more that aren't; notes take about 55 % longer (more on 8 GB Macs).",
+      "descriptions": {
+        "fr": "Trouve environ 40 % de tâches en plus que Qwen3.5 4B, mais en propose aussi beaucoup plus qui n'en sont pas ; les notes prennent environ 55 % de temps en plus (davantage sur un Mac 8 Go).",
+        "es": "Encuentra alrededor de un 40 % más de tareas que Qwen3.5 4B, pero también propone muchas más que no lo son; las notas tardan alrededor de un 55 % más (más aún en un Mac de 8 GB).",
+        "pt": "Encontra cerca de 40 % mais tarefas que o Qwen3.5 4B, mas também propõe muitas mais que não são; as notas levam cerca de 55 % mais tempo (mais em Macs de 8 GB).",
+        "ja": "Qwen3.5 4B より約 40 % 多くタスクを見つけますが、タスクでないものもかなり多く挙げます。メモの作成は約 55 % 長くかかります（8 GB の Mac ではさらに長く）。",
+        "zh-Hans": "比 Qwen3.5 4B 多找到约 40% 的待办，但也会多列出不少并非待办的内容；生成笔记的时间约长 55%（8 GB Mac 上更久）。"
       }
     },
     {

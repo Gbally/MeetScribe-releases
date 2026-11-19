@@ -15,28 +15,47 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1] / "src"))
 sys.path.insert(0, str(HERE))
 
-from judge_data import prompt  # noqa: E402
+from judge_data import PROMPT, prompt  # noqa: E402
 from meetscribe.summarize import SYSTEM  # noqa: E402
 from meetscribe.transcript import load_json, to_plain  # noqa: E402
 
 
 class Judge:
-    def __init__(self, adapter: Path | None = None, model: str = "mlx-community/Qwen3.5-4B-4bit"):
+    """version 2: the instructions come first and are read once (cached), then for each to-do only its
+    lines and itself. version 1: judge-r16 / judge-r16s's question."""
+
+    def __init__(self, adapter: Path | None = None, model: str = "mlx-community/Qwen3.5-4B-4bit", version: int = 2):
         from mlx_lm import load
 
         self.model, self.tok = load(model, adapter_path=str(adapter) if adapter else None)
+        self.version, self._prefix = version, None
         first = lambda w: self.tok.encode(w, add_special_tokens=False)[0]  # noqa: E731
         self.yes = [first(w) for w in ("yes", "Yes", " yes", " Yes")]
         self.no = [first(w) for w in ("no", "No", " no", " No")]
 
     def score(self, lines: list[str], todo: dict) -> float:
         """log P(yes) − log P(no) for the answer's first token."""
+        import copy
+
         import mlx.core as mx
+        from mlx_lm.models.cache import make_prompt_cache
 
         text = self.tok.apply_chat_template([{"role": "system", "content": SYSTEM},
-                                             {"role": "user", "content": prompt(lines, todo)}],
+                                             {"role": "user", "content": prompt(lines, todo, self.version)}],
                                             add_generation_prompt=True, tokenize=False, enable_thinking=False)
-        logits = self.model(mx.array(self.tok.encode(text, add_special_tokens=False))[None])[0, -1]
+        ids = self.tok.encode(text, add_special_tokens=False)
+        done, state = 0, None
+        if self.version == 2:
+            if self._prefix is None:  # the instructions, the same for every to-do: read once
+                head = self.tok.encode(text[:text.index(PROMPT) + len(PROMPT)], add_special_tokens=False)
+                cache = make_prompt_cache(self.model)
+                self.model(mx.array(head)[None], cache=cache)
+                mx.eval([c.state for c in cache])
+                self._prefix = (head, cache)
+            head, cache = self._prefix
+            if ids[:len(head)] == head:
+                done, state = len(head), copy.deepcopy(cache)
+        logits = self.model(mx.array(ids[done:])[None], cache=state)[0, -1]
         s = mx.logsumexp(logits[mx.array(self.yes)]).item() - mx.logsumexp(logits[mx.array(self.no)]).item()
         mx.clear_cache()
         return round(s, 3)
@@ -63,7 +82,8 @@ if __name__ == "__main__":
     ap.add_argument("out", type=Path)
     ap.add_argument("runs", nargs="+", type=Path)
     ap.add_argument("--adapter", type=Path)
+    ap.add_argument("--version", type=int, default=2, help="the question's format: 1 for judge-r16 and judge-r16s")
     a = ap.parse_args()
     jobs = [(f"ami/{f.stem}", HERE / "data" / "sessions" / f.stem.rsplit("-", 1)[0] / "transcript.json", json.loads(f.read_text()))
             for run in a.runs for f in sorted(run.glob("*.json"))]
-    run_todos(a.out, jobs, Judge(a.adapter))
+    run_todos(a.out, jobs, Judge(a.adapter, version=a.version))

@@ -34,7 +34,24 @@ from score import annotated, content, matches  # noqa: E402
 from train_data import dialogue_acts, links  # noqa: E402
 from convert import section, utterances  # noqa: E402
 
-PROMPT = """Lines from a meeting transcript:
+# Version 2 (2026-11-19): the instructions first, the same for every to-do, so a meeting's
+# questions share their reading (judge.py caches it): only the few lines and the to-do are read
+# for each one. And 3 lines before + 1 after, cut at 220 characters: on the owner's work meetings
+# this kept as many real to-dos as 5 + 2 lines at 400, for ~40 % fewer tokens.
+PROMPT = """Below is a to-do noted from a meeting transcript, with the line it was noted from (marked >>) and the lines just before and after it.
+
+A real to-do is something that person takes on, or is given, to do AFTER the meeting. It is NOT one if it is an idea or a suggestion still being discussed, something done during the meeting itself (presenting, showing, discussing, drawing), something already done, an opinion, or something that only might happen.
+Is it a real to-do? Answer yes or no.
+
+Lines:
+"""
+QUESTION = """{ctx}
+
+To-do: {owner}: {task}"""
+BEFORE, AFTER, WIDTH = 3, 1, 220  # context lines around the to-do's line; characters kept of the others
+
+# Version 1 (judge-r16, judge-r16s): the lines first, then the to-do and the instructions.
+PROMPT_V1 = """Lines from a meeting transcript:
 {ctx}
 
 From the line marked >>, this to-do was noted:
@@ -42,17 +59,21 @@ From the line marked >>, this to-do was noted:
 
 A real to-do is something that person takes on, or is given, to do AFTER the meeting. It is NOT one if it is an idea or a suggestion still being discussed, something done during the meeting itself (presenting, showing, discussing, drawing), something already done, an opinion, or something that only might happen.
 Is it a real to-do? Answer yes or no."""
-BEFORE, AFTER = 5, 2  # context lines around the to-do's line
 
 
-def context(lines: list[str], n: int | None, quote: str) -> str:
+def context(lines: list[str], n: int | None, quote: str, before: int = BEFORE, after: int = AFTER, width: int = WIDTH) -> str:
     if n is None or not 0 <= n < len(lines):
         return ">> " + quote
-    return "\n".join(("   ", ">> ")[k == n] + lines[k][:400] for k in range(max(0, n - BEFORE), min(len(lines), n + AFTER + 1)))
+    return "\n".join(("   ", ">> ")[k == n] + lines[k][:400 if k == n else width]
+                     for k in range(max(0, n - before), min(len(lines), n + after + 1)))
 
 
-def prompt(lines: list[str], todo: dict) -> str:
-    return PROMPT.format(ctx=context(lines, todo.get("line"), todo.get("quote", "")), owner=todo["owner"], task=todo["task"])
+def prompt(lines: list[str], todo: dict, version: int = 2) -> str:
+    if version == 1:
+        return PROMPT_V1.format(ctx=context(lines, todo.get("line"), todo.get("quote", ""), 5, 2, 400),
+                                owner=todo["owner"], task=todo["task"])
+    return PROMPT + QUESTION.format(ctx=context(lines, todo.get("line"), todo.get("quote", "")),
+                                    owner=todo["owner"], task=todo["task"])
 
 
 def action_lines(mid: str) -> dict[int, set[str]]:
@@ -110,7 +131,7 @@ if __name__ == "__main__":
                 report["yes by line only"] += yes and not by_words
                 p = prompt(lines, todo)
                 if rng.random() < 0.05:
-                    report["examples"]["yes" if yes else "no"].append(p.split("\n\nA real to-do")[0])
+                    report["examples"]["yes" if yes else "no"].append(p[len(PROMPT):])
                 (va if mid in valid else tr).write(json.dumps({"meeting": mid, "messages": [
                     {"role": "system", "content": S.SYSTEM}, {"role": "user", "content": p},
                     {"role": "assistant", "content": "yes" if yes else "no"}]}, ensure_ascii=False) + "\n")

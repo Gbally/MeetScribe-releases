@@ -77,6 +77,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--cands", default="judge-cands", help="a run.py --set train run")
     ap.add_argument("--valid", type=float, default=0.1)
+    ap.add_argument("--synth", type=int, default=3, help="the invented work-call examples (judge_synth.py), this many times")
     a = ap.parse_args()
     split = json.loads((DATA / "split.json").read_text())
     held = set(split["dev"] + split["test"])
@@ -113,6 +114,15 @@ if __name__ == "__main__":
                 (va if mid in valid else tr).write(json.dumps({"meeting": mid, "messages": [
                     {"role": "system", "content": S.SYSTEM}, {"role": "user", "content": p},
                     {"role": "assistant", "content": "yes" if yes else "no"}]}, ensure_ascii=False) + "\n")
+        from judge_synth import examples as synth  # what AMI lacks: sharing / inviting after the call, other languages
+
+        for lines, todo, answer in synth():
+            ex = {"meeting": "synth", "messages": [{"role": "system", "content": S.SYSTEM},
+                                                   {"role": "user", "content": prompt(lines, todo)},
+                                                   {"role": "assistant", "content": answer}]}
+            for _ in range(a.synth):
+                tr.write(json.dumps(ex, ensure_ascii=False) + "\n")
+            report["synth " + answer] = report.get("synth " + answer, 0) + a.synth
     (out / "report.json").write_text(json.dumps(report, indent=1, ensure_ascii=False), encoding="utf-8")
     print(f"{len(mids)} meetings ({len(valid)} for validation) → {out}")
     print({k: v for k, v in report.items() if k != "examples"})

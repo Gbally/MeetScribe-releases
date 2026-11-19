@@ -1,4 +1,4 @@
-"""Audio loading: any format macOS can decode → 16 kHz mono float32."""
+"""Audio loading: any common format → 16 kHz mono float32."""
 
 import subprocess
 import tempfile
@@ -11,7 +11,17 @@ SAMPLE_RATE = 16_000
 
 
 def load_audio(path: Path) -> np.ndarray:
-    """Decode with macOS's built-in `afconvert` (wav, caf, m4a, mp3, aac, …)."""
+    """Decode with macOS's built-in `afconvert` (wav, caf, m4a, mp3, aac, …); elsewhere with
+    faster-whisper's decoder (FFmpeg's, through PyAV: the same formats and video files)."""
+    from .hardware import IS_MAC
+
+    if not IS_MAC:
+        from faster_whisper import decode_audio
+
+        try:
+            return np.ascontiguousarray(decode_audio(str(path), sampling_rate=SAMPLE_RATE), dtype=np.float32)
+        except Exception as e:
+            raise SystemExit(f"Could not decode {path.name}: {e}") from e
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "audio.wav"
         result = subprocess.run(

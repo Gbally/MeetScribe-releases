@@ -94,6 +94,11 @@ class _WhisperBar:
 def hook_whisper() -> None:
     import importlib
 
+    from .hardware import IS_MAC
+
+    if not IS_MAC:  # faster-whisper: transcribe.py drives the bar itself
+        return
+
     # Not `import mlx_whisper.transcribe`: the package's `transcribe` attribute is the function.
     t = importlib.import_module("mlx_whisper.transcribe")
 

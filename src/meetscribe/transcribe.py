@@ -99,7 +99,21 @@ def _transcribe_all(audio: np.ndarray, model: str, language: str, vocabulary: st
     return words, max(totals, key=totals.get)
 
 
+def _keep(text: str, start: float, end: float, no_speech: float, logprob: float, prompt: str | None) -> bool:
+    """A segment worth keeping: not one of Whisper's stock phrases over silence, nor its prompt."""
+    text = text.strip().lower()
+    if text in HALLUCINATIONS and end - start < 4:
+        return False
+    if no_speech > 0.8 and logprob < -0.7:
+        return False
+    return not (prompt and text.startswith("vocabulary:"))  # Whisper repeating its prompt over silence
+
+
 def _transcribe(audio, model, language, vocabulary) -> tuple[list[Word], str]:
+    from .hardware import IS_MAC
+
+    if not IS_MAC:
+        return _transcribe_faster(audio, model, language, vocabulary)
     import importlib
 
     import mlx_whisper
@@ -133,17 +147,61 @@ def _transcribe(audio, model, language, vocabulary) -> tuple[list[Word], str]:
     lang = result.get("language") or language or ""
     words: list[Word] = []
     for seg in result["segments"]:
-        text = seg["text"].strip().lower()
-        if text in HALLUCINATIONS and seg["end"] - seg["start"] < 4:
-            continue
-        if seg.get("no_speech_prob", 0) > 0.8 and seg.get("avg_logprob", 0) < -0.7:
-            continue
-        if prompt and text.startswith("vocabulary:"):  # Whisper repeating its prompt over silence
+        if not _keep(seg["text"], seg["start"], seg["end"], seg.get("no_speech_prob", 0), seg.get("avg_logprob", 0), prompt):
             continue
         for w in seg.get("words", []):
             if prompt and re.fullmatch(r"\s*vocabulary[,:.]", w["word"].lower()):
                 continue  # the prompt's first word leaking into speech: "Vocabulary, I'm lucky as well"
             words.append(Word(float(w["start"]), float(w["end"]), w["word"], lang))
+    return words, lang
+
+
+_faster = {}  # faster-whisper models, loaded once: name → WhisperModel
+
+
+def faster_model(name: str):
+    """A faster-whisper model on the GPU when there is a usable NVIDIA one, else on the CPU."""
+    if name not in _faster:
+        from faster_whisper import WhisperModel
+
+        from .hardware import device
+
+        where, compute = device().whisper
+        _faster[name] = WhisperModel(name, device=where, compute_type=compute)
+    return _faster[name]
+
+
+def free_faster() -> None:
+    """Release the faster-whisper models (their GPU memory) before the notes model loads."""
+    _faster.clear()
+    import gc
+
+    gc.collect()
+
+
+def _transcribe_faster(audio, model, language, vocabulary) -> tuple[list[Word], str]:
+    """faster-whisper (CTranslate2), with the settings of the MLX path: words timed, no text carried
+    from window to window, the vocabulary given to every window (its "hotwords"), the same filters."""
+    from . import progress
+
+    prompt = f"Vocabulary: {vocabulary}." if vocabulary else None
+    segments, info = faster_model(model).transcribe(
+        audio, language=language or None, word_timestamps=True, condition_on_previous_text=False,
+        hallucination_silence_threshold=2.0, hotwords=prompt, vad_filter=False)
+    lang = info.language or language or ""
+    words: list[Word] = []
+    bar = progress._WhisperBar(total=max(info.duration, 1.0))
+    with bar:
+        done = 0.0
+        for seg in segments:  # a generator: the transcription runs as it is read
+            bar.update(max(0.0, seg.end - done))
+            done = max(done, seg.end)
+            if not _keep(seg.text, seg.start, seg.end, seg.no_speech_prob, seg.avg_logprob, prompt):
+                continue
+            for w in seg.words or []:
+                if prompt and re.fullmatch(r"\s*vocabulary[,:.]", w.word.lower()):
+                    continue
+                words.append(Word(float(w.start), float(w.end), w.word, lang))
     return words, lang
 
 
@@ -195,11 +253,31 @@ def _language_id_model(fallback: str):
     return _language_id
 
 
-def language_runs(audio: np.ndarray, model_path: str, allowed: list[str]) -> list[tuple[str, float, float]]:
-    """Split the audio into stretches of one language: [(lang, start, end)]."""
+def _language_probs(model_path: str):
+    """A function: a clip → {language: probability}, with the small detection model."""
+    from .hardware import IS_MAC
+
+    if not IS_MAC:
+        small = faster_model("base")  # ~20× faster than the big one, as reliable between the allowed languages
+
+        def probs(clip):
+            _, _, ranked = small.detect_language(clip)
+            return dict(ranked)
+        return probs
     import mlx.core as mx
     from mlx_whisper.audio import N_FRAMES, N_SAMPLES, log_mel_spectrogram, pad_or_trim
     model = _language_id_model(model_path)
+
+    def probs(clip):
+        mel = log_mel_spectrogram(clip, n_mels=model.dims.n_mels, padding=N_SAMPLES)
+        _, p = model.detect_language(pad_or_trim(mel, N_FRAMES, axis=-2).astype(mx.float16))
+        return p
+    return probs
+
+
+def language_runs(audio: np.ndarray, model_path: str, allowed: list[str]) -> list[tuple[str, float, float]]:
+    """Split the audio into stretches of one language: [(lang, start, end)]."""
+    detect = _language_probs(model_path)
 
     # Group speech into windows of ~4–20 s (short bits are too short to identify reliably).
     windows: list[list[float]] = []
@@ -219,8 +297,7 @@ def language_runs(audio: np.ndarray, model_path: str, allowed: list[str]) -> lis
     for k, (s, e) in enumerate(windows):
         progress.update(0.1 * k / max(len(windows), 1))
         clip = audio[int(s * SR): int(e * SR)]
-        mel = log_mel_spectrogram(clip, n_mels=model.dims.n_mels, padding=N_SAMPLES)
-        _, probs = model.detect_language(pad_or_trim(mel, N_FRAMES, axis=-2).astype(mx.float16))
+        probs = detect(clip)
         scores = {l: float(probs.get(l, 0)) for l in allowed}
         total = sum(scores.values()) or 1
         lang = max(scores, key=scores.get)

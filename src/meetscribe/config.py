@@ -5,6 +5,8 @@ import tomllib
 from dataclasses import dataclass, fields
 from pathlib import Path
 
+from .hardware import IS_MAC
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # Data dir: the project folder when run from source, ~/Library/Application Support/MeetScribe
 # when run by the menu bar app (which sets MEETSCRIBE_HOME).
@@ -22,8 +24,9 @@ class Config:
     # Only capture audio from this app (e.g. "Microsoft Teams"); empty = all system audio.
     app: str = ""
 
-    # Speech-to-text (any MLX Whisper repo on Hugging Face).
-    whisper_model: str = "mlx-community/whisper-large-v3-turbo"
+    # Speech-to-text: an MLX Whisper repo on a Mac; elsewhere a faster-whisper model (a name it
+    # knows, like "large-v3-turbo", or a CTranslate2 repo on Hugging Face).
+    whisper_model: str = "mlx-community/whisper-large-v3-turbo" if IS_MAC else "large-v3-turbo"
     # "" = auto-detect (one language per track); "en" = English only; "en,fr" = the meeting
     # may switch between these languages (detected every few seconds).
     language: str = ""
@@ -35,9 +38,12 @@ class Config:
     # back afterwards (matching voiceprints, the calendar's head count).
     diarization_threshold: float = 0.6
 
-    # Summary. backend = "mlx" (in-process, default) or "openai" (Ollama / LM Studio server).
-    llm_backend: str = "mlx"
-    llm_model: str = "mlx-community/Qwen3-8B-4bit"
+    # Summary. backend = "mlx" (in-process, the Mac's), "llama" (llama.cpp's server, started by the
+    # engine: other PCs; llm_model is then a GGUF "repo:quant") or "openai" (Ollama / LM Studio).
+    llm_backend: str = "mlx" if IS_MAC else "llama"
+    llm_model: str = "mlx-community/Qwen3-8B-4bit" if IS_MAC else "unsloth/Qwen3.5-4B-GGUF:Q4_K_M"
+    # For llm_backend = "llama": llama-server(.exe); "" = models/llama.cpp/ or on the PATH.
+    llama_server: str = ""
     # For llm_backend = "openai": Ollama = http://localhost:11434/v1, LM Studio = http://localhost:1234/v1
     llm_url: str = "http://localhost:11434/v1"
     # Language of the notes: "auto" = the meeting's main language, or e.g. "English".

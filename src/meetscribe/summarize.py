@@ -138,6 +138,10 @@ class LLM:
         if self.cfg.llm_backend == "mlx":
             self._load()
             return len(self._tokenizer.encode(text))
+        if self.cfg.llm_backend == "llama":
+            from .llama_server import server
+
+            return server(self.cfg).count_tokens(text)  # exact: the transcript is cut as on the Mac
         return len(text) // 4  # rough estimate for remote servers
 
     def _load(self):
@@ -221,6 +225,11 @@ class LLM:
                 import mlx.core as mx
 
                 mx.clear_cache()  # give the GPU memory of this answer back before the next pass
+        elif self.cfg.llm_backend == "llama":
+            from .llama_server import server
+
+            out = server(self.cfg).chat(messages, max_tokens, TEMPERATURE if temperature is None else temperature,
+                                        prose, on_token)
         elif self.cfg.llm_backend == "openai":
             req = urllib.request.Request(
                 self.cfg.llm_url.rstrip("/") + "/chat/completions",
@@ -232,7 +241,7 @@ class LLM:
             with urllib.request.urlopen(req, timeout=1800) as r:
                 out = json.load(r)["choices"][0]["message"]["content"]
         else:
-            raise SystemExit(f"Unknown llm_backend '{self.cfg.llm_backend}' (use 'mlx' or 'openai')")
+            raise SystemExit(f"Unknown llm_backend '{self.cfg.llm_backend}' (use 'mlx', 'llama' or 'openai')")
         return re.sub(r"<think>.*?</think>", "", out, flags=re.S).strip()
 
 

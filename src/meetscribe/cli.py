@@ -270,6 +270,12 @@ def started_at(session: Path) -> datetime:
 
 def free_whisper():
     """Release Whisper's GPU memory before loading the LLM (matters on 16 GB Macs)."""
+    from .hardware import IS_MAC
+
+    if not IS_MAC:
+        from .transcribe import free_faster
+
+        return free_faster()
     try:
         import mlx.core as mx
         from mlx_whisper.transcribe import ModelHolder
@@ -345,7 +351,14 @@ def notes_language(cfg: Config, spoken: str) -> str:
     """The notes' language: fixed in settings, or ("auto") the meeting's main language."""
     if cfg.summary_language.lower() != "auto":
         return cfg.summary_language
-    from mlx_whisper.tokenizer import LANGUAGES
+    try:
+        from mlx_whisper.tokenizer import LANGUAGES
+    except ImportError:  # not a Mac: the languages people hold meetings in most
+        LANGUAGES = {"en": "english", "fr": "french", "es": "spanish", "de": "german", "pt": "portuguese",
+                     "it": "italian", "nl": "dutch", "pl": "polish", "sv": "swedish", "da": "danish", "no": "norwegian",
+                     "fi": "finnish", "cs": "czech", "ro": "romanian", "hu": "hungarian", "el": "greek", "tr": "turkish",
+                     "ru": "russian", "uk": "ukrainian", "ar": "arabic", "he": "hebrew", "hi": "hindi", "ja": "japanese",
+                     "ko": "korean", "zh": "chinese", "vi": "vietnamese", "th": "thai", "id": "indonesian", "ms": "malay"}
 
     return LANGUAGES.get(spoken, "english").title()
 

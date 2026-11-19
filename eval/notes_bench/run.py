@@ -9,7 +9,11 @@ OUT keeps the audio (made once), the transcripts and every set of notes; run aga
 rounds or models and only what's missing is done. The report is printed at the end and written
 to OUT/report.json (python eval/notes_bench/report.py OUT prints it again). The models must be
 downloaded already (Settings → AI models). Your own settings and voice library aren't used:
-each model gets its own MeetScribe home in OUT/homes."""
+each model gets its own MeetScribe home in OUT/homes.
+
+On a PC (Windows): the engine's models are those of MEETSCRIBE_HOME (see WINDOWS.md), the notes model
+a GGUF (--model unsloth/Qwen3.5-4B-GGUF:Q4_K_M), and the audio made on a Mac (--audio DIR: one
+folder per meeting with mic.caf, system.caf, meeting.json), since it takes the macOS voices."""
 
 import argparse
 import json
@@ -24,13 +28,14 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 from scenarios import SCENARIOS  # noqa: E402
 
-SUPPORT = Path.home() / "Library/Application Support/MeetScribe"
+MAC = sys.platform == "darwin"
+SUPPORT = Path.home() / "Library/Application Support/MeetScribe" if MAC else Path(os.environ["MEETSCRIBE_HOME"])
 
 
 def arm_name(repo: str) -> str:
-    """mlx-community/Qwen3.5-4B-4bit → qwen3.5-4b"""
-    name = repo.split("/")[-1].lower()
-    for tail in ("-4bit", "-8bit", "-mlx", "-instruct-2507"):
+    """mlx-community/Qwen3.5-4B-4bit → qwen3.5-4b; unsloth/Qwen3.5-4B-GGUF:Q4_K_M → qwen3.5-4b-q4_k_m"""
+    name = repo.split("/")[-1].lower().replace(":", "-")
+    for tail in ("-4bit", "-8bit", "-mlx", "-instruct-2507", "-gguf"):
         name = name.replace(tail, "")
     return name
 
@@ -39,11 +44,15 @@ def home_for(out: Path, repo: str, languages: str = "en,fr") -> Path:
     home = out / "homes" / arm_name(repo)
     home.mkdir(parents=True, exist_ok=True)
     (home / "config.toml").write_text(
-        f'notes_dir = "{out / "notes"}"\nme = "Guillaume"\nlanguage = "{languages}"\nsummary_language = "auto"\n'
+        f'notes_dir = "{(out / "notes").as_posix()}"\nme = "Guillaume"\nlanguage = "{languages}"\nsummary_language = "auto"\n'
         f'summary_style = "standard"\ntemplate = "general"\nllm_model = "{repo}"\n'
-        f'whisper_model = "mlx-community/whisper-large-v3-turbo"\n')
+        f'whisper_model = "{"mlx-community/whisper-large-v3-turbo" if MAC else "large-v3-turbo"}"\n')
     if not (home / "models").exists():
-        (home / "models").symlink_to(SUPPORT / "models")
+        if MAC:
+            (home / "models").symlink_to(SUPPORT / "models")
+        else:  # a junction: a symlink needs admin rights on Windows
+            import _winapi
+            _winapi.CreateJunction(str(SUPPORT / "models"), str(home / "models"))
     return home
 
 
@@ -51,7 +60,7 @@ def run_engine(home: Path, log: Path, *args) -> tuple[int, float]:
     env = dict(os.environ, MEETSCRIBE_HOME=str(home), PYTHONPATH=str(ROOT / "src"), PYTHONUNBUFFERED="1",
                HF_HUB_DISABLE_PROGRESS_BARS="1", TOKENIZERS_PARALLELISM="false")
     t0 = time.time()
-    with open(log, "w") as f:
+    with open(log, "w", encoding="utf-8") as f:
         code = subprocess.run([sys.executable, "-m", "meetscribe", *args], cwd=ROOT, env=env, stdout=f, stderr=subprocess.STDOUT).returncode
     return code, time.time() - t0
 
@@ -64,6 +73,7 @@ def main():
     ap.add_argument("--meetings", default="all")
     ap.add_argument("--templates", choices=["own", "general", "both"], default="own")
     ap.add_argument("--engine", action="store_true", help="also the 30-min bilingual meeting (its audio takes a few minutes to make)")
+    ap.add_argument("--audio", type=Path, help="the meetings' audio made elsewhere (a Mac): DIR/MEETING/mic.caf, …")
     a = ap.parse_args()
     out = a.out.resolve()
     meetings = list(SCENARIOS) if a.meetings == "all" else a.meetings.split(",")
@@ -76,7 +86,11 @@ def main():
         base = out / sc / "meeting"
         if not (base / "mic.caf").exists():
             base.mkdir(parents=True, exist_ok=True)
-            subprocess.run([sys.executable, str(HERE / "make_audio.py"), sc, str(base)], check=True)
+            if a.audio:
+                for f in (a.audio / sc).iterdir():
+                    (base / f.name).write_bytes(f.read_bytes())
+            else:
+                subprocess.run([sys.executable, str(HERE / "make_audio.py"), sc, str(base)], check=True)
         if not (base / "transcript.json").exists():
             # The meeting's own languages, as set in Settings (en,fr for the French/English ones)
             langs = "en,fr" if sc == "engine" else ",".join(sorted({lang for _, lang, _ in SCENARIOS[sc]["turns"]} | {"en"}))

@@ -7,6 +7,9 @@ change to the rules is scored in minutes: only the prompts it changes go to the 
 
 Writes data/runs/NAME/ID-ROUND.json (the to-dos) and prints the score (score.py NAME again).
 --src: another copy of the engine's code (a variant to compare), else this repository's src/.
+On a PC (Windows): the engine's llama.cpp backend, with the models of MEETSCRIBE_HOME (the engine's
+setup, see WINDOWS.md); MEETSCRIBE_DEVICE=cpu and --llama-server (llama.cpp's CPU build) for a PC
+without a GPU. The GPU and the CPU have their own cache.
 Each round is its own sample of the model (it runs at the app's temperature)."""
 
 import argparse
@@ -22,30 +25,39 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 DATA = HERE / "data"
-SUPPORT = Path.home() / "Library/Application Support/MeetScribe"
+MAC = sys.platform == "darwin"
+SUPPORT = Path.home() / "Library/Application Support/MeetScribe" if MAC else Path(os.environ["MEETSCRIBE_HOME"])
 
 ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 ap.add_argument("name")
 ap.add_argument("--set", default="dev", choices=["dev", "test", "all", "train"],
                 help="train: the scenario meetings in neither dev nor test (candidates for judge_data.py; not scored)")
 ap.add_argument("--rounds", type=int, default=2)
-ap.add_argument("--model", default="mlx-community/Qwen3.5-4B-4bit")
+ap.add_argument("--model", default="mlx-community/Qwen3.5-4B-4bit" if MAC else "unsloth/Qwen3.5-4B-GGUF:Q4_K_M")
 ap.add_argument("--src", type=Path, default=ROOT / "src")
 ap.add_argument("--adapter", type=Path, help="an mlx-lm LoRA adapter (to_mlx.py's output), for the extraction passes")
 ap.add_argument("--adapter-scale", type=float, help="the LoRA scale, instead of the adapter's own (weaker: lower)")
 ap.add_argument("--adapter-everywhere", action="store_true", help="… and for the second look too")
+ap.add_argument("--meetings", nargs="*", help="only these (of the set): a quick test")
+ap.add_argument("--llama-server", default="", help="PC: this llama-server.exe (e.g. the CPU build) instead of the engine's")
 a = ap.parse_args()
 
 home = DATA / "home"
 home.mkdir(parents=True, exist_ok=True)
-(home / "config.toml").write_text(f'llm_model = "{a.model}"\nlanguage = "en"\n')
+(home / "config.toml").write_text(f'llm_model = "{a.model}"\nlanguage = "en"\n'
+                                  + (f"llama_server = '{a.llama_server}'\n" if a.llama_server else ""))
 if not (home / "models").exists():
-    (home / "models").symlink_to(SUPPORT / "models")
+    if MAC:
+        (home / "models").symlink_to(SUPPORT / "models")
+    else:  # a junction: a symlink needs admin rights on Windows
+        import _winapi
+        _winapi.CreateJunction(str(SUPPORT / "models"), str(home / "models"))
 os.environ["MEETSCRIBE_HOME"] = str(home)
 sys.path.insert(0, str(a.src.resolve()))
 
 from meetscribe import summarize as S  # noqa: E402
 from meetscribe.config import load_config  # noqa: E402
+from meetscribe.hardware import device  # noqa: E402
 from meetscribe.transcript import load_json, to_plain  # noqa: E402
 
 CACHE = DATA / "cache"
@@ -79,13 +91,15 @@ class CachedLLM(S.LLM):
 
     def chat(self, prompt, max_tokens=2500, on_token=None, prose=False, temperature=None, transcript=None, last=False):
         model = self.cfg.llm_model + (f"+{ADAPTER}" if a.adapter and self.adapter_on else "")  # the cache tells them apart
+        if not MAC:
+            model += f"@{device().kind}"  # llama.cpp on the GPU or the CPU
         key = hashlib.sha256(json.dumps([model, self.round, prompt, transcript, max_tokens, temperature,
                                          prose]).encode()).hexdigest()
         f = CACHE / f"{key}.txt"
         if f.exists():
-            return f.read_text()
+            return f.read_text(encoding="utf-8")
         out = super().chat(prompt, max_tokens, on_token, prose, temperature, transcript, last)
-        f.write_text(out)
+        f.write_text(out, encoding="utf-8")
         return out
 
 
@@ -101,6 +115,7 @@ if a.set == "train":
             convert(mid)
 else:
     meetings = split["dev"] + split["test"] if a.set == "all" else split[a.set]
+meetings = [m for m in meetings if not a.meetings or m in a.meetings]
 out = DATA / "runs" / a.name
 out.mkdir(parents=True, exist_ok=True)
 llm = CachedLLM(load_config())
@@ -116,7 +131,7 @@ for r in range(1, a.rounds + 1):  # round by round, so a run cut short still cov
         checked = S.check_actions(raw, transcript, meeting)
         llm.use_adapter(a.adapter_everywhere)
         actions = S.merge_actions(checked + S.second_look(llm, "English", transcript, checked, meeting))
-        (out / f"{mid}-{r}.json").write_text(json.dumps(actions, indent=1, ensure_ascii=False))
+        (out / f"{mid}-{r}.json").write_text(json.dumps(actions, indent=1, ensure_ascii=False), encoding="utf-8")
         print(f"{mid} round {r}: {len(actions)} to-dos in {time.time() - t0:.0f}s", flush=True)
 
 if a.set != "train":

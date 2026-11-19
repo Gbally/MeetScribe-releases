@@ -63,6 +63,27 @@ on the GPU and on the CPU, before any Windows UI is written?** Talk to the owner
 6. **Real meetings** the owner sends (his 3 scored ones from 27 Oct, and new ones from his work PC
    never seen before): compare with the Mac's notes of the same meetings.
 
+### Step B results (PC, 2026-11-19)
+
+- **Setup** in `MeetScribe\win`: `venv` (`uv sync` with `UV_PROJECT_ENVIRONMENT`), `nvidia-cublas-cu12`
+  + `nvidia-cudnn-cu12` 9 in it (their `bin` folders on PATH, see `win\env.sh`), llama.cpp b12532
+  (`win-cuda-12.4-x64` + its cudart in `home\models\llama.cpp`, `win-cpu-x64` in `llama.cpp-cpu`),
+  the sherpa-onnx speaker models by hand. `meetscribe setup` isn't PC-ready yet: it sizes and
+  downloads `llm_model` as a whole repo (a GGUF "repo:quant" would fetch every quant) and the
+  language-ID model is MLX.
+- **llama.cpp runs Qwen3.5 4B** (`unsloth/Qwen3.5-4B-GGUF:Q4_K_M`): 4.2 GB of VRAM, prompt ~2100
+  tok/s, answer ~75 tok/s on the RTX 3080 Laptop; CPU only ~87 / 12 tok/s. `-hf` also loaded the
+  vision projector (0.7 GB): now `--no-mmproj`.
+- **AMI dev** (`run.py pc-gpu --rounds 1`): 26/51 found, right owner 19, 233 to-dos, 203 unmatched
+  (87 %), ~13.5 min (Mac MLX 4-bit: 19/51, 14, 163, 139, 64 min). Like the Mac's 6-bit (27/51):
+  Q4_K_M seems to keep more than MLX 4-bit. CPU only, 4 meetings (`pc-cpu`): 12/18 found vs 11/18 on the GPU, 40 to-dos vs 39; ~3.5 min per
+  meeting vs ~20 s (the full 20 would take 1–2 h).
+- **Notes bench, GPU** (`notes_bench/run.py … --audio DIR`, 2 rounds): 131/142 tasks, noise 20,
+  right deadlines 106, wrong 3 (Mac same code: 132/142, 23, 108, 2); speakers 89.6–100 % of words
+  to the right person. ~4 min per 30 min of meeting (allhands, 9.5 min: 39 s transcription + 40 s notes).
+- **CPU only** (`MEETSCRIBE_DEVICE=cpu`, `CUDA_VISIBLE_DEVICES=-1`), 3 bench meetings, 1 round: ~20 min
+  per 30 min of meeting (allhands: 166 s + 211 s); 21/25 tasks vs 23/25 on the GPU, same speakers.
+
 Decision: if the quality holds (no more than 2–3 tasks lost on the bench compared with the Mac,
 same order on AMI), next is the Windows app (tray icon, mic + WASAPI loopback, toasts, settings),
 then the installer and the updates. If not, find out why first.

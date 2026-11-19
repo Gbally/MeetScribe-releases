@@ -55,7 +55,8 @@ class LlamaServer:
         source = ["-m", model] if model.lower().endswith(".gguf") else ["-hf", model]
         layers = device().gpu_layers(MODEL_GB)
         cmd = [binary(self.cfg), *source, "--host", "127.0.0.1", "--port", str(port), "--ctx-size", str(CONTEXT),
-               "--jinja", "--parallel", "1", "--n-gpu-layers", str(layers)]
+               "--jinja", "--parallel", "1", "--n-gpu-layers", str(layers),
+               "--no-mmproj"]  # -hf also fetches the vision part (~0.7 GB on the GPU): text only here
         env = {**os.environ, "LLAMA_CACHE": str(MODELS_DIR / "gguf")}
         log = open(MODELS_DIR.parent / "llama-server.log", "ab")
         flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0

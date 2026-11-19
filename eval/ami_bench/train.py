@@ -4,7 +4,8 @@
   python eval/ami_bench/train.py judge-r16 --data eval/ami_bench/judge_set --pos-repeat 1 --epochs 2   # the judge
 
 Writes the adapter to OUT/NAME (default OUT: the folder above the repository, runs/), with
-args.json and the losses in log.json, so runs stay comparable. The loss counts only the answer:
+args.json and the losses in log.json, so runs stay comparable; the adapter of the step with the
+lowest validation loss in OUT/NAME/best (to_mlx.py OUT/NAME/best converts it). The loss counts only the answer:
 the prompt is the one LLM.chat sends, with the chat template the app uses (no thinking).
 --pos-repeat: each part with to-dos is seen that many times per epoch (most parts have none).
 --neg-per-pos: fewer empty parts. With all of them (5.5 per part with to-dos), r16-e2 learnt to
@@ -37,6 +38,7 @@ ap.add_argument("--neg-per-pos", type=float, help="keep this many empty parts pe
 ap.add_argument("--max-len", type=int, default=4096)
 ap.add_argument("--max-steps", type=int, default=0, help="stop after N optimizer steps (a quick test)")
 ap.add_argument("--seed", type=int, default=0)
+ap.add_argument("--save-every", type=int, default=0, help="also keep the adapter every N steps (a multiple of 10) in NAME/step-N")
 a = ap.parse_args()
 
 from peft import LoraConfig, get_peft_model  # noqa: E402
@@ -109,10 +111,10 @@ def validate() -> dict:
 
 out = a.out / a.name
 out.mkdir(parents=True, exist_ok=True)
-(out / "args.json").write_text(json.dumps({**vars(a), "out": str(a.out), "train": len(train), "valid": len(valid)}, indent=1))
+(out / "args.json").write_text(json.dumps({**vars(a), "out": str(a.out), "data": str(a.data), "train": len(train), "valid": len(valid)}, indent=1))
 log = [{"step": 0, "valid": validate()}]
 print(log[-1], flush=True)
-order, rng, t0 = [], random.Random(a.seed), time.time()
+order, rng, t0, best = [], random.Random(a.seed), time.time(), float("inf")
 model.train()
 for step in range(1, steps + 1):
     total = 0.0
@@ -133,6 +135,15 @@ for step in range(1, steps + 1):
     if step % 10 == 0 or step == steps:
         log[-1]["valid"] = validate()
         model.save_pretrained(out)
+        # the validation set is small and the loss jumps around: keep the step where it was lowest
+        # (the mean over the kinds of answer, so the rare one counts as much), and others on request
+        mean = sum(log[-1]["valid"].values()) / len(log[-1]["valid"])
+        if mean < best:
+            best = mean
+            model.save_pretrained(out / "best")
+            (out / "best" / "step.json").write_text(json.dumps(log[-1], indent=1))
+        if a.save_every and step % a.save_every == 0:
+            model.save_pretrained(out / f"step-{step}")
     print(log[-1], flush=True)
     (out / "log.json").write_text(json.dumps(log, indent=1))
 model.save_pretrained(out)

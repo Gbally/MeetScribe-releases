@@ -118,6 +118,9 @@ its examples are short (~450 tokens) and there are many more of them.
   ```
 
   then copy `runs\judge-r16\mlx` to the Mac (`eval/ami_bench/data/adapters/judge-r16`).
+- `judge-r16` trained on the PC (2026-11-19): 653 train / 51 valid, 163 steps, 28.5 min, 4.0 GB.
+  Validation loss yes 0.81 → 0.37, no 0.31 → 0.05 (noisy on 51 examples: yes 0.14–0.65 between
+  steps 60 and 160; only the last step is kept).
 - The 6-bit model (`mlx-community/Qwen3.5-4B-6bit`) finds more (AMI dev 27/51 vs 19/51 in one round)
   but proposes 386 to-dos vs 163 and takes +56 % time: a judge could keep its gain, the time can't.
 

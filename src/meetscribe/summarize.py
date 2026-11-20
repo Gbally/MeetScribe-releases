@@ -713,7 +713,11 @@ def _days_apart(due_a: str, due_b: str) -> int | None:
 # kept 96 % of the real ones and dropped 30 % of the rest, "strict" 91 % and 47 %; on the
 # multilingual bench "standard" lost none. ~1.5 s per to-do on an M2 (the instructions are read
 # once per meeting). eval/ami_bench/judge_data.py has the question's history.
+# Thresholds per backend: llama.cpp's Q4_K_M scores the same to-dos a little lower than MLX's
+# 4-bit (348 AMI to-dos scored by both: correlation 0.88, 0.2 lower on average); these make it
+# take the same decision as the Mac on 310 / 301 of them.
 JUDGE_LEVELS = {"off": None, "standard": -2.0, "strict": -1.5}
+JUDGE_LEVELS_LLAMA = {"off": None, "standard": -2.25, "strict": -1.75}
 YES, NO = ("yes", "Yes", " yes", " Yes"), ("no", "No", " no", " No")
 JUDGE_PROMPT = """Below is a to-do noted from a meeting transcript, with the line it was noted from (marked >>) and the lines just before and after it.
 
@@ -739,7 +743,8 @@ def judge_context(lines: list[str], n: int | None, quote: str, before: int = 3, 
 
 def judge_actions(llm, transcript: str, actions: list[dict], level: str = "standard") -> list[dict]:
     """The to-dos the judge doesn't reject (all of them when it's off or can't tell)."""
-    threshold = JUDGE_LEVELS.get(level)
+    levels = JUDGE_LEVELS_LLAMA if getattr(getattr(llm, "cfg", None), "llm_backend", "") == "llama" else JUDGE_LEVELS
+    threshold = levels.get(level)
     if threshold is None or not actions:
         return actions
     lines = [line for line in transcript.splitlines() if SAID.match(line)]  # numbered as _lines does

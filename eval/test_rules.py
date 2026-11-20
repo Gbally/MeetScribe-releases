@@ -449,6 +449,9 @@ def test_judge_actions():
     assert judge_actions(Fake([-1.8, 1.5]), transcript, todos) == todos  # standard: -1.8 is not sure enough
     assert judge_actions(Fake([-1.8, 1.5]), transcript, todos, "strict") == todos[1:]
     assert judge_actions(Fake([None, None]), transcript, todos) == todos
+    llama = Fake([-2.1, 1.5])
+    llama.cfg = type("Cfg", (), {"llm_backend": "llama"})()
+    assert judge_actions(llama, transcript, todos) == todos  # llama.cpp scores lower: its standard is -2.25
     # The calendar details above the transcript don't shift the lines (the to-dos count spoken lines)
     llm = Fake([-3.0, 1.5])
     judge_actions(llm, "Organizer: Guillaume\nInvited: Ana\n(Speaker labels …)\n\n" + transcript, todos)

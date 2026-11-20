@@ -48,6 +48,9 @@ class Config:
     llm_url: str = "http://localhost:11434/v1"
     # Language of the notes: "auto" = the meeting's main language, or e.g. "English".
     summary_language: str = "auto"
+    # To-dos the model found, checked once more one by one ("is it a real to-do?"): "standard",
+    # "strict" (drops more noise, and a few more real ones) or "off".
+    todo_filter: str = "standard"
     # How much detail: "detailed" (long, full context), "standard", or "brief" (bullets only).
     summary_style: str = "standard"
     # Default meeting type: general, one_on_one, standup, client, interview, workshop.

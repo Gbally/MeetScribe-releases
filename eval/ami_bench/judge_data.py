@@ -38,17 +38,8 @@ from convert import section, utterances  # noqa: E402
 # questions share their reading (judge.py caches it): only the few lines and the to-do are read
 # for each one. And 3 lines before + 1 after, cut at 220 characters: on the owner's work meetings
 # this kept as many real to-dos as 5 + 2 lines at 400, for ~40 % fewer tokens.
-PROMPT = """Below is a to-do noted from a meeting transcript, with the line it was noted from (marked >>) and the lines just before and after it.
-
-A real to-do is something that person takes on, or is given, to do AFTER the meeting. It is NOT one if it is an idea or a suggestion still being discussed, something done during the meeting itself (presenting, showing, discussing, drawing), something already done, an opinion, or something that only might happen.
-Is it a real to-do? Answer yes or no.
-
-Lines:
-"""
-QUESTION = """{ctx}
-
-To-do: {owner}: {task}"""
-BEFORE, AFTER, WIDTH = 3, 1, 220  # context lines around the to-do's line; characters kept of the others
+PROMPT, QUESTION = S.JUDGE_PROMPT, S.JUDGE_QUESTION  # the app's (summarize.judge_actions)
+BEFORE, AFTER, WIDTH = 3, 1, 220  # as summarize.judge_context
 
 # Version 1 (judge-r16, judge-r16s): the lines first, then the to-do and the instructions.
 PROMPT_V1 = """Lines from a meeting transcript:

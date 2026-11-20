@@ -100,6 +100,25 @@ class LlamaServer:
     def count_tokens(self, text: str) -> int:
         return len(self.post("/tokenize", {"content": text, "add_special": False})["tokens"])
 
+    def yes_odds(self, messages: list[dict], yes, no) -> float | None:
+        """log P(yes) − log P(no) for the answer's first token, from the server's top log-probabilities
+        (the judge, summarize.judge_actions). The instructions at the start of the message are the same
+        for the whole meeting: cache_prompt keeps them read."""
+        import math
+
+        body = {"messages": messages, "max_tokens": 1, "temperature": 0, "logprobs": True, "top_logprobs": 20,
+                "chat_template_kwargs": {"enable_thinking": False}, "cache_prompt": True}
+        try:
+            top = self.post("/v1/chat/completions", body)["choices"][0]["logprobs"]["content"][0]["top_logprobs"]
+        except (KeyError, IndexError, TypeError):
+            return None
+        floor = min((t["logprob"] for t in top), default=-30.0) - 1  # not in the top 20: below the last one
+
+        def mass(words) -> float:
+            found = [t["logprob"] for t in top if t["token"] in words]
+            return math.log(sum(math.exp(x) for x in found)) if found else floor
+        return mass(set(yes)) - mass(set(no))
+
     def chat(self, messages: list[dict], max_tokens: int, temperature: float, prose: bool, on_token=None) -> str:
         """As LLM.chat's MLX path: no thinking, top-p 0.8, a mild repetition penalty for prose only."""
         body = {"messages": messages, "max_tokens": max_tokens, "temperature": temperature, "top_p": 0.8,

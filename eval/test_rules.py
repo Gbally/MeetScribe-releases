@@ -425,6 +425,31 @@ def test_overlap_crumbs():
     assert left == {0, 1, 3, 4}, left
     assert drop_overlap_crumbs([Turn(0, 5, 0), Turn(0, 5, 1)]) == [Turn(0, 5, 0), Turn(0, 5, 1)]  # not everyone
 
+
+def test_judge_actions():
+    """The judge drops the to-dos it's fairly sure aren't ones, keeps the rest; off, or a backend that
+    can't tell (None), keeps them all."""
+    from meetscribe.summarize import JUDGE_PROMPT, judge_actions
+
+    class Fake:
+        def __init__(self, odds):
+            self.odds, self.asked = odds, []
+
+        def yes_odds(self, head, question):
+            assert head == JUDGE_PROMPT
+            self.asked.append(question)
+            return self.odds[len(self.asked) - 1]
+
+    transcript = "[00:00:01] Ana: let me share my screen\n[00:00:09] Ana: I'll send the deck tonight"
+    todos = [{"owner": "Ana", "task": "share her screen", "line": 0}, {"owner": "Ana", "task": "send the deck", "line": 1}]
+    llm = Fake([-3.0, 1.5])
+    assert judge_actions(llm, transcript, todos) == todos[1:]
+    assert ">> [00:00:09] Ana: I'll send the deck tonight" in llm.asked[1] and "To-do: Ana: send the deck" in llm.asked[1]
+    assert judge_actions(Fake([-1.8, 1.5]), transcript, todos) == todos  # standard: -1.8 is not sure enough
+    assert judge_actions(Fake([-1.8, 1.5]), transcript, todos, "strict") == todos[1:]
+    assert judge_actions(Fake([None, None]), transcript, todos) == todos
+    assert judge_actions(Fake([]), transcript, todos, "off") == todos
+
 def test_whisper_stall():
     """Whisper that stops moving ends the job with a message instead of running forever."""
     import subprocess

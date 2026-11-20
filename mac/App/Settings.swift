@@ -43,12 +43,34 @@ enum SummaryStyle: String, Codable, CaseIterable {
     }
 }
 
+/// The to-dos found, checked once more one by one (summarize.judge_actions in the engine).
+enum TodoFilter: String, Codable, CaseIterable {
+    case off, standard, strict
+
+    var label: String {
+        switch self {
+        case .off: return i18n("Off")
+        case .standard: return i18n("Standard")
+        case .strict: return i18n("Strict")
+        }
+    }
+
+    var help: String {
+        switch self {
+        case .off: return i18n("Every to-do the AI finds is listed.")
+        case .standard: return i18n("Each to-do is checked once more: about a third of the false ones go, almost no real ones (a few seconds per to-do).")
+        case .strict: return i18n("Removes about half of the false to-dos, but also about one real to-do in ten.")
+        }
+    }
+}
+
 struct AppSettings: Codable, Equatable {
     var myName = NSFullUserName().components(separatedBy: " ").first ?? ""
     var languages: [String] = [] // spoken in meetings: [] = detect automatically, ["en","fr"] = may switch
     var notesLanguage = "auto"   // "auto" = the meeting's main language, else e.g. "English"
     var vocabulary = ""
     var summaryStyle = SummaryStyle.standard
+    var todoFilter = TodoFilter.standard
     var teamsOnly = false        // false = all Mac audio
     var storage = Storage.local
     var oneDrivePath = ""        // root of the chosen OneDrive account
@@ -135,6 +157,7 @@ struct AppSettings: Codable, Equatable {
         }
         vocabulary = try c.decodeIfPresent(String.self, forKey: .vocabulary) ?? d.vocabulary
         summaryStyle = (try? c.decodeIfPresent(SummaryStyle.self, forKey: .summaryStyle)) ?? d.summaryStyle
+        todoFilter = (try? c.decodeIfPresent(TodoFilter.self, forKey: .todoFilter)) ?? d.todoFilter
         teamsOnly = try c.decodeIfPresent(Bool.self, forKey: .teamsOnly) ?? d.teamsOnly
         oneDrivePath = try c.decodeIfPresent(String.self, forKey: .oneDrivePath) ?? ""
         customFolderPath = try c.decodeIfPresent(String.self, forKey: .customFolderPath) ?? ""
@@ -150,7 +173,7 @@ struct AppSettings: Codable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case myName, language, languages, notesLanguage, useCalendar, callReminders, endReminders, stopWhenOver, notifyWhenReady,
              emailApp, gmailAccount, briefs, dueReminders, autoRecord, defaultTemplate, hotkey, audioRetentionDays, llmModel, whisperModel,
-             vocabulary, summaryStyle, teamsOnly, keepAudio, storage, oneDrivePath,
+             vocabulary, summaryStyle, todoFilter, teamsOnly, keepAudio, storage, oneDrivePath,
              customFolderPath, notesFolderPath, exportFolderPath, autoExport, notesTiming, laterModel, laterWindows,
              laterInWindows, laterWhenIdle, laterIdleMinutes, laterWhenLocked
     }
@@ -177,6 +200,7 @@ struct AppSettings: Codable, Equatable {
         try c.encodeIfPresent(whisperModel, forKey: .whisperModel)
         try c.encode(vocabulary, forKey: .vocabulary)
         try c.encode(summaryStyle, forKey: .summaryStyle)
+        try c.encode(todoFilter, forKey: .todoFilter)
         try c.encode(teamsOnly, forKey: .teamsOnly)
         try c.encode(storage, forKey: .storage)
         try c.encode(oneDrivePath, forKey: .oneDrivePath)

@@ -147,6 +147,7 @@ enum Engine {
         summary_language = \(q(s.notesLanguage))
         vocabulary = \(q(s.vocabulary))
         summary_style = \(q(s.summaryStyle.rawValue))
+        todo_filter = \(q(s.todoFilter.rawValue))
         template = \(q(s.defaultTemplate))
         llm_model = \(q(llm))
         whisper_model = \(q(whisper))

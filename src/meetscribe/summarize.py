@@ -133,6 +133,7 @@ class LLM:
         self.cfg = cfg
         self._model = self._tokenizer = None
         self._read = None  # (the transcript as given, its tokens, the model's state after reading them)
+        self._judge = None  # (the judge's instructions as tokens, the model's state after reading them)
 
     def count_tokens(self, text: str) -> int:
         if self.cfg.llm_backend == "mlx":
@@ -243,6 +244,41 @@ class LLM:
         else:
             raise SystemExit(f"Unknown llm_backend '{self.cfg.llm_backend}' (use 'mlx', 'llama' or 'openai')")
         return re.sub(r"<think>.*?</think>", "", out, flags=re.S).strip()
+
+
+    def yes_odds(self, head: str, question: str) -> float | None:
+        """log P(yes) − log P(no) for the first word of the answer to head + question (one user
+        message). `head` is the same for every call of a meeting (judge_actions): read once on MLX,
+        and llama.cpp's server keeps it from the last request. None when the backend can't say."""
+        messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": head + question}]
+        if self.cfg.llm_backend == "mlx":
+            import copy
+
+            import mlx.core as mx
+            from mlx_lm.models.cache import make_prompt_cache
+
+            self._load()
+            text = self._tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False,
+                                                       enable_thinking=False)
+            ids = self._encode(text)
+            prefix = self._encode(text[:text.index(head) + len(head)])
+            if not (self._judge and self._judge[0] == prefix):
+                state = make_prompt_cache(self._model)
+                self._model(mx.array(prefix)[None], cache=state)
+                mx.eval([c.state for c in state])
+                self._judge = (prefix, state)
+            done, state = (len(prefix), copy.deepcopy(self._judge[1])) if ids[:len(prefix)] == prefix else (0, None)
+            logits = self._model(mx.array(ids[done:])[None], cache=state)[0, -1]
+            words = {w: self._tokenizer.encode(w, add_special_tokens=False)[0] for w in YES + NO}
+            yes = mx.logsumexp(logits[mx.array([words[w] for w in YES])]).item()
+            no = mx.logsumexp(logits[mx.array([words[w] for w in NO])]).item()
+            mx.clear_cache()
+            return yes - no
+        if self.cfg.llm_backend == "llama":
+            from .llama_server import server
+
+            return server(self.cfg).yes_odds(messages, YES, NO)
+        return None  # Ollama / LM Studio: no reliable log-probabilities, the to-dos are kept
 
 
 def _plain_text(text: str) -> str:
@@ -667,6 +703,51 @@ def _days_apart(due_a: str, due_b: str) -> int | None:
     return abs((a - b).days) if a and b else None
 
 
+# The judge: each to-do found is asked about once more, on its own, with the few lines around it
+# ("is it a real to-do?"), and dropped when the model is fairly sure it isn't. Measured on the
+# owner's 12 work meetings never seen before (hand-labelled, 74 real to-dos of 165): "standard"
+# kept 96 % of the real ones and dropped 30 % of the rest, "strict" 91 % and 47 %; on the
+# multilingual bench "standard" lost none. ~1.5 s per to-do on an M2 (the instructions are read
+# once per meeting). eval/ami_bench/judge_data.py has the question's history.
+JUDGE_LEVELS = {"off": None, "standard": -2.0, "strict": -1.5}
+YES, NO = ("yes", "Yes", " yes", " Yes"), ("no", "No", " no", " No")
+JUDGE_PROMPT = """Below is a to-do noted from a meeting transcript, with the line it was noted from (marked >>) and the lines just before and after it.
+
+A real to-do is something that person takes on, or is given, to do AFTER the meeting. It is NOT one if it is an idea or a suggestion still being discussed, something done during the meeting itself (presenting, showing, discussing, drawing), something already done, an opinion, or something that only might happen.
+Is it a real to-do? Answer yes or no.
+
+Lines:
+"""
+JUDGE_QUESTION = """{ctx}
+
+To-do: {owner}: {task}
+
+Is this a real to-do, to be done after the meeting? Answer yes or no."""
+
+
+def judge_context(lines: list[str], n: int | None, quote: str, before: int = 3, after: int = 1, width: int = 220) -> str:
+    """The to-do's line (>>) with a few lines around it, cut short."""
+    if n is None or not 0 <= n < len(lines):
+        return ">> " + quote
+    return "\n".join(("   ", ">> ")[k == n] + lines[k][:400 if k == n else width]
+                     for k in range(max(0, n - before), min(len(lines), n + after + 1)))
+
+
+def judge_actions(llm, transcript: str, actions: list[dict], level: str = "standard") -> list[dict]:
+    """The to-dos the judge doesn't reject (all of them when it's off or can't tell)."""
+    threshold = JUDGE_LEVELS.get(level)
+    if threshold is None or not actions:
+        return actions
+    lines = transcript.split("\n")
+    kept = []
+    for a in actions:
+        odds = llm.yes_odds(JUDGE_PROMPT, JUDGE_QUESTION.format(
+            ctx=judge_context(lines, a.get("line"), a.get("quote", "")), owner=a["owner"], task=a["task"]))
+        if odds is None or odds >= threshold:
+            kept.append(a)
+    return kept
+
+
 def merge_actions(actions: list[dict]) -> list[dict]:
     """One item per task. The same task often comes back (worded differently, or in the recap
     at the end, where one line lists everyone's tasks): for the same owner, items sharing most
@@ -780,6 +861,7 @@ def _summarize(transcript: str, cfg: Config, language: str, context: str, templa
         checked = check_actions(raw, transcript, meeting)
         progress.update(0.45)
         actions = merge_actions(checked + second_look(llm, lang, transcript, checked, meeting))
+        actions = judge_actions(llm, transcript, actions, cfg.todo_filter)
         decisions = finish_decisions(llm, lang, transcript, raw_decisions) if DECISIONS_MODE != "notes" else []
         progress.update(0.5)
         body = llm.chat(NOTES_PROMPT.format(language=lang, style=style, extra_sections=extra,
@@ -812,6 +894,7 @@ def _summarize(transcript: str, cfg: Config, language: str, context: str, templa
     raw, raw_decisions = _extract(llm, lang, _parts(llm, transcript, EXTRACT_TOKENS))
     checked = check_actions(raw, transcript, meeting)
     actions = merge_actions(checked + second_look(llm, lang, transcript, checked, meeting))
+    actions = judge_actions(llm, transcript, actions, cfg.todo_filter)
     decisions = finish_decisions(llm, lang, transcript, raw_decisions) if DECISIONS_MODE != "notes" else []
     body = llm.chat(NOTES_PROMPT.format(language=lang, style=style, extra_sections=extra,
                                         actions=_actions_context(actions), summary_how=_summary_how(transcript)),

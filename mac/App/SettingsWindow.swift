@@ -271,6 +271,11 @@ struct NotesPane: View {
             }
             .pickerStyle(.segmented)
             Caption(model.settings.summaryStyle.help)
+            Picker("Check the to-dos", selection: $model.settings.todoFilter) {
+                ForEach(TodoFilter.allCases, id: \.self) { Text(tr($0.label)).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            Caption(model.settings.todoFilter.help)
             Picker("Language", selection: $model.settings.notesLanguage) {
                 Text("Same as the meeting").tag("auto")
                 ForEach(meetingLanguages, id: \.code) { Text(languageName($0.code)).tag($0.name) }

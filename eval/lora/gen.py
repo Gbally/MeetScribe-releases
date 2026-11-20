@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-import meetscribe.summarize as sm  # noqa: E402
+import hesper.summarize as sm  # noqa: E402
 
 NAMES = ["Sarah", "Tom", "Aisha", "Marc", "Léa", "Jake", "Priya", "Oliver", "Nadia", "Hugo", "Emma", "Ken",
          "Camille", "Yusuf", "Chloe", "Ben", "Fatima", "Lucas", "Mei", "Andy", "Selen", "Diego", "Inès", "Paul",

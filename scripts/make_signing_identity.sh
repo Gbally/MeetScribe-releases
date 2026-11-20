@@ -1,6 +1,7 @@
 #!/bin/sh
-# Creates a stable code-signing identity for MeetScribe builds, in its own keychain file
-# (signing/MeetScribe-signing.keychain-db) — the login keychain is not touched.
+# Creates a stable code-signing identity for Hesper builds, in its own keychain file
+# (signing/MeetScribe-signing.keychain-db: the name from before Hesper was renamed, kept so
+# the existing identity keeps working) — the login keychain is not touched.
 #
 # Why: macOS remembers permissions (microphone, screen audio, calendar, Documents) per code
 # signature. Ad-hoc signatures change on every build, so every update re-asked for all of

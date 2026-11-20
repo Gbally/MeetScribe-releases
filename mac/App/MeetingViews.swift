@@ -140,7 +140,7 @@ struct MeetingView: View {
                 Card {
                     Label("The meeting audio wasn't recorded", systemImage: "speaker.slash").font(.callout.weight(.medium))
                         .foregroundColor(.orange)
-                    Text("Only your microphone was captured, so other people's voices were picked up through your speakers — speaker names may be less reliable. Check Screen & System Audio Recording for MeetScribe in System Settings.")
+                    Text("Only your microphone was captured, so other people's voices were picked up through your speakers — speaker names may be less reliable. Check Screen & System Audio Recording for Hesper in System Settings.")
                         .font(.caption).fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -162,7 +162,7 @@ struct MeetingView: View {
             if !m.unnamedSpeakers.isEmpty && !model.isBusy(id) && m.notes != nil {
                 Button { route = .speakers(id) } label: {
                     HStack {
-                        Image(systemName: "person.crop.circle.badge.questionmark").foregroundColor(.accentColor)
+                        Image(systemName: "person.crop.circle.badge.questionmark").foregroundColor(Brand.accent)
                         Text(m.unnamedSpeakers.count == 1 ? tr("1 speaker without a name — name them")
                              : tr("%@ speakers without a name — name them", "\(m.unnamedSpeakers.count)"))
                             .font(.callout)
@@ -171,7 +171,7 @@ struct MeetingView: View {
                     }
                     .padding(10)
                     .contentShape(Rectangle())
-                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.accentColor.opacity(0.08)))
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Brand.accent.opacity(0.08)))
                 }
                 .buttonStyle(.plain)
             }
@@ -301,7 +301,7 @@ struct SpeakersView: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Listen to each speaker (▶︎), then type their name. MeetScribe remembers their voice for next time, and the notes are rewritten with the names. Same person split in two? Give both the same name.")
+                    Text("Listen to each speaker (▶︎), then type their name. Hesper remembers their voice for next time, and the notes are rewritten with the names. Same person split in two? Give both the same name.")
                         .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
                     if preparingClips {
                         HStack { ProgressView().controlSize(.small); Text("Preparing voice samples…").font(.caption) }
@@ -323,7 +323,7 @@ struct SpeakersView: View {
                                     Button { player.toggle(url) } label: {
                                         HStack(alignment: .top, spacing: 6) {
                                             Image(systemName: player.playing == url ? "stop.circle.fill" : "play.circle.fill")
-                                                .font(.title3).foregroundColor(.accentColor)
+                                                .font(.title3).foregroundColor(Brand.accent)
                                             Text(verbatim: "“\(clip.text)”").font(.caption).foregroundColor(.secondary)
                                                 .fixedSize(horizontal: false, vertical: true)
                                             Spacer(minLength: 0)
@@ -383,7 +383,7 @@ struct SpeakersView: View {
             preparingClips = true
             Engine.writeConfig(model.settings)
             Task {
-                _ = await Engine.meetscribe(["clips", m.folder.path]) { _ in }
+                _ = await Engine.hesper(["clips", m.folder.path]) { _ in }
                 clips = model.meeting(id)?.clips ?? [:]
                 preparingClips = false
             }
@@ -452,7 +452,7 @@ struct TodosView: View {
                              : tr("No to-dos."))
                             .font(.callout).foregroundColor(.secondary).padding(.top, 20)
                         if mineOnly && model.settings.myName.isEmpty {
-                            Text("Set your name in Settings so MeetScribe knows which to-dos are yours.")
+                            Text("Set your name in Settings so Hesper knows which to-dos are yours.")
                                 .font(.caption).foregroundColor(.secondary)
                         }
                     }
@@ -508,7 +508,7 @@ struct DueBadge: View {
                 days < 0 ? (tr("Overdue · %@", day.formatted(.dateTime.day().month(.abbreviated).locale(AppLanguage.locale))), .red)
                 : days == 0 ? (tr("Due today"), .orange)
                 : days == 1 ? (tr("Due tomorrow"), .orange)
-                : days < 7 ? (tr("Due %@", day.formatted(.dateTime.weekday(.wide).locale(AppLanguage.locale))), .accentColor)
+                : days < 7 ? (tr("Due %@", day.formatted(.dateTime.weekday(.wide).locale(AppLanguage.locale))), Brand.accent)
                 : (tr("Due %@", day.formatted(.dateTime.day().month(.abbreviated).locale(AppLanguage.locale))), .secondary)
             Text(text).font(.caption2.weight(.semibold))
                 .foregroundColor(done ? .secondary : color)

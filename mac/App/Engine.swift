@@ -1,5 +1,5 @@
 // Runs the Python engine (bundled in the app) in its own environment under
-// ~/Library/Application Support/MeetScribe. The first launch installs Python + packages with
+// ~/Library/Application Support/Hesper. The first launch installs Python + packages with
 // the bundled `uv`, then downloads the models; after that everything works offline.
 
 import Foundation
@@ -7,10 +7,21 @@ import Foundation
 enum Engine {
     static let support: URL = {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let url = base.appendingPathComponent("MeetScribe", isDirectory: true)
-        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        let url = base.appendingPathComponent("Hesper", isDirectory: true)
+        let old = base.appendingPathComponent("MeetScribe", isDirectory: true)
+        let fm = FileManager.default
+        // Hesper was MeetScribe: its engine, models, voices and waiting recordings move over once.
+        // The Python environment holds absolute paths, so it's rebuilt (from the local cache).
+        if !fm.fileExists(atPath: url.path), fm.fileExists(atPath: old.path), (try? fm.moveItem(at: old, to: url)) != nil {
+            try? fm.removeItem(at: url.appendingPathComponent("venv"))
+            migrated = true
+        }
+        try? fm.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }()
+
+    /// The data folder was just moved from MeetScribe's: the engine is set up again, quietly.
+    private(set) static var migrated = false
 
     static var engineSource: URL { Bundle.main.resourceURL!.appendingPathComponent("engine") }
     static var uv: URL { Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/uv") }
@@ -35,7 +46,7 @@ enum Engine {
 
     static var environment: [String: String] {
         var env = ProcessInfo.processInfo.environment
-        env["MEETSCRIBE_HOME"] = support.path
+        env["HESPER_HOME"] = support.path
         env["PYTHONPATH"] = engineSource.appendingPathComponent("src").path
         env["PYTHONUNBUFFERED"] = "1"
         env["PYTHONDONTWRITEBYTECODE"] = "1" // never write into the (signed) app bundle
@@ -113,7 +124,7 @@ enum Engine {
         func stop() { if process.isRunning { process.terminate() } }
     }
 
-    /// Appends to ~/Library/Application Support/MeetScribe/engine.log (kept under ~1 MB).
+    /// Appends to ~/Library/Application Support/Hesper/engine.log (kept under ~1 MB).
     static func log(_ message: String) {
         let url = support.appendingPathComponent("engine.log")
         let line = "[\(ISO8601DateFormatter().string(from: Date()))] \(message)\n"
@@ -127,8 +138,8 @@ enum Engine {
         }
     }
 
-    static func meetscribe(_ args: [String], onLine: @escaping (String) -> Void) async -> Result {
-        await run(python, ["-m", "meetscribe"] + args, onLine: onLine)
+    static func hesper(_ args: [String], onLine: @escaping (String) -> Void) async -> Result {
+        await run(python, ["-m", "hesper"] + args, onLine: onLine)
     }
 
     /// Writes the user's settings where the Python engine reads them.

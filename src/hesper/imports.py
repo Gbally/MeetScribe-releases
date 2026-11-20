@@ -1,4 +1,4 @@
-"""Transcripts made elsewhere (Teams, Zoom, Google Meet, Granola, Otter…) turned into MeetScribe
+"""Transcripts made elsewhere (Teams, Zoom, Google Meet, Granola, Otter…) turned into Hesper
 utterances, so they get the same notes as a recording. Reads WebVTT (.vtt), SubRip (.srt), YouTube
 (.sbv), Word (.docx, Teams' download) and plain text or Markdown (.txt, .md: "Name: text" lines,
 or a "Name 0:03" / "Name - 00:01" / "Speaker 1 (00:01):" / "[Name] 10:00:01" header line before

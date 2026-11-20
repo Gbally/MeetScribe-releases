@@ -14,7 +14,7 @@ step alone.
 
 ```sh
 python3 eval/ami_bench/fetch.py      # once: corpus annotations (23 MB) + the 30 meetings
-"$HOME/Library/Application Support/MeetScribe/venv/bin/python" eval/ami_bench/run.py NAME [--set dev|test|all] [--rounds 2]
+"$HOME/Library/Application Support/Hesper/venv/bin/python" eval/ami_bench/run.py NAME [--set dev|test|all] [--rounds 2]
 python3 eval/ami_bench/score.py NAME [--set …] [--show]
 ```
 

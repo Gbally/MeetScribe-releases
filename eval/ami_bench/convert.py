@@ -1,4 +1,4 @@
-"""AMI scenario meetings → MeetScribe sessions (data/sessions/ID: transcript.json + truth.json).
+"""AMI scenario meetings → Hesper sessions (data/sessions/ID: transcript.json + truth.json).
 
 The transcript is the corpus' manual one: each speaker's words grouped into turns (a pause of a
 second or more ends one), in time order. Speakers are named by their role in the scenario

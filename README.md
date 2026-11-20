@@ -1,14 +1,16 @@
 <p align="center"><img src="docs/img/icon.png" width="96" alt=""></p>
 
-<h1 align="center">MeetScribe</h1>
+<h1 align="center">Hesper</h1>
+
+<p align="center"><i>Private meeting notes, fully offline</i> · by Nibjorg Studio · formerly MeetScribe</p>
 
 <p align="center"><b>Meeting notes that stay on your Mac.</b><br>
 Records your Teams, Zoom or Meet calls, works out who said what, and writes a summary, the decisions
 and a to-do list — with AI that runs entirely on your Mac. Free, open source, no account.</p>
 
 <p align="center">
-  <a href="https://github.com/Gbally/MeetScribe-releases/releases/latest"><b>Download for Mac</b></a> ·
-  <a href="https://gbally.github.io/MeetScribe-releases/">Website</a> ·
+  <a href="https://github.com/Gbally/Hesper/releases/latest"><b>Download for Mac</b></a> ·
+  <a href="https://gbally.github.io/Hesper/">Website</a> ·
   <a href="PRIVACY.md">Privacy</a> ·
   <a href="mac/INSTALL.txt">Install guide</a>
 </p>
@@ -17,7 +19,7 @@ and a to-do list — with AI that runs entirely on your Mac. Free, open source, 
 
 ## Why
 
-Meeting assistants usually send your calls to a cloud service. MeetScribe doesn't: speech
+Meeting assistants usually send your calls to a cloud service. Hesper doesn't: speech
 recognition (Whisper), speaker separation and the notes (Qwen) all run on your Mac's Apple silicon.
 Your recordings, transcripts and notes are plain files in a folder you choose.
 
@@ -65,21 +67,21 @@ Your recordings, transcripts and notes are plain files in a folder you choose.
 - **Notes when you're away** (Settings → Notes): the transcript right away, the notes — or quick
   notes now and better ones with a bigger model — at set times, when the Mac is idle or locked.
 - **Shortcut:** start/stop from anywhere (default ⌃⌥R, changeable in Settings).
-- **Edit:** rename a meeting, fix/add/delete to-dos (notes.md is rebuilt with `meetscribe render`).
+- **Edit:** rename a meeting, fix/add/delete to-dos (notes.md is rebuilt with `hesper render`).
 - **Privacy:** audio (and voice samples) deleted after 7 days by default; notes are kept.
 - **Many languages** — 99 spoken languages, even switching mid-meeting; the app itself is in
   English, French, Spanish, Portuguese, Japanese and Chinese.
 - **Updates itself**, picks AI models that fit your Mac's memory (and says so when one runs out of
   it, with a smaller one to choose), can receive test versions (Settings → About), and removes itself cleanly
-  (Settings → Privacy and storage → Remove MeetScribe).
+  (Settings → Privacy and storage → Remove Hesper).
 
 ## Install
 
 Requirements: a Mac with Apple silicon (M1 or newer), macOS 13 or later, 8 GB memory or more
 (16 GB recommended), ~8 GB free disk space.
 
-1. Download the `.dmg` from the [latest release](https://github.com/Gbally/MeetScribe-releases/releases/latest)
-   and drag MeetScribe into Applications.
+1. Download the `.dmg` from the [latest release](https://github.com/Gbally/Hesper/releases/latest)
+   and drag Hesper into Applications.
 2. Open it. The first time, macOS may say it can't verify the developer (the app isn't notarized
    yet): System Settings → Privacy & Security → **Open Anyway**.
 3. A welcome window takes you through your name, languages, permissions and the AI models
@@ -109,8 +111,8 @@ Your mic and the meeting audio are recorded **separately**, so everything you sa
 your name, and speaker separation only has to tell the remote people apart. Without headphones,
 the remote voices picked up by your mic are detected and removed.
 
-The app is a SwiftUI menu bar app (`mac/`); the processing is a Python engine (`src/meetscribe/`)
-that the app installs on first launch into `~/Library/Application Support/MeetScribe` with the
+The app is a SwiftUI menu bar app (`mac/`); the processing is a Python engine (`src/hesper/`)
+that the app installs on first launch into `~/Library/Application Support/Hesper` with the
 bundled [uv](https://github.com/astral-sh/uv).
 
 ## Build from source
@@ -119,7 +121,7 @@ Needs the Xcode command line tools (`xcode-select --install`) and [uv](https://g
 
 ```sh
 ./scripts/make_signing_identity.sh   # once: a stable self-signed identity (keeps permissions across builds)
-./scripts/build_app.sh               # → build/MeetScribe.app + dist/MeetScribe-<version>.dmg
+./scripts/build_app.sh               # → build/Hesper.app + dist/Hesper-<version>.dmg
 ```
 
 **Permissions across updates:** macOS remembers permissions per code signature. Run
@@ -136,7 +138,7 @@ so the switch takes two releases:
 
 1. Join the Apple Developer Program, create a *Developer ID Application* certificate (it lands in
    your login keychain) and note your Team ID (10 characters). Store notarization credentials:
-   `xcrun notarytool store-credentials meetscribe-notary --apple-id … --team-id TEAMID`.
+   `xcrun notarytool store-credentials hesper-notary --apple-id … --team-id TEAMID`.
 2. **Transition release**, still self-signed: `DEVELOPER_TEAM=TEAMID ./scripts/release.sh "…"`.
    Apps that install it also accept updates signed by that team.
 3. A few days later, every release: `SIGN_ID="Developer ID Application: Name (TEAMID)"
@@ -167,23 +169,23 @@ cp config.example.toml config.toml   # then set `me = "Your Name"`
 ```
 
 Handy alias (add to `~/.zshrc`):
-`alias meetscribe=/path/to/MeetScribe/.venv/bin/meetscribe`
+`alias hesper=/path/to/Hesper/.venv/bin/hesper`
 
-**Permissions:** the first `meetscribe record` needs your terminal app (Terminal / iTerm)
+**Permissions:** the first `hesper record` needs your terminal app (Terminal / iTerm)
 allowed in System Settings → Privacy & Security → **Microphone** and **Screen & System
 Audio Recording**. Restart the terminal after granting.
 
 ### Use
 
 ```sh
-meetscribe record --title "Weekly sync"            # Ctrl+C when the meeting ends
-meetscribe record --app "Microsoft Teams"           # only Teams' audio (no notifications/music)
-meetscribe record --room                            # in-person meeting: everyone on your mic
-meetscribe record --speakers 3                      # if you know how many remote people talk
+hesper record --title "Weekly sync"            # Ctrl+C when the meeting ends
+hesper record --app "Microsoft Teams"           # only Teams' audio (no notifications/music)
+hesper record --room                            # in-person meeting: everyone on your mic
+hesper record --speakers 3                      # if you know how many remote people talk
 
-meetscribe process ~/Downloads/recording.m4a        # any existing audio file (Teams export, phone…)
-meetscribe rename <folder> "Speaker 1=Alice" "Speaker 2=Bob"   # name speakers, redo the notes
-meetscribe summarize <folder>                       # rewrite notes (e.g. after changing the model)
+hesper process ~/Downloads/recording.m4a        # any existing audio file (Teams export, phone…)
+hesper rename <folder> "Speaker 1=Alice" "Speaker 2=Bob"   # name speakers, redo the notes
+hesper summarize <folder>                       # rewrite notes (e.g. after changing the model)
 ```
 
 Each meeting gets a folder in `~/Documents/MeetingNotes/` with `notes.md`,
@@ -219,7 +221,7 @@ Mac's language (anything else → English); Settings → General → Language fo
 - `mac/Shared/AudioCapture.swift` — mic + system audio capture (shared)
 - `mac/App/` — the menu bar app (SwiftUI); `mac/CLI/` — `bin/meeting-recorder`
 - `scripts/` — `build_app.sh` (app + DMG), `build_recorder.sh`, `make_icon.swift`
-- `src/meetscribe/` — `audio` (decode), `transcribe` (Whisper), `diarize` (speakers),
+- `src/hesper/` — `audio` (decode), `transcribe` (Whisper), `diarize` (speakers),
   `transcript` (merge, echo removal, output), `summarize` (LLM notes), `cli`
 
 ## Translations
@@ -238,7 +240,7 @@ Language forces one.
 ## Repository layout
 
 - `mac/App/` — the menu bar app (SwiftUI); `mac/Shared/` — audio capture; `mac/CLI/` — command-line recorder
-- `src/meetscribe/` — the engine: `transcribe` (Whisper), `diarize` (speakers), `transcript` (merge,
+- `src/hesper/` — the engine: `transcribe` (Whisper), `diarize` (speakers), `transcript` (merge,
   echo removal), `summarize` (notes), `ask`, `dates`, `cli`
 - `scripts/` — build, release, translations; `catalog/models.json` — tested models
 - `docs/` — the website; `eval/` — model comparison on sample transcripts
@@ -246,10 +248,10 @@ Language forces one.
 
 ## Contributing
 
-Bug reports and ideas: [open an issue](https://github.com/Gbally/MeetScribe-releases/issues).
+Bug reports and ideas: [open an issue](https://github.com/Gbally/Hesper/issues).
 Pull requests welcome — please keep `python3 scripts/i18n.py extract` clean.
 
 ## License
 
-[MIT](LICENSE) © 2026 Gbally. MeetScribe builds on Whisper, Qwen, pyannote, NVIDIA TitaNet, MLX,
+[MIT](LICENSE) © 2026 Gbally. Hesper builds on Whisper, Qwen, pyannote, NVIDIA TitaNet, MLX,
 sherpa-onnx and more — see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

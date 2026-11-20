@@ -11,8 +11,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from meetscribe.cli import write_notes  # noqa: E402
-from meetscribe.config import Config  # noqa: E402
+from hesper.cli import write_notes  # noqa: E402
+from hesper.config import Config  # noqa: E402
 
 FIXTURES = ROOT / "eval" / "fixtures"
 

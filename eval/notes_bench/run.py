@@ -1,7 +1,7 @@
 """Notes benchmark: synthetic meetings (macOS voices, known script and truth) → transcription →
 notes with one or more models → scores.   Run with the app's Python, from the repository:
 
-  "$HOME/Library/Application Support/MeetScribe/venv/bin/python" eval/notes_bench/run.py OUT \\
+  "$HOME/Library/Application Support/Hesper/venv/bin/python" eval/notes_bench/run.py OUT \\
       --model mlx-community/Qwen3.5-4B-4bit [--model mlx-community/Qwen3-4B-Instruct-2507-4bit] \\
       [--rounds 3] [--meetings standup,client|all] [--templates own|general|both] [--engine]
 
@@ -9,9 +9,9 @@ OUT keeps the audio (made once), the transcripts and every set of notes; run aga
 rounds or models and only what's missing is done. The report is printed at the end and written
 to OUT/report.json (python eval/notes_bench/report.py OUT prints it again). The models must be
 downloaded already (Settings → AI models). Your own settings and voice library aren't used:
-each model gets its own MeetScribe home in OUT/homes.
+each model gets its own Hesper home in OUT/homes.
 
-On a PC (Windows): the engine's models are those of MEETSCRIBE_HOME (see WINDOWS.md), the notes model
+On a PC (Windows): the engine's models are those of HESPER_HOME (see WINDOWS.md), the notes model
 a GGUF (--model unsloth/Qwen3.5-4B-GGUF:Q4_K_M), and the audio made on a Mac (--audio DIR: one
 folder per meeting with mic.caf, system.caf, meeting.json), since it takes the macOS voices."""
 
@@ -29,7 +29,7 @@ sys.path.insert(0, str(HERE))
 from scenarios import SCENARIOS  # noqa: E402
 
 MAC = sys.platform == "darwin"
-SUPPORT = Path.home() / "Library/Application Support/MeetScribe" if MAC else Path(os.environ["MEETSCRIBE_HOME"])
+SUPPORT = Path.home() / "Library/Application Support/Hesper" if MAC else Path(os.environ["HESPER_HOME"])
 TODO_FILTER = ""  # --todo-filter: the judge's setting, else the engine's default
 
 
@@ -59,11 +59,11 @@ def home_for(out: Path, repo: str, languages: str = "en,fr") -> Path:
 
 
 def run_engine(home: Path, log: Path, *args) -> tuple[int, float]:
-    env = dict(os.environ, MEETSCRIBE_HOME=str(home), PYTHONPATH=str(ROOT / "src"), PYTHONUNBUFFERED="1",
+    env = dict(os.environ, HESPER_HOME=str(home), PYTHONPATH=str(ROOT / "src"), PYTHONUNBUFFERED="1",
                HF_HUB_DISABLE_PROGRESS_BARS="1", TOKENIZERS_PARALLELISM="false")
     t0 = time.time()
     with open(log, "w", encoding="utf-8") as f:
-        code = subprocess.run([sys.executable, "-m", "meetscribe", *args], cwd=ROOT, env=env, stdout=f, stderr=subprocess.STDOUT).returncode
+        code = subprocess.run([sys.executable, "-m", "hesper", *args], cwd=ROOT, env=env, stdout=f, stderr=subprocess.STDOUT).returncode
     return code, time.time() - t0
 
 

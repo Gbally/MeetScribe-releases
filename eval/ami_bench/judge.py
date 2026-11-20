@@ -16,8 +16,8 @@ sys.path.insert(0, str(HERE.parents[1] / "src"))
 sys.path.insert(0, str(HERE))
 
 from judge_data import PROMPT, prompt  # noqa: E402
-from meetscribe.summarize import SYSTEM  # noqa: E402
-from meetscribe.transcript import load_json, to_plain  # noqa: E402
+from hesper.summarize import SYSTEM  # noqa: E402
+from hesper.transcript import load_json, to_plain  # noqa: E402
 
 
 class Judge:

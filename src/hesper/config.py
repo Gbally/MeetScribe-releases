@@ -8,9 +8,9 @@ from pathlib import Path
 from .hardware import IS_MAC
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-# Data dir: the project folder when run from source, ~/Library/Application Support/MeetScribe
-# when run by the menu bar app (which sets MEETSCRIBE_HOME).
-HOME = Path(os.environ.get("MEETSCRIBE_HOME", PROJECT_ROOT))
+# Data dir: the project folder when run from source, ~/Library/Application Support/Hesper
+# when run by the menu bar app (which sets HESPER_HOME).
+HOME = Path(os.environ.get("HESPER_HOME", PROJECT_ROOT))
 CONFIG_FILE = HOME / "config.toml"
 MODELS_DIR = HOME / "models"
 

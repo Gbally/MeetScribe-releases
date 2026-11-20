@@ -89,7 +89,7 @@ struct HotkeyField: View {
                 Text(capturing ? tr("Press the keys…") : (hotkey?.display ?? tr("None")))
                     .font(.system(.body, design: .rounded).weight(.semibold))
                     .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(RoundedRectangle(cornerRadius: 6).stroke(capturing ? Color.accentColor : Color.secondary.opacity(0.4)))
+                    .background(RoundedRectangle(cornerRadius: 6).stroke(capturing ? Brand.accent : Color.secondary.opacity(0.4)))
                 Button(capturing ? tr("Cancel") : tr("Change…")) { capturing ? stop() : startCapture() }
                 if hotkey != nil && !capturing { Button("Remove") { hotkey = nil } }
             }

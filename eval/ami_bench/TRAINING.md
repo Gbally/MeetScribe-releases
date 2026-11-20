@@ -19,7 +19,7 @@ models in `hf\`, outputs under the root.
 
 - `eval/ami_bench` (see README.md): 30 AMI scenario meetings, **20 dev + 10 test**, manual
   transcripts, scored against the annotators' actions.
-- The app's to-do pipeline (`src/meetscribe/summarize.py`: `_parts` → `_extract` with
+- The app's to-do pipeline (`src/hesper/summarize.py`: `_parts` → `_extract` with
   `ACTIONS_PROMPT` → `check_actions` → `second_look` → `merge_actions`) with Qwen3.5 4B 4-bit (MLX)
   finds 36 % (dev) / 24 % (test) of annotated actions; ~85 % of its to-dos match none.
 - Most of that noise is things done **in** the meeting ("present", "give it a three") and ideas

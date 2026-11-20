@@ -224,6 +224,7 @@ struct HomeView: View {
 
     var header: some View {
         HStack(spacing: 8) {
+            AppIconView(size: 30)
             VStack(alignment: .leading, spacing: 0) {
                 Text(Date().formatted(.dateTime.weekday(.wide).locale(AppLanguage.locale))).font(.headline)
                 Text(Date().formatted(.dateTime.day().month(.wide).locale(AppLanguage.locale))).font(.caption).foregroundColor(.secondary)
@@ -231,23 +232,23 @@ struct HomeView: View {
             Spacer()
             if updater.available != nil {
                 Button { Windows.showSettings(model, tab: .about) } label: {
-                    Text("Update").font(.caption.weight(.medium)).foregroundColor(.accentColor)
+                    Text("Update").font(.caption.weight(.medium)).foregroundColor(Brand.badgeText)
                         .padding(.horizontal, 8).padding(.vertical, 2)
-                        .background(Capsule().fill(Color.accentColor.opacity(0.12)))
+                        .background(Capsule().fill(Brand.badgeBg))
                 }
                 .buttonStyle(.plain)
-                .help("A new version of MeetScribe is available")
+                .help("A new version of Hesper is available")
             }
             Button { Windows.showSettings(model) } label: { Image(systemName: "gearshape") }
-                .buttonStyle(.borderless).help("Settings")
+                .buttonStyle(.borderless).tint(.secondary).help("Settings")
             Menu {
                 Button("Transcribe an audio file…") { model.chooseAudioFile() }.disabled(model.phase != .ready)
                 Button("Import a transcript…") { model.chooseTranscriptFile() }.disabled(model.phase != .ready)
                 Button("Open notes folder") { NSWorkspace.shared.open(model.settings.notesFolder) }
                 Divider()
-                Button("Quit MeetScribe") { NSApp.terminate(nil) }
+                Button("Quit Hesper") { NSApp.terminate(nil) }
             } label: { Image(systemName: "ellipsis.circle") }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().tint(.secondary)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -295,11 +296,11 @@ struct HomeView: View {
                     model.startRecording(title: "", template: template)
                     template = nil
                 } label: {
-                    ZStack {
-                        Circle().fill(Color.red.opacity(0.14))
-                        Circle().strokeBorder(Color.red.opacity(0.35), lineWidth: 1)
-                        if model.isStarting { ProgressView().controlSize(.small) }
-                        else { Circle().fill(Color.red).frame(width: 22, height: 22) }
+                    ZStack {  // dusk circle, evening-star ring and glyph; it turns red only while recording
+                        Circle().fill(Brand.duskInk)
+                        Circle().strokeBorder(Brand.eveningStar, lineWidth: 2)
+                        if model.isStarting { ProgressView().controlSize(.small).tint(Brand.eveningStar) }
+                        else { BrandGlyph(color: Brand.eveningStar).frame(width: 28, height: 28) }
                     }
                     .frame(width: 60, height: 60)
                     .contentShape(Circle())
@@ -317,7 +318,7 @@ struct HomeView: View {
                         } label: {
                             Text(templateName(template ?? model.settings.defaultTemplate) + " ▾").font(.caption)
                         }
-                        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().tint(.secondary)
                         .help("Meeting type: shapes the notes")
                         if let hk = model.settings.hotkey { Text(verbatim: "· \(hk.display)") }
                     }
@@ -327,7 +328,7 @@ struct HomeView: View {
                             Text(b.openTodos.isEmpty ? tr("Notes from last time ›")
                                  : b.openTodos.count == 1 ? tr("1 open to-do from last time ›")
                                  : tr("%@ open to-dos from last time ›", "\(b.openTodos.count)"))
-                                .font(.caption).foregroundColor(.accentColor)
+                                .font(.caption).foregroundColor(Brand.accent)
                         }
                         .buttonStyle(.plain)
                     } else if model.settings.autoRecord {
@@ -441,7 +442,7 @@ struct HomeView: View {
             .padding(.bottom, 8)
             Divider()
             HStack {
-                tabButton(.today, icon: "calendar", label: "Today")
+                tabButton(.today, icon: nil, label: "Today")
                 tabButton(.meetings, icon: "list.bullet", label: "Meetings")
                 tabButton(.todos, icon: "checklist", label: "To-dos", count: model.myOpenTodoCount)
             }
@@ -450,13 +451,19 @@ struct HomeView: View {
         .padding(.top, 8)
     }
 
-    func tabButton(_ t: Tab, icon: String, label: String, count: Int = 0) -> some View {
-        Button { tab = t; search = "" } label: {
+    /// `icon` nil: the brand glyph (Today).
+    func tabButton(_ t: Tab, icon: String?, label: String, count: Int = 0) -> some View {
+        let selected = tab == t && search.isEmpty
+        return Button { tab = t; search = "" } label: {
             VStack(spacing: 2) {
-                Image(systemName: icon).font(.system(size: 15))
-                Text(tr(label) + (count > 0 ? " · \(count)" : "")).font(.caption2)
+                if let icon {
+                    Image(systemName: icon).font(.system(size: 15))
+                } else {
+                    BrandGlyph(color: selected ? Brand.accent : .secondary).frame(width: 18, height: 18)
+                }
+                Text(tr(label) + (count > 0 ? " · \(count)" : "")).font(.caption2.weight(selected ? .semibold : .regular))
             }
-            .foregroundColor(tab == t && search.isEmpty ? .accentColor : .secondary)
+            .foregroundColor(selected ? Brand.accent : .secondary)
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
         }
@@ -571,9 +578,9 @@ struct MeetingRow: View {
             if let n = meeting.notes, !n.actions.isEmpty {
                 let open = n.actions.indices.filter { !meeting.done.contains($0) }.count
                 if open > 0 {
-                    Text(tr("%@ to-do", "\(open)")).font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+                    Text(tr("%@ to-do", "\(open)")).font(.caption2.weight(.semibold)).foregroundColor(Brand.badgeText)
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(Capsule().fill(Brand.badgeBg))
                 }
             }
             Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
@@ -594,7 +601,7 @@ struct MeetingRow: View {
         } else if meeting.error != nil {
             Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
         } else if meeting.notes != nil {
-            Image(systemName: "doc.text.fill").foregroundColor(.accentColor)
+            Image(systemName: "doc.text.fill").foregroundColor(Brand.accent)
         } else {
             Image(systemName: "waveform").foregroundColor(.secondary)
         }
@@ -609,7 +616,7 @@ struct SetupCard: View {
     var body: some View {
         Card {
             Label("One-time setup", systemImage: "arrow.down.circle").font(.headline)
-            Text("MeetScribe runs its AI entirely on this Mac — your meetings never leave it. It first needs to download its engine and models (4–6 GB, 10–20 minutes).")
+            Text("Hesper runs its AI entirely on this Mac — your meetings never leave it. It first needs to download its engine and models (4–6 GB, 10–20 minutes).")
                 .font(.callout).fixedSize(horizontal: false, vertical: true)
             if model.phase == .settingUp {
                 if let p = model.setupProgress {
@@ -661,7 +668,7 @@ struct PermissionsCard: View {
                     Text("Already allowed? macOS applies it after a restart.")
                         .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
                     Spacer()
-                    Button("Restart MeetScribe") { model.restartApp() }.controlSize(.small)
+                    Button("Restart Hesper") { model.restartApp() }.controlSize(.small)
                 }
             }
         }
@@ -713,7 +720,7 @@ struct LaterNotesCard: View {
         if !waiting.isEmpty {
             Card {
                 HStack(alignment: .top) {
-                    Image(systemName: "moon.zzz").foregroundColor(.accentColor)
+                    Image(systemName: "moon.zzz").foregroundColor(Brand.accent)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(waiting.count == 1 ? tr("1 meeting waiting for its notes") : tr("%@ meetings waiting for their notes", "\(waiting.count)"))
                             .font(.callout.weight(.medium))

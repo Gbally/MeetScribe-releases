@@ -13,13 +13,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-import meetscribe.summarize as sm  # noqa: E402
-from meetscribe import names  # noqa: E402
-from meetscribe.dates import parse_due  # noqa: E402
-from meetscribe.imports import read_transcript  # noqa: E402
-from meetscribe.notes import parse_notes  # noqa: E402
-from meetscribe.transcribe import Word  # noqa: E402
-from meetscribe.transcript import Utterance, snap_to_sentences  # noqa: E402
+import hesper.summarize as sm  # noqa: E402
+from hesper import names  # noqa: E402
+from hesper.dates import parse_due  # noqa: E402
+from hesper.imports import read_transcript  # noqa: E402
+from hesper.notes import parse_notes  # noqa: E402
+from hesper.transcribe import Word  # noqa: E402
+from hesper.transcript import Utterance, snap_to_sentences  # noqa: E402
 
 D = date(2026, 10, 23)  # a Friday
 
@@ -250,8 +250,8 @@ def test_import():
 
 
 def test_session_dirs():
-    from meetscribe.cli import new_session_dir
-    from meetscribe.config import Config
+    from hesper.cli import new_session_dir
+    from hesper.config import Config
 
     with tempfile.TemporaryDirectory() as tmp:
         cfg = Config(notes_dir=tmp)
@@ -375,7 +375,7 @@ def test_deadline_said_but_not_given():
 def test_faint_mic():
     """The room heard by the mic (much quieter than your voice) goes; your quieter words stay."""
     import numpy as np
-    from meetscribe.transcript import drop_faint
+    from hesper.transcript import drop_faint
     sr, audio = 16000, np.zeros(16000 * 40, dtype=np.float32)
     words = []
     for k in range(8):  # your voice every 4 s, one in four 6 dB quieter; the room in between, 26 dB down
@@ -388,7 +388,7 @@ def test_faint_mic():
 
 def test_caption_names():
     """Full names Whisper invents at the start of a sentence go; greetings and real names stay."""
-    from meetscribe.transcript import drop_caption_names
+    from hesper.transcript import drop_caption_names
     u = [U("Jake", "Jake Leibbrandt, So all of the parts are here.", 0), U("Fahri", "Fahri Fahriyad- Absolutely. We will.", 3),
          U("Lisa", "Thanks Lisa, Emma from IT joins us too.", 6), U("Aisha", "Hi Oliver, I'm Aisha.", 9),
          U("Ben", "Hive AI, I think the AI part is the key.", 12), U("Yunus", "Jurgen Lerner,", 15)]
@@ -401,7 +401,7 @@ def test_crumb_speakers():
     """A few seconds of "another speaker" join the main voice they are clearly closest to; a
     crumb alike to none, or to two voices as much, stays apart."""
     import numpy as np
-    from meetscribe.diarize import Turn, consolidate
+    from hesper.diarize import Turn, consolidate
     rng = np.random.default_rng(0)
     a, b, other = (v / np.linalg.norm(v) for v in rng.normal(size=(3, 192)))
     mix = lambda *vs: sum(vs) / np.linalg.norm(sum(vs))
@@ -416,7 +416,7 @@ def test_crumb_speakers():
 def test_overlap_crumbs():
     """Two people talking at once come out as a third "speaker" of a few seconds: it goes. Someone
     who says a few words alone (hello), or a person who often talks over others, stays."""
-    from meetscribe.diarize import Turn, drop_overlap_crumbs, overlaps
+    from hesper.diarize import Turn, drop_overlap_crumbs, overlaps
     turns = [Turn(0, 60, 0), Turn(55, 120, 1),           # 0 and 1 overlap 5 s
              Turn(56, 59, 2), Turn(100, 102, 2),         # 2: 5 s, all over 0 or 1
              Turn(130, 134, 3),                          # 3: 4 s alone ("hello")
@@ -430,7 +430,7 @@ def test_overlap_crumbs():
 def test_judge_actions():
     """The judge drops the to-dos it's fairly sure aren't ones, keeps the rest; off, or a backend that
     can't tell (None), keeps them all."""
-    from meetscribe.summarize import JUDGE_PROMPT, judge_actions
+    from hesper.summarize import JUDGE_PROMPT, judge_actions
 
     class Fake:
         def __init__(self, odds):
@@ -461,7 +461,7 @@ def test_judge_actions():
 def test_whisper_stall():
     """Whisper that stops moving ends the job with a message instead of running forever."""
     import subprocess
-    code = ("import time, meetscribe.progress as p; p.STALL = 1; b = p._WhisperBar(10); b.__enter__(); "
+    code = ("import time, hesper.progress as p; p.STALL = 1; b = p._WhisperBar(10); b.__enter__(); "
             "b.update(1); time.sleep(5); print('still running')")
     r = subprocess.run([sys.executable, "-c", code], env={**os.environ, "PYTHONPATH": str(ROOT / "src"), "PYTHONUTF8": "1"},
                        capture_output=True, text=True, encoding="utf-8", timeout=30)  # Windows: not its ANSI code page
@@ -533,8 +533,8 @@ def test_out_of_memory():
     import io
     import weakref
 
-    from meetscribe import progress
-    from meetscribe.config import Config
+    from hesper import progress
+    from hesper.config import Config
 
     def said(stage, fn=progress.out_of_memory):
         out = io.StringIO()

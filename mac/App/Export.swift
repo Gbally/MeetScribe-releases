@@ -12,7 +12,7 @@ enum Export {
         let day = m.date.formatted(.iso8601.year().month().day())
         let people = (m.notes?.participants ?? []).map { "\"\($0.replacingOccurrences(of: "\"", with: "'"))\"" }
         let front = ["---", "date: \(day)", "participants: [\(people.joined(separator: ", "))]",
-                     "tags: [meeting]", "source: MeetScribe", "meetscribe_id: \"\(m.id)\"", "---", ""]
+                     "tags: [meeting]", "source: Hesper", "hesper_id: \"\(m.id)\"", "---", ""]
         // The link to the transcript only works inside the meeting folder.
         let lines = body.components(separatedBy: "\n").filter { !$0.contains("(transcript.md)") }
         return (front + lines).joined(separator: "\n")
@@ -32,8 +32,9 @@ enum Export {
             // Whose copy it is, from its front matter; copies made before it said so count as this one's.
             let lines = text.components(separatedBy: "\n")
             let front = lines.first == "---" ? Array(lines.dropFirst().prefix { $0 != "---" }) : []
-            guard let line = front.first(where: { $0.hasPrefix("meetscribe_id:") }) else { return file }
-            let id = line.dropFirst("meetscribe_id:".count).trimmingCharacters(in: CharacterSet(charactersIn: " \"'"))
+            // hesper_id; meetscribe_id in notes exported before the rename (MeetScribe → Hesper)
+            guard let line = front.first(where: { $0.hasPrefix("hesper_id:") || $0.hasPrefix("meetscribe_id:") }) else { return file }
+            let id = line.drop(while: { $0 != ":" }).dropFirst().trimmingCharacters(in: CharacterSet(charactersIn: " \"'"))
             if id == m.id { return file }
         }
         return folder.appendingPathComponent("\(name) \(m.id).md")

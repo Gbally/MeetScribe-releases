@@ -39,7 +39,7 @@ def extract_keys() -> tuple[set[str], list[str]]:
             for m in re.finditer(pattern, text):
                 s = m.group(1)
                 if not s or not re.search(r"[A-Za-z]", s) or re.fullmatch(r"[a-z0-9_\-]+(\.[a-z0-9_\-]+)+", s):
-                    continue  # empty, symbols only, or an identifier like "meetscribe.system-audio"
+                    continue  # empty, symbols only, or an identifier like "hesper.system-audio"
                 if s.startswith("\\(Image"):
                     continue  # icon + value (menu bar), nothing to translate
                 if "\\(" in s:

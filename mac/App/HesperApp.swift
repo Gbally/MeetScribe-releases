@@ -2,12 +2,12 @@ import SwiftUI
 import UserNotifications
 
 @main
-struct MeetScribeApp: App {
+struct HesperApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
         MenuBarExtra {
-            RootView().environmentObject(delegate.model)
+            RootView().environmentObject(delegate.model).tint(Brand.accent)
         } label: {
             MenuBarLabel().environmentObject(delegate.model)
         }
@@ -23,7 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().delegate = self
     }
 
-    /// `open -a MeetScribe --args --settings models` opens Settings on that tab (for testing).
+    /// `open -a Hesper --args --settings models` opens Settings on that tab (for testing).
     func applicationDidFinishLaunching(_ notification: Notification) {
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--settings") {
@@ -45,6 +45,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if let i = args.firstIndex(of: "--meeting"), i + 1 < args.count {
             let id = args[i + 1]
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { Windows.showMeeting(id, model: self.model) }
+        }
+        // Testing: --snapshot DIR saves each open window as a PNG (the app draws its own views: no
+        // screen-recording permission), plus the menu-bar icons, then quits.
+        if let i = args.firstIndex(of: "--snapshot"), i + 1 < args.count {
+            let dir = URL(fileURLWithPath: args[i + 1])
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                func save(_ rep: NSBitmapImageRep?, _ name: String) {
+                    if let data = rep?.representation(using: .png, properties: [:]) { try? data.write(to: dir.appendingPathComponent(name)) }
+                }
+                for (n, w) in NSApp.windows.enumerated() where w.isVisible {
+                    guard let v = w.contentView, let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { continue }
+                    v.cacheDisplay(in: v.bounds, to: rep)
+                    save(rep, "window-\(n)-\(w.title.replacingOccurrences(of: "/", with: "-")).png")
+                }
+                for (name, img) in [("idle", MenuBarIcon.idle), ("processing", MenuBarIcon.processing(0.4)), ("recording", MenuBarIcon.recording)] {
+                    let big = NSImage(size: NSSize(width: 72, height: 72), flipped: false) { r in img.draw(in: r); return true }
+                    save(big.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)), "menubar-\(name).png")
+                }
+                NSApp.terminate(nil)
+            }
         }
     }
 
@@ -74,18 +95,19 @@ struct MenuBarLabel: View {
 
     var body: some View {
         if model.isRecording {
-            Text("\(Image(systemName: "record.circle.fill")) \(formatDuration(model.elapsed))")
+            // Not a template image: the red dot means the mic is on, it must stay red.
+            Text("\(Image(nsImage: MenuBarIcon.recording)) \(formatDuration(model.elapsed))")
                 .monospacedDigit()
         } else if model.currentJob != nil {
             if let p = model.jobProgress {
-                Text("\(Image(systemName: "hourglass")) \(Int(p * 100))%").monospacedDigit()
+                Text("\(Image(nsImage: MenuBarIcon.processing(p))) \(Int(p * 100))%").monospacedDigit()
             } else {
-                Image(systemName: "hourglass")
+                Image(nsImage: MenuBarIcon.processing(nil))
             }
         } else if model.phase == .settingUp {
-            Image(systemName: "hourglass")
+            Image(nsImage: MenuBarIcon.processing(model.setupProgress))
         } else {
-            Image(systemName: "waveform")
+            Image(nsImage: MenuBarIcon.idle)
         }
     }
 }

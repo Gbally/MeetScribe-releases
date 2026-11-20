@@ -17,7 +17,7 @@
 set -e
 cd "$(dirname "$0")/.."
 ROOT=$(pwd)
-RELEASES_REPO=Gbally/MeetScribe-releases
+RELEASES_REPO=Gbally/Hesper
 GH=$(command -v gh || echo "$HOME/development/bin/gh")
 PUBLISH=0
 BETA=0
@@ -29,7 +29,7 @@ while :; do
   esac
 done
 VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
-NOTES=${1:-"MeetScribe $VERSION"}
+NOTES=${1:-"Hesper $VERSION"}
 if [ "$BETA" = 1 ]; then OUT="$ROOT/build-cache/beta"; FEED=latest-beta.json; else OUT="$ROOT/build-cache/release"; FEED=latest.json; fi
 
 if [ "$PUBLISH" = 0 ]; then
@@ -37,13 +37,13 @@ if [ "$PUBLISH" = 0 ]; then
   [ -f signing/MeetScribe-signing.keychain-db ] || [ -n "$SIGN_ID" ] || {
     echo "No stable signing identity: installed apps would refuse the update."; exit 1; }
   ./scripts/build_app.sh
-  [ -n "$SIGN_ID" ] && ./scripts/notarize.sh "dist/MeetScribe-$VERSION.dmg"
-  BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" build/MeetScribe.app/Contents/Info.plist)
+  [ -n "$SIGN_ID" ] && ./scripts/notarize.sh "dist/Hesper-$VERSION.dmg"
+  BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" build/Hesper.app/Contents/Info.plist)
   LABEL=$VERSION
   [ "$BETA" = 1 ] && LABEL="$VERSION-test.$BUILD"
-  DMG="MeetScribe-$LABEL.dmg"
+  DMG="Hesper-$LABEL.dmg"
   rm -rf "$OUT" && mkdir -p "$OUT"
-  cp "dist/MeetScribe-$VERSION.dmg" "$OUT/$DMG"
+  cp "dist/Hesper-$VERSION.dmg" "$OUT/$DMG"
   SHA=$(shasum -a 256 "$OUT/$DMG" | cut -d' ' -f1)
   URL="https://github.com/$RELEASES_REPO/releases/download/v$LABEL/$DMG"
   python3 - "$OUT/$FEED" "$LABEL" "$BUILD" "$URL" "$SHA" "$NOTES" <<'PY'
@@ -55,10 +55,10 @@ PY
   printf '%s' "$NOTES" > "$OUT/notes.txt"
   echo
   if [ "$BETA" = 1 ]; then
-    echo "✅ Prepared test version MeetScribe $LABEL (build $BUILD) in build-cache/beta/ — nothing published."
+    echo "✅ Prepared test version Hesper $LABEL (build $BUILD) in build-cache/beta/ — nothing published."
     echo "   Publish with:  ./scripts/release.sh --beta --publish"
   else
-    echo "✅ Prepared MeetScribe $VERSION (build $BUILD) in build-cache/release/ — nothing published."
+    echo "✅ Prepared Hesper $VERSION (build $BUILD) in build-cache/release/ — nothing published."
     echo "   Publish with:  ./scripts/release.sh --publish"
   fi
   exit 0
@@ -68,7 +68,7 @@ fi
 [ -f "$OUT/$FEED" ] || { echo "Run ./scripts/release.sh$( [ "$BETA" = 1 ] && echo ' --beta') (prepare) first."; exit 1; }
 VERSION=$(python3 -c "import json; print(json.load(open('$OUT/$FEED'))['version'])")
 NOTES=$(cat "$OUT/notes.txt")
-DMG="MeetScribe-$VERSION.dmg"
+DMG="Hesper-$VERSION.dmg"
 [ "$(git rev-parse --abbrev-ref HEAD)" = main ] || { echo "Publish from the main branch."; exit 1; }
 
 # 1. The code the release is built from.
@@ -89,11 +89,11 @@ if "$GH" release view "v$VERSION" --repo "$RELEASES_REPO" >/dev/null 2>&1; then
 elif [ "$BETA" = 1 ]; then
   echo "• GitHub pre-release v$VERSION"
   "$GH" release create "v$VERSION" "$OUT/$DMG" --repo "$RELEASES_REPO" --prerelease \
-    --target main --title "MeetScribe $VERSION (test version)" --notes "$NOTES"
+    --target main --title "Hesper $VERSION (test version)" --notes "$NOTES"
 else
   echo "• GitHub release v$VERSION"
   "$GH" release create "v$VERSION" "$OUT/$DMG" --repo "$RELEASES_REPO" \
-    --target main --title "MeetScribe $VERSION" --notes "$NOTES"
+    --target main --title "Hesper $VERSION" --notes "$NOTES"
 fi
 git fetch -q --tags origin
 
@@ -108,10 +108,10 @@ else
   cp catalog/models.json models.json
   git add latest.json models.json
 fi
-git diff --cached --quiet || git commit -qm "MeetScribe $VERSION"
+git diff --cached --quiet || git commit -qm "Hesper $VERSION"
 git push -q origin main
 if [ "$BETA" = 1 ]; then
-  echo "✅ Published test version MeetScribe $VERSION — apps receiving test versions will offer it within a day."
+  echo "✅ Published test version Hesper $VERSION — apps receiving test versions will offer it within a day."
 else
-  echo "✅ Released MeetScribe $VERSION — installed apps will offer the update within a day."
+  echo "✅ Released Hesper $VERSION — installed apps will offer the update within a day."
 fi

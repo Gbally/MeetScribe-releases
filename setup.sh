@@ -26,4 +26,4 @@ if [ "$1" = "--models" ]; then
   echo "Pre-downloading Whisper (~1.6 GB) and the summary model (~4.6 GB)…"
   .venv/bin/python -c "from huggingface_hub import snapshot_download as d; d('mlx-community/whisper-large-v3-turbo'); d('mlx-community/Qwen3-8B-4bit')"
 fi
-echo "✅ Setup done. Try: .venv/bin/meetscribe --help"
+echo "✅ Setup done. Try: .venv/bin/hesper --help"

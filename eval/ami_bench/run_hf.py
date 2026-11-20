@@ -38,8 +38,8 @@ sys.path.insert(0, str(ROOT / "src"))
 from transformers import AutoTokenizer  # noqa: E402
 
 import hf  # noqa: E402
-from meetscribe import summarize as S  # noqa: E402
-from meetscribe.transcript import load_json, to_plain  # noqa: E402
+from hesper import summarize as S  # noqa: E402
+from hesper.transcript import load_json, to_plain  # noqa: E402
 
 CACHE = DATA / "cache"
 CACHE.mkdir(exist_ok=True)

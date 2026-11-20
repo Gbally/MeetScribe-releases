@@ -42,7 +42,7 @@ enum Windows {
     static func showSettings(_ model: AppModel, tab: SettingsTab? = nil) {
         if let tab { model.settingsTab = tab }
         if settings == nil {
-            let w = make(title: tr("MeetScribe Settings"), size: NSSize(width: 780, height: 540),
+            let w = make(title: tr("Hesper Settings"), size: NSSize(width: 780, height: 540),
                          view: SettingsWindow().environmentObject(model), autosave: "Settings")
             // Closing it forgets temporary state (e.g. a custom model check); reopening starts fresh.
             NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: w, queue: .main) { _ in
@@ -78,7 +78,7 @@ enum Windows {
     static func showWelcome(_ model: AppModel, step: Int = 0) {
         if others["welcome"] == nil {
             let close: () -> Void = { Windows.others["welcome"]?.close() }
-            let w = make(title: tr("Welcome to MeetScribe"), size: NSSize(width: 540, height: 600),
+            let w = make(title: tr("Welcome to Hesper"), size: NSSize(width: 540, height: 600),
                          view: WelcomeView(close: close, step: step).environmentObject(model), autosave: nil)
             w.styleMask.remove(.resizable)
             NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: w, queue: .main) { _ in
@@ -95,7 +95,7 @@ enum Windows {
     /// The menu bar content in a normal window (testing / screenshots: `--preview`).
     static func showPreview(_ model: AppModel) {
         if others["preview"] == nil {
-            others["preview"] = make(title: "MeetScribe", size: NSSize(width: 380, height: 580),
+            others["preview"] = make(title: "Hesper", size: NSSize(width: 380, height: 580),
                                      view: RootView().environmentObject(model), autosave: nil)
         }
         present(others["preview"]!)
@@ -103,8 +103,8 @@ enum Windows {
 
     /// Re-titles open windows; their content redraws by itself (keyed by model.uiLanguage).
     static func languageChanged(_ model: AppModel) {
-        settings?.title = tr("MeetScribe Settings")
-        others["welcome"]?.title = tr("Welcome to MeetScribe")
+        settings?.title = tr("Hesper Settings")
+        others["welcome"]?.title = tr("Welcome to Hesper")
         for (id, w) in meetings { w.title = model.meeting(id)?.title ?? tr("Meeting") }
     }
 
@@ -113,7 +113,7 @@ enum Windows {
                          styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         w.title = title
         w.isReleasedWhenClosed = false
-        w.contentView = NSHostingView(rootView: view)
+        w.contentView = NSHostingView(rootView: view.tint(Brand.accent))  // the evening-star accent, not system blue
         w.center()
         if let autosave { w.setFrameAutosaveName(autosave) }
         return w
@@ -173,7 +173,7 @@ struct SettingsWindow: View {
         NavigationSplitView {
             List(SettingsTab.allCases, selection: Binding<SettingsTab?>(
                 get: { model.settingsTab }, set: { if let t = $0 { model.settingsTab = t } })) { tab in
-                Label(tr(tab.title), systemImage: tab.icon).tag(tab)
+                Label { Text(tr(tab.title)) } icon: { Image(systemName: tab.icon).foregroundStyle(Brand.accent) }.tag(tab)
             }
             .navigationSplitViewColumnWidth(230)
         } detail: {
@@ -231,7 +231,7 @@ struct GeneralPane: View {
         }
         Section("Shortcut and startup") {
             LabeledContent("Start / stop recording") { HotkeyField(hotkey: $model.settings.hotkey) }
-            Toggle("Open MeetScribe at login", isOn: $model.launchAtLogin)
+            Toggle("Open Hesper at login", isOn: $model.launchAtLogin)
         }
         EmailSection()
     }
@@ -321,7 +321,7 @@ struct ModelsPane: View {
         Section {
             LabeledContent("This Mac", value: hw.localizedSummary)
         } footer: {
-            Caption(tr("Models run on this Mac only. Recommendations come from a list of models tested with MeetScribe (updated %@).",
+            Caption(tr("Models run on this Mac only. Recommendations come from a list of models tested with Hesper (updated %@).",
                        model.catalog.updated.isEmpty ? "—" : model.catalog.updated))
         }
         if let d = model.modelDownload {
@@ -376,7 +376,7 @@ struct ModelsPane: View {
                         Tag(text: "Custom", color: .orange)
                         Tag(text: "In use", color: .green)
                     }
-                    Caption(repo + " · " + tr("not tested with MeetScribe"))
+                    Caption(repo + " · " + tr("not tested with Hesper"))
                     memoryNote(repo, speech: speech)
                 }
                 Spacer()
@@ -404,7 +404,7 @@ struct ModelsPane: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(m.name)
-                    if recommended { Tag(text: "Recommended", color: .accentColor) }
+                    if recommended { Tag(text: "Recommended", color: Brand.accent) }
                     if inUse { Tag(text: "In use", color: .green) }
                 }
                 Caption(String(format: "%.1f GB", m.sizeGB) + " · " + m.localizedDescription
@@ -467,11 +467,21 @@ struct AboutPane: View {
 
     init() { _updater = ObservedObject(wrappedValue: AppModelHolder.updater) }
 
-    static let repo = URL(string: "https://github.com/Gbally/MeetScribe-releases")!
+    /// The public repository: the one updates come from (Info.plist HesperReleasesRepo).
+    static var repo: URL { URL(string: "https://github.com/" + (Releases.repo.isEmpty ? "Gbally/Hesper" : Releases.repo))! }
 
     var body: some View {
         Section {
-            LabeledContent("Version", value: Engine.appVersion)
+            HStack(spacing: 16) {
+                AppIconView(size: 64)
+                VStack(alignment: .leading, spacing: 2) {
+                    Wordmark(size: 28)
+                    Text(verbatim: tr("Private meeting notes, fully offline") + " · " + Engine.appVersion).font(.callout).foregroundColor(.secondary)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+        Section {
             if let info = updater.available {
                 LabeledContent("Update available") {
                     Button(tr("Install %@ and restart", info.version)) { updater.install() }
@@ -487,39 +497,47 @@ struct AboutPane: View {
             }
             switch updater.state {
             case .downloading: ProgressView("Downloading the update…").progressViewStyle(.linear)
-            case .installing: Caption("Installing — MeetScribe will restart.")
+            case .installing: Caption("Installing — Hesper will restart.")
             case .failed(let msg): Text(msg).font(.caption).foregroundColor(.red)
             default: EmptyView()
             }
-            if let page = Releases.pageURL { Link("Release notes", destination: page) }
+            if let page = Releases.pageURL { Link("Release notes", destination: page).foregroundColor(Brand.link) }
             Toggle("Receive test versions", isOn: $testVersions)
                 .onChange(of: testVersions) { _ in Task { await updater.check() } }
             Caption("Versions with fixes still being tried, before they're released to everyone. Same signature checks as releases.")
         }
         Section("Open source") {
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "star.fill").font(.title2).foregroundColor(.yellow)
+                BrandGlyph(color: Brand.accent).frame(width: 22, height: 22)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("MeetScribe is free and open source").font(.callout.weight(.medium))
+                    Text("Hesper is free and open source").font(.callout.weight(.medium))
                     Caption("Like it? A star on GitHub helps other people find it.")
                 }
                 Spacer()
-                Button("Star on GitHub") { NSWorkspace.shared.open(Self.repo) }.buttonStyle(.borderedProminent)
+                Button { NSWorkspace.shared.open(Self.repo) } label: {
+                    Text("Star on GitHub").font(.callout.weight(.semibold)).foregroundColor(Brand.duskInk)
+                        .padding(.horizontal, 14).padding(.vertical, 6)
+                        .background(RoundedRectangle(cornerRadius: 7).fill(Brand.eveningStar))
+                }
+                .buttonStyle(.plain)
             }
-            LabeledContent("Source code") { Link(destination: Self.repo) { Text(verbatim: "github.com/Gbally/MeetScribe-releases") } }
-            LabeledContent("Bugs and ideas") { Link("Report a problem…", destination: Self.repo.appendingPathComponent("issues/new")) }
+            LabeledContent("Source code") { Link(destination: Self.repo) { Text(verbatim: Self.repo.host! + Self.repo.path) }.foregroundColor(Brand.link) }
+            LabeledContent("Bugs and ideas") { Link("Report a problem…", destination: Self.repo.appendingPathComponent("issues/new")).foregroundColor(Brand.link) }
             LabeledContent("License") {
                 HStack(spacing: 6) {
-                    Link(destination: Self.repo.appendingPathComponent("blob/main/LICENSE")) { Text(verbatim: "MIT") }
+                    Link(destination: Self.repo.appendingPathComponent("blob/main/LICENSE")) { Text(verbatim: "MIT") }.foregroundColor(Brand.link)
                     Text(verbatim: "·").foregroundColor(.secondary)
-                    Link("Privacy", destination: Self.repo.appendingPathComponent("blob/main/PRIVACY.md"))
+                    Link("Privacy", destination: Self.repo.appendingPathComponent("blob/main/PRIVACY.md")).foregroundColor(Brand.link)
                     Text(verbatim: "·").foregroundColor(.secondary)
-                    Link("Third-party licenses", destination: Self.repo.appendingPathComponent("blob/main/THIRD_PARTY_NOTICES.md"))
+                    Link("Third-party licenses", destination: Self.repo.appendingPathComponent("blob/main/THIRD_PARTY_NOTICES.md")).foregroundColor(Brand.link)
                 }
             }
         }
         Section("Credits") {
             Caption("Speech: OpenAI Whisper (MIT), via MLX. Notes: Qwen (Apache 2.0), via MLX. Speaker separation: pyannote segmentation (MIT) and NVIDIA TitaNet (CC BY 4.0), via sherpa-onnx.")
+        }
+        Section {
+            Text(Brand.publisher).font(.caption).foregroundColor(.secondary)
         }
     }
 }
@@ -576,7 +594,7 @@ struct CustomModelSection: View {
                 } else {
                     LabeledContent(c.repo, value: String(format: "%.1f GB", c.sizeGB))
                     if c.compatible == false {
-                        Label(tr("MeetScribe can't run it: %@", c.compatibilityReason), systemImage: "xmark.octagon.fill")
+                        Label(tr("Hesper can't run it: %@", c.compatibilityReason), systemImage: "xmark.octagon.fill")
                             .font(.caption).foregroundColor(.red).fixedSize(horizontal: false, vertical: true)
                     } else {
                         if c.compatible == true {
@@ -601,14 +619,14 @@ struct CustomModelSection: View {
         } header: {
             Text("Custom model")
         } footer: {
-            Caption("For experiments: any model from Hugging Face. MeetScribe checks it can run it; you can go back to the recommended model at any time.")
+            Caption("For experiments: any model from Hugging Face. Hesper checks it can run it; you can go back to the recommended model at any time.")
         }
         .confirmationDialog(tr("Use %@?", check?.repo ?? tr("this model")), isPresented: $confirm) {
             Button("Download and use") {
                 if let c = checks[speech] { model.useModel(c.asCatalogModel(), speech: speech) }
             }
         } message: {
-            Text("It isn't tested with MeetScribe. If results look wrong or processing fails, switch back to the recommended model here.")
+            Text("It isn't tested with Hesper. If results look wrong or processing fails, switch back to the recommended model here.")
         }
     }
 
@@ -654,7 +672,7 @@ struct LaterNotesSection: View {
                             value: $model.settings.laterIdleMinutes, in: 2...60, step: 1)
                 }
                 Toggle("When the screen is locked", isOn: $model.settings.laterWhenLocked)
-                Caption("Only when the Mac is on power. Transcripts are always made right away. If you come back while notes are being written, that meeting is finished and the next ones wait. To write them now: the button in MeetScribe's window.")
+                Caption("Only when the Mac is on power. Transcripts are always made right away. If you come back while notes are being written, that meeting is finished and the next ones wait. To write them now: the button in Hesper's window.")
             }
         }
         .onAppear { model.loadInstalledModels() }

@@ -1,5 +1,5 @@
 """Downloads the AMI Meeting Corpus' manual annotations (23 MB, CC BY 4.0, University of Edinburgh)
-into eval/ami_bench/data/ami, then converts the benchmark's meetings into MeetScribe sessions.
+into eval/ami_bench/data/ami, then converts the benchmark's meetings into Hesper sessions.
 
   python3 eval/ami_bench/fetch.py
 """

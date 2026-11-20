@@ -3,20 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MeetScribe — meeting notes that stay on your Mac</title>
-<meta name="description" content="MeetScribe records your Teams, Zoom or Meet calls, transcribes them, recognises who spoke, and writes a summary with decisions and to-dos — all on your Mac.">
+<title>Hesper — private meeting notes, fully offline</title>
+<meta name="description" content="Hesper records your Teams, Zoom or Meet calls, transcribes them, recognises who spoke, and writes a summary with decisions and to-dos — all on your Mac.">
 <link rel="icon" href="img/icon.png">
-<meta property="og:title" content="MeetScribe — meeting notes that stay on your Mac">
+<meta property="og:title" content="Hesper — private meeting notes, fully offline">
 <meta property="og:description" content="Local AI meeting notes for macOS: transcript, speakers, summary and to-dos. Free, private, no account.">
 <meta property="og:image" content="img/meeting.png">
 <style>
   :root {
-    --bg: #fbfbfd; --surface: #ffffff; --text: #1d1d1f; --muted: #6e6e73; --line: #e5e5ea;
-    --accent: #5b45f2; --accent-text: #ffffff; --link: #5b45f2; --red: #e5484d; --tint: #f2f0ff;
+    --bg: #F6F6F3; --surface: #ffffff; --text: #1d1d1f; --muted: #6e6e73; --line: #e5e5ea;
+    --accent: #F2B544; --accent-text: #1B1F2E; --link: #8A5A0F; --red: #D93A3A; --tint: #F7E7C2;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #0f0f12; --surface: #18181c; --text: #f5f5f7; --muted: #a1a1a6; --line: #2a2a30;
-            --accent: #6b57ff; --accent-text: #ffffff; --link: #a99cff; --tint: #1d1a33; }
+    :root { --bg: #1B1F2E; --surface: #232838; --text: #f2f2f4; --muted: #a9adbb; --line: #333a52;
+            --accent: #F2B544; --accent-text: #1B1F2E; --link: #F4C978; --tint: #2E3550; }
   }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
@@ -92,13 +92,13 @@
 
 <nav>
   <div class="wrap">
-    <a class="brand" href="#"><img src="img/icon.png" alt="">MeetScribe</a>
+    <a class="brand" href="#"><img src="img/icon.png" alt="">Hesper</a>
     <div class="links">
       <a href="#features">Features</a>
       <a href="#privacy">Privacy</a>
       <a href="#install">Install</a>
-      <a href="https://github.com/Gbally/MeetScribe-releases"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z"/></svg> GitHub</a>
-      <a class="btn small dl" href="https://github.com/Gbally/MeetScribe-releases/releases/latest">Download</a>
+      <a href="https://github.com/Gbally/Hesper"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z"/></svg> GitHub</a>
+      <a class="btn small dl" href="https://github.com/Gbally/Hesper/releases/latest">Download</a>
     </div>
   </div>
 </nav>
@@ -106,19 +106,19 @@
 <header class="hero">
   <div class="wrap">
     <h1>Meeting notes that<br><span>stay on your Mac.</span></h1>
-    <p class="lead">MeetScribe records your Teams, Zoom or Meet calls, works out who said what, and hands you a
+    <p class="lead">Hesper records your Teams, Zoom or Meet calls, works out who said what, and hands you a
       summary, the decisions and a to-do list — all with AI that runs on your Mac. No account, nothing uploaded.</p>
     <div class="actions">
-    <a class="btn dl" href="https://github.com/Gbally/MeetScribe-releases/releases/latest">
+    <a class="btn dl" href="https://github.com/Gbally/Hesper/releases/latest">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
       <span id="dl-label">Download for Mac</span>
     </a>
-    <a class="btn ghost" href="https://github.com/Gbally/MeetScribe-releases"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z"/></svg> Star on GitHub</a>
+    <a class="btn ghost" href="https://github.com/Gbally/Hesper"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z"/></svg> Star on GitHub</a>
     </div>
     <div class="meta">Free and open source · macOS 13 or later · Apple silicon (M1 or newer) · 8 GB memory or more</div>
     <div class="meta">English · Français · Español · Português · 日本語 · 中文</div>
     <div class="shots">
-      <img class="a" src="img/home.png" alt="MeetScribe menu bar window: a record button and today's meetings">
+      <img class="a" src="img/home.png" alt="Hesper menu bar window: a record button and today's meetings">
       <img class="b" src="img/meeting.png" alt="Meeting notes with to-dos, due dates, summary and decisions">
     </div>
   </div>
@@ -158,7 +158,7 @@
           <li>Audio is deleted automatically after 7 days — you choose</li>
           <li>Models are picked for your Mac's memory, and you can bring your own</li>
           <li>No account, no analytics, no tracking — the app only checks GitHub for updates</li>
-          <li>Open source: <a href="https://github.com/Gbally/MeetScribe-releases">read the code</a> and the <a href="https://github.com/Gbally/MeetScribe-releases/blob/main/PRIVACY.md">privacy details</a></li>
+          <li>Open source: <a href="https://github.com/Gbally/Hesper">read the code</a> and the <a href="https://github.com/Gbally/Hesper/blob/main/PRIVACY.md">privacy details</a></li>
         </ul>
       </div>
       <img src="img/models.png" alt="Settings: AI models recommended for this Mac">
@@ -169,15 +169,15 @@
 <section id="install">
   <div class="wrap">
     <h2>Install in a few minutes</h2>
-    <p class="sub">MeetScribe updates itself after that.</p>
+    <p class="sub">Hesper updates itself after that.</p>
     <div class="steps">
-      <div class="card"><h3>Download</h3><p>Open the <code>.dmg</code> and drag MeetScribe into Applications.</p></div>
+      <div class="card"><h3>Download</h3><p>Open the <code>.dmg</code> and drag Hesper into Applications.</p></div>
       <div class="card"><h3>Open it</h3><p>If macOS can't verify the developer: System Settings → Privacy &amp; Security → <b>Open Anyway</b>.</p></div>
       <div class="card"><h3>Follow the welcome</h3><p>Your name, your meeting languages, and the AI models picked for your Mac (4–6 GB, downloaded once).</p></div>
-      <div class="card"><h3>Allow access</h3><p>Microphone, and Screen &amp; System Audio Recording to hear the other participants. Restart MeetScribe once.</p></div>
+      <div class="card"><h3>Allow access</h3><p>Microphone, and Screen &amp; System Audio Recording to hear the other participants. Restart Hesper once.</p></div>
     </div>
     <div class="cta" style="margin-top:44px">
-      <a class="btn dl" href="https://github.com/Gbally/MeetScribe-releases/releases/latest"><span class="dl-text">Download for Mac</span></a>
+      <a class="btn dl" href="https://github.com/Gbally/Hesper/releases/latest"><span class="dl-text">Download for Mac</span></a>
       <p class="note">Always tell the other participants that you're recording, and follow your company's rules.</p>
     </div>
   </div>
@@ -186,15 +186,15 @@
 <footer>
   <div class="wrap">
     <div class="row">
-      <div>MeetScribe <span id="version"></span> · © 2026 Gbally · free and open source under the <a href="https://github.com/Gbally/MeetScribe-releases/blob/main/LICENSE">MIT License</a>, provided as is, without warranty.</div>
+      <div>Hesper <span id="version"></span> · by Nibjorg Studio · formerly MeetScribe · free and open source under the <a href="https://github.com/Gbally/Hesper/blob/main/LICENSE">MIT License</a>, provided as is, without warranty.</div>
     </div>
     <div class="row">
       <div class="links">
-        <a href="https://github.com/Gbally/MeetScribe-releases">Source code</a>
-        <a href="https://github.com/Gbally/MeetScribe-releases/blob/main/PRIVACY.md">Privacy</a>
-        <a href="https://github.com/Gbally/MeetScribe-releases/blob/main/THIRD_PARTY_NOTICES.md">Third-party licenses</a>
-        <a href="https://github.com/Gbally/MeetScribe-releases/releases">All versions</a>
-        <a href="https://github.com/Gbally/MeetScribe-releases/issues">Contact &amp; bug reports</a>
+        <a href="https://github.com/Gbally/Hesper">Source code</a>
+        <a href="https://github.com/Gbally/Hesper/blob/main/PRIVACY.md">Privacy</a>
+        <a href="https://github.com/Gbally/Hesper/blob/main/THIRD_PARTY_NOTICES.md">Third-party licenses</a>
+        <a href="https://github.com/Gbally/Hesper/releases">All versions</a>
+        <a href="https://github.com/Gbally/Hesper/issues">Contact &amp; bug reports</a>
       </div>
     </div>
     <div>Built on OpenAI Whisper (MIT), Qwen (Apache 2.0), pyannote (MIT) and NVIDIA TitaNet (CC BY 4.0), via MLX and sherpa-onnx.</div>
@@ -203,11 +203,11 @@
 
 <script>
   // The download buttons point straight at the newest installer (latest.json is in the repo root).
-  fetch("https://raw.githubusercontent.com/Gbally/MeetScribe-releases/main/latest.json", { cache: "no-store" })
+  fetch("https://raw.githubusercontent.com/Gbally/Hesper/main/latest.json", { cache: "no-store" })
     .then(r => r.ok ? r.json() : Promise.reject())
     .then(info => {
       document.querySelectorAll("a.dl").forEach(a => { a.href = info.url; });
-      const label = "Download MeetScribe " + info.version;
+      const label = "Download Hesper " + info.version;
       document.getElementById("dl-label").textContent = label;
       document.querySelectorAll(".dl-text").forEach(s => { s.textContent = label; });
       document.getElementById("version").textContent = info.version;

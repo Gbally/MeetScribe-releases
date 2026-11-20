@@ -1,6 +1,6 @@
 [project]
-name = "meetscribe"
-version = "0.6.6"
+name = "hesper"
+version = "0.7.0"
 description = "Local meeting recorder, transcriber and note-taker for macOS and Windows"
 requires-python = ">=3.12"
 dependencies = [
@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.scripts]
-meetscribe = "meetscribe.cli:main"
+hesper = "hesper.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.13.4,<0.14.0"]

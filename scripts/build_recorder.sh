@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds the command-line recorder into bin/meeting-recorder (used by `meetscribe record`).
+# Builds the command-line recorder into bin/meeting-recorder (used by `hesper record`).
 set -e
 cd "$(dirname "$0")/.."
 mkdir -p bin

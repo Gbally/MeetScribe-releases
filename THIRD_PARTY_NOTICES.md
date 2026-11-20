@@ -1,6 +1,6 @@
 # Third-party notices
 
-MeetScribe itself is released under the [MIT License](LICENSE). It builds on the projects below,
+Hesper itself is released under the [MIT License](LICENSE). It builds on the projects below,
 which keep their own licenses. Only `uv` ships inside the app; the rest is downloaded on first
 setup (the Python engine) or when a model is chosen (the AI models).
 
@@ -30,7 +30,7 @@ page).
 | soundfile / libsndfile | BSD 3-Clause / LGPL 2.1 | [bastibe/python-soundfile](https://github.com/bastibe/python-soundfile), [libsndfile](https://github.com/libsndfile/libsndfile) |
 
 The complete list of Python packages and versions is in [`uv.lock`](uv.lock); each package's
-license file is installed next to it in `~/Library/Application Support/MeetScribe/venv`.
+license file is installed next to it in `~/Library/Application Support/Hesper/venv`.
 
 The full license texts are at the links above. CC BY 4.0 attribution: TitaNet © NVIDIA
 Corporation, used unmodified (converted to ONNX by the sherpa-onnx project).

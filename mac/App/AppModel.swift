@@ -71,7 +71,7 @@ struct Brief {
 final class AppModel: ObservableObject {
     enum Phase: Equatable { case needsSetup, settingUp, ready }
 
-    @Published var phase: Phase = Engine.isInstalled ? .ready : .needsSetup
+    @Published var phase: Phase = .needsSetup  // set in init, once MeetScribe's data has moved over
     @Published var settings: AppSettings {
         didSet {
             saveSettings()
@@ -113,7 +113,7 @@ final class AppModel: ObservableObject {
     @Published var toast: String?
     @Published var nextEvent: CalendarEvent?     // happening now or within 30 min (for the brief card)
     @Published var todayEvents: [CalendarEvent] = []
-    @Published var catalog = ModelCatalog.load()
+    @Published var catalog = ModelCatalog(version: 0, updated: "", notes: [], speech: [])  // loaded in init (after the data folder moved)
     @Published var installedModels: [String: Double] = [:]   // repo → GB on disk
     @Published var modelDownload: (repo: String, progress: Double?, status: String)?
     @Published var modelDownloadError: String?
@@ -160,7 +160,34 @@ final class AppModel: ObservableObject {
     private var meterTimer: Timer?
     private var runner: Task<Void, Never>?
 
+    /// Hesper was called MeetScribe (bundle id app.meetscribe.MeetScribe). On the first launch: its
+    /// settings come over, and the old app is quit and moved to the Trash, so two copies never
+    /// record or start at login side by side. Its data folder moves in Engine.support.
+    static let oldBundleID = "app.meetscribe.MeetScribe"
+
+    private static func takeOverFromMeetScribe() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: "tookOverFromMeetScribe") else { return }
+        defaults.set(true, forKey: "tookOverFromMeetScribe")
+        if defaults.data(forKey: "settings") == nil, let old = defaults.persistentDomain(forName: oldBundleID) {
+            // Not the login-item flag: Hesper is a new login item and registers itself.
+            for (key, value) in old where key != "loginItemDefaultApplied" && !key.hasPrefix("NS") { defaults.set(value, forKey: key) }
+        }
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: oldBundleID)
+        running.forEach { $0.terminate() }
+        // Its data folder moves next (Engine.support): wait for it to quit (a few seconds at most).
+        let deadline = Date().addingTimeInterval(8)
+        while running.contains(where: { !$0.isTerminated }) && Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.2)) }
+        for url in NSWorkspace.shared.urlsForApplications(withBundleIdentifier: oldBundleID)
+        where url.path.hasPrefix("/Applications/") || url.path.hasPrefix(NSHomeDirectory() + "/Applications/") {
+            try? FileManager.default.trashItem(at: url, resultingItemURL: nil)
+        }
+    }
+
     init() {
+        Self.takeOverFromMeetScribe()
+        phase = Engine.isInstalled ? .ready : .needsSetup  // (moves MeetScribe's data folder, the first time)
+        catalog = ModelCatalog.load()
         if let data = UserDefaults.standard.data(forKey: "settings"),
            let s = try? JSONDecoder().decode(AppSettings.self, from: data) {
             settings = s
@@ -181,7 +208,7 @@ final class AppModel: ObservableObject {
         // Leftovers of the usage statistics removed in 0.5.2 (random install id etc.).
         for key in ["installID", "telemetryEnabled", "installAnnounced", "lastVersion"] { UserDefaults.standard.removeObject(forKey: key) }
         reload()
-        if phase == .needsSetup && FileManager.default.fileExists(atPath: Engine.python.path) {
+        if phase == .needsSetup && (FileManager.default.fileExists(atPath: Engine.python.path) || Engine.migrated) {
             runSetup() // app was updated: refresh the engine quietly (models are already downloaded)
         }
         let center = UNUserNotificationCenter.current()
@@ -276,7 +303,7 @@ final class AppModel: ObservableObject {
 
     func meeting(_ id: Meeting.ID) -> Meeting? { meetings.first { $0.id == id } }
 
-    /// Shows macOS's "record screen & system audio" request (and adds MeetScribe to the list in
+    /// Shows macOS's "record screen & system audio" request (and adds Hesper to the list in
     /// System Settings) without waiting for the first recording to fail.
     private func askForScreenAudioIfNeeded() {
         guard !SystemAudioCapture.hasPermission else { return }
@@ -326,7 +353,7 @@ final class AppModel: ObservableObject {
             if settings.llmModel == nil { settings.llmModel = ModelCatalog.recommended(catalog.notes, for: .current)?.repo }
             if settings.whisperModel == nil { settings.whisperModel = ModelCatalog.recommended(catalog.speech, for: .current)?.repo }
             Engine.writeConfig(settings)
-            let setup = await Engine.meetscribe(["setup"]) { [weak self] line in
+            let setup = await Engine.hesper(["setup"]) { [weak self] line in
                 guard let self else { return }
                 if line.hasPrefix("@@progress "), let v = Double(line.dropFirst(11)) {
                     self.setupProgress = v
@@ -358,7 +385,7 @@ final class AppModel: ObservableObject {
     static func withNetworkHint(_ error: String) -> String {
         let signs = ["certificate", "UnknownIssuer", "CERTIFICATE_VERIFY_FAILED", "SSL"]
         guard signs.contains(where: { error.localizedCaseInsensitiveContains($0) }) else { return error }
-        return error + "\n\n" + tr("This network checks secure connections with its own certificate (often a company network). Ask your IT team to install it in Keychain Access, or set up MeetScribe on another network (e.g. your phone's hotspot) — afterwards it works on any network.")
+        return error + "\n\n" + tr("This network checks secure connections with its own certificate (often a company network). Ask your IT team to install it in Keychain Access, or set up Hesper on another network (e.g. your phone's hotspot) — afterwards it works on any network.")
     }
 
     private func failSetup(_ message: String) {
@@ -462,7 +489,7 @@ final class AppModel: ObservableObject {
             if settings.endReminders, !endReminderSent {
                 endReminderSent = true
                 notify(title: tr("Is “%@” over?", recordingEvent?.title ?? tr("the meeting")),
-                       body: tr("MeetScribe is still recording."), category: "ENDED")
+                       body: tr("Hesper is still recording."), category: "ENDED")
             }
         }
         checkMeetingOver(rec)
@@ -473,11 +500,11 @@ final class AppModel: ObservableObject {
 
     private func readInfo(_ folder: URL) -> MeetingInfo? {
         guard let data = try? Data(contentsOf: folder.appendingPathComponent("meeting.json")) else { return nil }
-        return try? JSONDecoder.meetscribe.decode(MeetingInfo.self, from: data)
+        return try? JSONDecoder.hesper.decode(MeetingInfo.self, from: data)
     }
 
     private func writeInfo(_ folder: URL, _ info: MeetingInfo) {
-        try? JSONEncoder.meetscribe.encode(info).write(to: folder.appendingPathComponent("meeting.json"))
+        try? JSONEncoder.hesper.encode(info).write(to: folder.appendingPathComponent("meeting.json"))
     }
 
     // MARK: - Processing queue
@@ -521,7 +548,7 @@ final class AppModel: ObservableObject {
         runner = Task {
             let (args, folder) = arguments(for: job)
             if case .ask = job { askResult = nil; askError = nil }
-            let result = await Engine.meetscribe(args) { [weak self] line in
+            let result = await Engine.hesper(args) { [weak self] line in
                 if line.hasPrefix("@@memory ") {
                     self?.jobMemory = String(line.dropFirst(9))
                 } else if line.hasPrefix("@@result "), let data = line.dropFirst(9).data(using: .utf8) {
@@ -781,7 +808,7 @@ final class AppModel: ObservableObject {
         guard !old.isEmpty else { return }
         upgrading = true
         Task {
-            for f in old { _ = await Engine.meetscribe(["render", f.path]) { _ in } }
+            for f in old { _ = await Engine.hesper(["render", f.path]) { _ in } }
             upgrading = false
             reload()
         }
@@ -875,7 +902,7 @@ final class AppModel: ObservableObject {
         guard phase == .ready else { return }
         Task {
             var found: [String: Double] = [:]
-            _ = await Engine.meetscribe(["models", "list"]) { line in
+            _ = await Engine.hesper(["models", "list"]) { line in
                 if line.hasPrefix("@@result "), let data = line.dropFirst(9).data(using: .utf8),
                    let dict = try? JSONDecoder().decode([String: Double].self, from: data) { found = dict }
             }
@@ -897,7 +924,7 @@ final class AppModel: ObservableObject {
         modelDownloadError = nil
         modelDownload = (model.repo, nil, tr("Starting download…"))
         Task {
-            let result = await Engine.meetscribe(["models", "download", model.repo]) { [weak self] line in
+            let result = await Engine.hesper(["models", "download", model.repo]) { [weak self] line in
                 guard let self, var d = self.modelDownload else { return }
                 if line.hasPrefix("@@progress "), let v = Double(line.dropFirst(11)) { d.progress = v }
                 else if let text = localizedStep(line) { d.status = text }
@@ -917,7 +944,7 @@ final class AppModel: ObservableObject {
     func deleteModel(_ repo: String) {
         guard repo != notesModel, repo != speechModel else { return }
         Task {
-            _ = await Engine.meetscribe(["models", "delete", repo]) { _ in }
+            _ = await Engine.hesper(["models", "delete", repo]) { _ in }
             loadInstalledModels()
         }
     }
@@ -974,8 +1001,8 @@ final class AppModel: ObservableObject {
         guard settings.stopWhenOver || settings.endReminders else { return }
         notify(title: tr("The call has ended — stop recording?"),
                body: settings.stopWhenOver
-                   ? tr("MeetScribe stops by itself in %@ min unless you keep it going.", "\(Int(MeetingOverWatch.afterCall / 60))")
-                   : tr("MeetScribe is still recording."),
+                   ? tr("Hesper stops by itself in %@ min unless you keep it going.", "\(Int(MeetingOverWatch.afterCall / 60))")
+                   : tr("Hesper is still recording."),
                category: "ENDED")
     }
 
@@ -1013,7 +1040,7 @@ final class AppModel: ObservableObject {
             over.askedQuiet = true
             notify(title: tr("Is the meeting over?"),
                    body: settings.stopWhenOver
-                       ? tr("Nothing heard for %@ min. MeetScribe stops by itself after %@ min of quiet.",
+                       ? tr("Nothing heard for %@ min. Hesper stops by itself after %@ min of quiet.",
                             "\(Int(quiet / 60))", "\(Int(MeetingOverWatch.quietStop / 60))")
                        : tr("Nothing heard for %@ min.", "\(Int(quiet / 60))"), category: "ENDED")
         }
@@ -1041,7 +1068,7 @@ final class AppModel: ObservableObject {
         guard settings.callReminders else { return }
         let event = settings.useCalendar ? CalendarService.shared.currentMeeting() : nil
         notify(title: event.map { tr("Record “%@”?", $0.title) } ?? tr("Record this call?"),
-               body: tr("%@ is using the microphone. Click Record to take notes with MeetScribe.", app), category: "CALL")
+               body: tr("%@ is using the microphone. Click Record to take notes with Hesper.", app), category: "CALL")
     }
 
     func notify(title: String, body: String, category: String? = nil) {
@@ -1074,12 +1101,12 @@ final class AppModel: ObservableObject {
             var problem: String?
             switch s.authorizationStatus {
             case .denied:
-                problem = tr("Notifications are turned off for MeetScribe in macOS, so you won't see these.")
+                problem = tr("Notifications are turned off for Hesper in macOS, so you won't see these.")
             case .notDetermined:
                 problem = tr("macOS hasn't asked for permission yet.")
             default:
                 if s.alertStyle == .none {
-                    problem = tr("macOS only lists MeetScribe's notifications in Notification Center — no pop-up.")
+                    problem = tr("macOS only lists Hesper's notifications in Notification Center — no pop-up.")
                 }
             }
             DispatchQueue.main.async { self.notificationProblem = problem }
@@ -1214,7 +1241,7 @@ final class AppModel: ObservableObject {
     func exportToAppleNotes(_ id: Meeting.ID) {
         guard let m = meeting(id) else { return }
         show(Export.appleNotes(m) ? tr("Added to Apple Notes.")
-             : tr("Couldn't add to Apple Notes — allow MeetScribe in System Settings → Privacy & Security → Automation."))
+             : tr("Couldn't add to Apple Notes — allow Hesper in System Settings → Privacy & Security → Automation."))
     }
 
     func sendToThings(_ id: Meeting.ID, mineOnly: Bool) {
@@ -1296,7 +1323,7 @@ final class AppModel: ObservableObject {
         let folder = m.folder
         reload()
         Task {
-            _ = await Engine.meetscribe(["render", folder.path]) { _ in }
+            _ = await Engine.hesper(["render", folder.path]) { _ in }
             reload()
         }
     }

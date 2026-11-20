@@ -2,13 +2,13 @@
 merge), without the notes pass. Every model answer is kept in data/cache, so after the first run a
 change to the rules is scored in minutes: only the prompts it changes go to the model again.
 
-  "$HOME/Library/Application Support/MeetScribe/venv/bin/python" eval/ami_bench/run.py NAME \\
+  "$HOME/Library/Application Support/Hesper/venv/bin/python" eval/ami_bench/run.py NAME \\
       [--set dev|test|all] [--rounds 2] [--model mlx-community/Qwen3.5-4B-4bit] [--src DIR]
 
 Writes data/runs/NAME/ID-ROUND.json (the to-dos) and prints the score (score.py NAME again).
 --src: another copy of the engine's code (a variant to compare), else this repository's src/.
-On a PC (Windows): the engine's llama.cpp backend, with the models of MEETSCRIBE_HOME (the engine's
-setup, see WINDOWS.md); MEETSCRIBE_DEVICE=cpu and --llama-server (llama.cpp's CPU build) for a PC
+On a PC (Windows): the engine's llama.cpp backend, with the models of HESPER_HOME (the engine's
+setup, see WINDOWS.md); HESPER_DEVICE=cpu and --llama-server (llama.cpp's CPU build) for a PC
 without a GPU. The GPU and the CPU have their own cache.
 Each round is its own sample of the model (it runs at the app's temperature)."""
 
@@ -26,7 +26,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 DATA = HERE / "data"
 MAC = sys.platform == "darwin"
-SUPPORT = Path.home() / "Library/Application Support/MeetScribe" if MAC else Path(os.environ["MEETSCRIBE_HOME"])
+SUPPORT = Path.home() / "Library/Application Support/Hesper" if MAC else Path(os.environ["HESPER_HOME"])
 
 ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 ap.add_argument("name")
@@ -52,13 +52,13 @@ if not (home / "models").exists():
     else:  # a junction: a symlink needs admin rights on Windows
         import _winapi
         _winapi.CreateJunction(str(SUPPORT / "models"), str(home / "models"))
-os.environ["MEETSCRIBE_HOME"] = str(home)
+os.environ["HESPER_HOME"] = str(home)
 sys.path.insert(0, str(a.src.resolve()))
 
-from meetscribe import summarize as S  # noqa: E402
-from meetscribe.config import load_config  # noqa: E402
-from meetscribe.hardware import device  # noqa: E402
-from meetscribe.transcript import load_json, to_plain  # noqa: E402
+from hesper import summarize as S  # noqa: E402
+from hesper.config import load_config  # noqa: E402
+from hesper.hardware import device  # noqa: E402
+from hesper.transcript import load_json, to_plain  # noqa: E402
 
 CACHE = DATA / "cache"
 CACHE.mkdir(exist_ok=True)

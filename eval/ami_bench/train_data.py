@@ -29,8 +29,8 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(HERE))
 
 from convert import ROLE, roles, section, utterances  # noqa: E402
-from meetscribe import summarize as S  # noqa: E402
-from meetscribe.transcript import Utterance, to_plain  # noqa: E402
+from hesper import summarize as S  # noqa: E402
+from hesper.transcript import Utterance, to_plain  # noqa: E402
 from score import content  # noqa: E402
 
 MEETING = date(2005, 1, 10)  # convert.py's "created"

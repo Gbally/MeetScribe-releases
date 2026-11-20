@@ -9,12 +9,12 @@
 #   Root\tools      uv, Python 3.12, uv's cache
 #   Root\venv       the training packages (PyTorch with CUDA, transformers, peft, trl, bitsandbytes, Triton)
 #   Root\hf         Hugging Face cache (the base model, ~9 GB)
-#   Root\repo       the MeetScribe repository; the corpus goes to repo\eval\ami_bench\data
+#   Root\repo       the Hesper repository; the corpus goes to repo\eval\ami_bench\data
 #   Root\env.ps1    run ". .\env.ps1" in a new PowerShell to use all this again
 
 param(
     [string]$Root = "$env:USERPROFILE\Documents\Project\MeetScribe",
-    [string]$Repo = "https://github.com/Gbally/MeetScribe-releases.git",
+    [string]$Repo = "https://github.com/Gbally/Hesper.git",
     [string]$Model = "Qwen/Qwen3.5-4B",
     [switch]$NoModel  # don't download the base model now
 )

@@ -103,7 +103,7 @@ struct ModelCatalog: Codable {
 
 /// Where releases (latest.json, models.json, installers) are published.
 enum Releases {
-    static var repo: String { Bundle.main.object(forInfoDictionaryKey: "MSReleasesRepo") as? String ?? "" }
+    static var repo: String { Bundle.main.object(forInfoDictionaryKey: "HesperReleasesRepo") as? String ?? "" }
 
     static func url(_ file: String) -> URL? {
         repo.isEmpty ? nil : URL(string: "https://raw.githubusercontent.com/\(repo)/main/\(file)")
@@ -156,8 +156,8 @@ struct CustomModelCheck: Equatable {
 
     /// Plain-language risks of using this model.
     func warnings(speech: Bool, hw: Hardware) -> [String] {
-        var w = [speech ? tr("Not tested with MeetScribe: transcripts may be less accurate or slower.")
-                        : tr("Not tested with MeetScribe: notes may come out in the wrong format, slowly, or not at all.")]
+        var w = [speech ? tr("Not tested with Hesper: transcripts may be less accurate or slower.")
+                        : tr("Not tested with Hesper: notes may come out in the wrong format, slowly, or not at all.")]
         if compatible == nil {
             if !isMLX { w.append(tr("It isn't in MLX format (made for Apple silicon) — it may not load. Look for a version from “mlx-community”.")) }
             if speech && pipeline != "automatic-speech-recognition" { w.append(tr("It doesn't look like a speech-to-text model.")) }
@@ -178,7 +178,7 @@ struct CustomModelCheck: Equatable {
     /// Asks the engine whether it can run this model as a notes or speech model.
     mutating func checkCompatibility(speech: Bool) async {
         var verdict: [String: Any]?
-        _ = await Engine.meetscribe(["models", "check", repo, "--kind", speech ? "speech" : "notes"]) { line in
+        _ = await Engine.hesper(["models", "check", repo, "--kind", speech ? "speech" : "notes"]) { line in
             if line.hasPrefix("@@result "), let data = line.dropFirst(9).data(using: .utf8) {
                 verdict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             }

@@ -1,5 +1,5 @@
 // meeting-recorder — command-line front end to the shared capture engine (used by
-// `meetscribe record`). Records until Ctrl+C.
+// `hesper record`). Records until Ctrl+C.
 //
 //   meeting-recorder <output-dir> [--app "Microsoft Teams"] [--no-mic] [--no-system]
 

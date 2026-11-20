@@ -28,8 +28,8 @@ DATA = HERE / "data"
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(HERE))
 
-from meetscribe import summarize as S  # noqa: E402
-from meetscribe.transcript import load_json, to_plain  # noqa: E402
+from hesper import summarize as S  # noqa: E402
+from hesper.transcript import load_json, to_plain  # noqa: E402
 from score import annotated, content, matches  # noqa: E402
 from train_data import dialogue_acts, links  # noqa: E402
 from convert import section, utterances  # noqa: E402

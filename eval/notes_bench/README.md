@@ -28,7 +28,7 @@ From the repository, with the app's Python (the engine must be installed and the
 downloaded):
 
 ```sh
-"$HOME/Library/Application Support/MeetScribe/venv/bin/python" eval/notes_bench/run.py ~/bench-run \
+"$HOME/Library/Application Support/Hesper/venv/bin/python" eval/notes_bench/run.py ~/bench-run \
     --model mlx-community/Qwen3.5-4B-4bit --rounds 3
 ```
 

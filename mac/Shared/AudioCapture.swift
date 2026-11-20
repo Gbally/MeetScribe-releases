@@ -86,7 +86,7 @@ final class TrackWriter {
                 slices = 0
             }
         } catch {
-            NSLog("MeetScribe: write error (\(url.lastPathComponent)): \(error.localizedDescription)")
+            NSLog("Hesper: write error (\(url.lastPathComponent)): \(error.localizedDescription)")
         }
     }
 
@@ -153,7 +153,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     private var appName: String?
     private var stopped = false
     private var restarts = 0
-    private let queue = DispatchQueue(label: "meetscribe.system-audio")
+    private let queue = DispatchQueue(label: "hesper.system-audio")
 
     init(writer: TrackWriter) { self.writer = writer }
 
@@ -221,7 +221,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
     func stream(_ stream: SCStream, didStopWithError error: Error) {
         guard !stopped else { return }
-        NSLog("MeetScribe: system audio stopped: \(error.localizedDescription)")
+        NSLog("Hesper: system audio stopped: \(error.localizedDescription)")
         guard restarts < 20 else {
             onNotice?(tr("Mac audio capture stopped: %@", error.localizedDescription))
             return
@@ -258,7 +258,7 @@ final class MicCapture {
             forName: .AVAudioEngineConfigurationChange, object: nil, queue: .main
         ) { [weak self] _ in
             guard let self, !self.stopped else { return }
-            NSLog("MeetScribe: audio device changed — restarting microphone")
+            NSLog("Hesper: audio device changed — restarting microphone")
             self.engine.inputNode.removeTap(onBus: 0)
             self.engine.stop()
             self.engine = AVAudioEngine()
@@ -373,7 +373,7 @@ final class MeetingRecorder {
             _ = try FileManager.default.replaceItemAt(url, withItemAt: tmp)
         } catch {
             try? FileManager.default.removeItem(at: tmp)
-            NSLog("MeetScribe: couldn't trim \(url.lastPathComponent): \(error.localizedDescription)")
+            NSLog("Hesper: couldn't trim \(url.lastPathComponent): \(error.localizedDescription)")
         }
     }
 }

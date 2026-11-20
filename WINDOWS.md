@@ -1,4 +1,4 @@
-# MeetScribe on Windows — handover for the PC session
+# Hesper on Windows — handover for the PC session
 
 Handover for a Claude Code session on the Windows PC (RTX 3080 8 GB, 16 GB RAM). The Mac app is the
 product today; this is step B of the Windows plan: **does the engine hold its quality on Windows,
@@ -9,7 +9,7 @@ on the GPU and on the CPU, before any Windows UI is written?** Talk to the owner
 - Install nothing system-wide: everything in one folder (as `eval/ami_bench/setup_windows.ps1` does
   for the training), so deleting it removes it all. Don't change Windows settings.
 - The owner commits and pushes: give him the commands, don't run them.
-- The engine (`src/meetscribe`) is shared with the Mac app. Don't change how the Mac path behaves:
+- The engine (`src/hesper`) is shared with the Mac app. Don't change how the Mac path behaves:
   anything Windows-only goes behind `hardware.IS_MAC` / `hardware.device()`.
 - Real meetings: the owner will send some to this PC (SSH) for the tests. They never go into the
   repository, into training data, or anywhere else; delete them from the PC after the tests.
@@ -20,8 +20,8 @@ on the GPU and on the CPU, before any Windows UI is written?** Talk to the owner
 - `hardware.py`: one place decides the backends. Mac → MLX. A PC with a usable NVIDIA GPU
   (nvidia-smi finds it and CTranslate2 sees CUDA) → faster-whisper on CUDA float16, llama.cpp with
   the model on the GPU (all layers if it fits with ~1.5 GB to spare, else a share). Any other PC →
-  faster-whisper int8 and llama.cpp on the CPU. `MEETSCRIBE_DEVICE=cpu` forces the CPU (a colleague's
-  laptop); `MEETSCRIBE_AS_PC=1` makes a Mac use the PC backends (that's how step A tested them).
+  faster-whisper int8 and llama.cpp on the CPU. `HESPER_DEVICE=cpu` forces the CPU (a colleague's
+  laptop); `HESPER_AS_PC=1` makes a Mac use the PC backends (that's how step A tested them).
 - `pyproject.toml`: MLX on the Mac only; `faster-whisper` (+ `av<19`: PyAV 19 dropped an option
   faster-whisper's decoder passes) elsewhere. One universal `uv.lock`; the Mac's pins didn't move.
 - `transcribe.py`: `_transcribe_faster` with the MLX path's settings (word times, no text carried
@@ -46,17 +46,17 @@ on the GPU and on the CPU, before any Windows UI is written?** Talk to the owner
    (as `setup_windows.ps1`), `uv sync` of the repo, llama.cpp's Windows release (CUDA build and CPU
    build, from github.com/ggml-org/llama.cpp releases) into `models/llama.cpp`. The CUDA libraries
    faster-whisper needs on the GPU (cuBLAS, cuDNN 9: the `nvidia-cublas-cu12`, `nvidia-cudnn-cu12`
-   wheels, put on PATH) only on a PC with an NVIDIA GPU. `MEETSCRIBE_HOME` = a folder inside it.
+   wheels, put on PATH) only on a PC with an NVIDIA GPU. `HESPER_HOME` = a folder inside it.
 2. **First check: does llama.cpp run Qwen3.5 4B?** It's a hybrid (linear attention + full attention),
    the part that made the Mac training fail. Check the GGUF repo/quant name too. If llama.cpp can't,
    fall back to `Qwen3-4B-Instruct-2507` (GGUF), measured on the Mac before (a bit lower).
 3. **AMI** (`eval/ami_bench`: manual transcripts, so the notes/to-dos only). `run.py` uses MLX: add a
    PC mode (the engine's `LLM` with `llm_backend = "llama"`, same cache idea) or a sibling script.
    Mac reference, one round, 4-bit MLX: **found 19/51, right owner 14, 163 to-dos, 139 unmatched,
-   64 min**. Run it on the GPU and with `MEETSCRIBE_DEVICE=cpu`.
+   64 min**. Run it on the GPU and with `HESPER_DEVICE=cpu`.
 4. **Notes bench** (`eval/notes_bench`: real audio, so transcription + speakers + notes). Its audio is
    made with macOS voices: the owner sends the folders from the Mac (synthetic, nothing private).
-   `run.py` is Mac-centric (paths, MLX model names): adapt it or call `python -m meetscribe process`
+   `run.py` is Mac-centric (paths, MLX model names): adapt it or call `python -m hesper process`
    on each folder, then `score.py`. Mac reference (base, 2 rounds): **136/142 tasks found, noise 24,
    right deadlines 115, wrong 0**; speakers 89–100 % of words to the right person.
 5. **Time** per 30 min of meeting, GPU and CPU-only.
@@ -81,7 +81,7 @@ on the GPU and on the CPU, before any Windows UI is written?** Talk to the owner
 - **Notes bench, GPU** (`notes_bench/run.py … --audio DIR`, 2 rounds): 131/142 tasks, noise 20,
   right deadlines 106, wrong 3 (Mac same code: 132/142, 23, 108, 2); speakers 89.6–100 % of words
   to the right person. ~4 min per 30 min of meeting (allhands, 9.5 min: 39 s transcription + 40 s notes).
-- **CPU only** (`MEETSCRIBE_DEVICE=cpu`, `CUDA_VISIBLE_DEVICES=-1`), 3 bench meetings, 1 round: ~20 min
+- **CPU only** (`HESPER_DEVICE=cpu`, `CUDA_VISIBLE_DEVICES=-1`), 3 bench meetings, 1 round: ~20 min
   per 30 min of meeting (allhands: 166 s + 211 s); 21/25 tasks vs 23/25 on the GPU, same speakers.
 
 Decision: if the quality holds (no more than 2–3 tasks lost on the bench compared with the Mac,
@@ -90,10 +90,10 @@ then the installer and the updates. If not, find out why first.
 
 ## Later: publishing (decided 2026-11-18)
 
-- Same repo `Gbally/MeetScribe-releases`: a release `vX.Y.Z` holds the DMG and the Windows installer.
+- Same repo `Gbally/Hesper`: a release `vX.Y.Z` holds the DMG and the Windows installer.
 - Feeds per platform: `latest-windows.json`, `latest-windows-beta.json`, same format as `latest.json`
   (version, build, url, sha256, notes). Mac apps only read `latest.json`: untouched.
-- Per-user install (`%LOCALAPPDATA%\Programs\MeetScribe`): no admin, silent updates.
+- Per-user install (`%LOCALAPPDATA%\Programs\Hesper`): no admin, silent updates.
 - Updates signed with our own Ed25519 key (public key in the app), since there's no Windows code
   certificate yet; SmartScreen will warn on the first download until there is one.
 - `catalog/models.json` gets per-platform entries (MLX for the Mac, GGUF / faster-whisper for Windows).

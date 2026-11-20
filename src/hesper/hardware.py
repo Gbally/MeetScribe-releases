@@ -4,7 +4,7 @@
   PC with an NVIDIA GPU  faster-whisper on CUDA (float16), llama.cpp's server with the model on the GPU
   any other PC           faster-whisper on the CPU (int8), llama.cpp's server on the CPU
 
-MEETSCRIBE_DEVICE=cpu (or cuda) forces a choice: e.g. to see how a colleague's laptop without a GPU
+HESPER_DEVICE=cpu (or cuda) forces a choice: e.g. to see how a colleague's laptop without a GPU
 does on a PC that has one."""
 
 import os
@@ -14,8 +14,8 @@ import sys
 from dataclasses import dataclass
 from functools import cache
 
-# MEETSCRIBE_AS_PC=1: a Mac runs the other PCs' backends (faster-whisper, llama.cpp), to test them.
-IS_MAC = sys.platform == "darwin" and not os.environ.get("MEETSCRIBE_AS_PC")
+# HESPER_AS_PC=1: a Mac runs the other PCs' backends (faster-whisper, llama.cpp), to test them.
+IS_MAC = sys.platform == "darwin" and not os.environ.get("HESPER_AS_PC")
 
 
 @dataclass(frozen=True)
@@ -74,7 +74,7 @@ def _cuda_works() -> bool:
 
 @cache
 def device() -> Device:
-    forced = os.environ.get("MEETSCRIBE_DEVICE", "").lower()
+    forced = os.environ.get("HESPER_DEVICE", "").lower()
     if IS_MAC:
         return Device("mlx")
     if forced == "cpu":

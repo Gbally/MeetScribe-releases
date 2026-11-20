@@ -1,10 +1,10 @@
-"""meetscribe — local meeting recorder, transcriber and note-taker.
+"""hesper — local meeting recorder, transcriber and note-taker.
 
-  meetscribe record [--title T] [--app "Microsoft Teams"] [--room] [--speakers N]
-  meetscribe process <folder-or-audio-file> [--title T] [--room] [--speakers N]
-  meetscribe rename <folder> "Speaker 1=Alice" "Speaker 2=Bob"
-  meetscribe summarize <folder>
-  meetscribe setup
+  hesper record [--title T] [--app "Microsoft Teams"] [--room] [--speakers N]
+  hesper process <folder-or-audio-file> [--title T] [--room] [--speakers N]
+  hesper rename <folder> "Speaker 1=Alice" "Speaker 2=Bob"
+  hesper summarize <folder>
+  hesper setup
 """
 
 import argparse
@@ -63,7 +63,7 @@ def cmd_record(args, cfg: Config):
             sys.exit("Recording failed.")
         sys.exit(f"Recording failed (folder kept: {session})")
     if args.no_process:
-        print(f"Saved to {session}. Process later with: meetscribe process \"{session}\"")
+        print(f"Saved to {session}. Process later with: hesper process \"{session}\"")
         return
     process_session(session, cfg, args.title or "", args.room, args.speakers, summary=not args.no_summary)
 
@@ -557,7 +557,7 @@ def main():
         truststore.inject_into_ssl()
     except Exception:  # noqa: BLE001 — without it, downloads use Python's own certificates as before
         pass
-    p = argparse.ArgumentParser(prog="meetscribe", description="Local meeting transcription + notes")
+    p = argparse.ArgumentParser(prog="hesper", description="Local meeting transcription + notes")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     def common(sp):

@@ -9,7 +9,7 @@ wheels/
 # Virtual environments
 .venv
 
-# MeetScribe
+# Hesper
 models/
 bin/
 config.toml

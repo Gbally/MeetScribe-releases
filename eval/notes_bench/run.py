@@ -30,6 +30,7 @@ from scenarios import SCENARIOS  # noqa: E402
 
 MAC = sys.platform == "darwin"
 SUPPORT = Path.home() / "Library/Application Support/MeetScribe" if MAC else Path(os.environ["MEETSCRIBE_HOME"])
+TODO_FILTER = ""  # --todo-filter: the judge's setting, else the engine's default
 
 
 def arm_name(repo: str) -> str:
@@ -46,7 +47,8 @@ def home_for(out: Path, repo: str, languages: str = "en,fr") -> Path:
     (home / "config.toml").write_text(
         f'notes_dir = "{(out / "notes").as_posix()}"\nme = "Guillaume"\nlanguage = "{languages}"\nsummary_language = "auto"\n'
         f'summary_style = "standard"\ntemplate = "general"\nllm_model = "{repo}"\n'
-        f'whisper_model = "{"mlx-community/whisper-large-v3-turbo" if MAC else "large-v3-turbo"}"\n')
+        f'whisper_model = "{"mlx-community/whisper-large-v3-turbo" if MAC else "large-v3-turbo"}"\n'
+        + (f'todo_filter = "{TODO_FILTER}"\n' if TODO_FILTER else ""))
     if not (home / "models").exists():
         if MAC:
             (home / "models").symlink_to(SUPPORT / "models")
@@ -74,7 +76,10 @@ def main():
     ap.add_argument("--templates", choices=["own", "general", "both"], default="own")
     ap.add_argument("--engine", action="store_true", help="also the 30-min bilingual meeting (its audio takes a few minutes to make)")
     ap.add_argument("--audio", type=Path, help="the meetings' audio made elsewhere (a Mac): DIR/MEETING/mic.caf, …")
+    ap.add_argument("--todo-filter", choices=["off", "standard", "strict"], help="the to-do judge (Settings → Notes)")
     a = ap.parse_args()
+    global TODO_FILTER
+    TODO_FILTER = a.todo_filter or ""
     out = a.out.resolve()
     meetings = list(SCENARIOS) if a.meetings == "all" else a.meetings.split(",")
     if a.engine:

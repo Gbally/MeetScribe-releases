@@ -3,6 +3,7 @@ to-do and decision checks, merging, dates, speaker names, sentence boundaries, n
 transcript import.   .venv/bin/python eval/test_rules.py"""
 
 import json
+import os
 import sys
 import tempfile
 import zipfile
@@ -448,6 +449,10 @@ def test_judge_actions():
     assert judge_actions(Fake([-1.8, 1.5]), transcript, todos) == todos  # standard: -1.8 is not sure enough
     assert judge_actions(Fake([-1.8, 1.5]), transcript, todos, "strict") == todos[1:]
     assert judge_actions(Fake([None, None]), transcript, todos) == todos
+    # The calendar details above the transcript don't shift the lines (the to-dos count spoken lines)
+    llm = Fake([-3.0, 1.5])
+    judge_actions(llm, "Organizer: Guillaume\nInvited: Ana\n(Speaker labels …)\n\n" + transcript, todos)
+    assert ">> [00:00:09] Ana: I'll send the deck tonight" in llm.asked[1], llm.asked[1]
     assert judge_actions(Fake([]), transcript, todos, "off") == todos
 
 def test_whisper_stall():
@@ -455,8 +460,8 @@ def test_whisper_stall():
     import subprocess
     code = ("import time, meetscribe.progress as p; p.STALL = 1; b = p._WhisperBar(10); b.__enter__(); "
             "b.update(1); time.sleep(5); print('still running')")
-    r = subprocess.run([sys.executable, "-c", code], env={"PYTHONPATH": str(ROOT / "src")}, capture_output=True, text=True,
-                       timeout=30)
+    r = subprocess.run([sys.executable, "-c", code], env={**os.environ, "PYTHONPATH": str(ROOT / "src"), "PYTHONUTF8": "1"},
+                       capture_output=True, text=True, encoding="utf-8", timeout=30)  # Windows: not its ANSI code page
     assert r.returncode == 3 and "stopped responding" in r.stderr and "still running" not in r.stdout, (r.returncode, r.stderr[-300:])
 
 

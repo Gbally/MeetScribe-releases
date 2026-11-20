@@ -305,11 +305,15 @@ def _norm_words(text: str) -> list[str]:
     return out
 
 
+SAID = re.compile(r"^\[(\d+):(\d+):(\d+)\]\s+([^:]+?)(?:\s+\([A-Z]{2}\))?:\s+(.*)$")  # [00:01:02] Ana: text
+
+
 def _lines(transcript: str) -> list[tuple[float, str, str]]:
-    """The plain transcript as (seconds, speaker, text)."""
+    """The plain transcript as (seconds, speaker, text). The to-dos' "line" counts these lines only,
+    not the calendar details or blank lines above them."""
     out = []
     for line in transcript.splitlines():
-        m = re.match(r"^\[(\d+):(\d+):(\d+)\]\s+([^:]+?)(?:\s+\([A-Z]{2}\))?:\s+(.*)$", line)
+        m = SAID.match(line)
         if m:
             out.append((int(m[1]) * 3600 + int(m[2]) * 60 + int(m[3]), m[4], m[5]))
     return out
@@ -738,7 +742,7 @@ def judge_actions(llm, transcript: str, actions: list[dict], level: str = "stand
     threshold = JUDGE_LEVELS.get(level)
     if threshold is None or not actions:
         return actions
-    lines = transcript.split("\n")
+    lines = [line for line in transcript.splitlines() if SAID.match(line)]  # numbered as _lines does
     kept = []
     for a in actions:
         odds = llm.yes_odds(JUDGE_PROMPT, JUDGE_QUESTION.format(

@@ -79,7 +79,8 @@ git push -q origin main
 # 2. The exe on the release vX (the Mac's DMG may already be there).
 & $Gh release view "v$Label" --repo $Repo *> $null
 if ($LASTEXITCODE -eq 0) {
-    $Remote = & $Gh api "repos/$Repo/releases/tags/v$Label" --jq ".assets[] | select(.name==""$Exe"") | .digest" 2>$null
+    # The asset's digest, read here (Windows PowerShell 5 mangles quotes in a jq filter passed to gh)
+    $Remote = ((& $Gh api "repos/$Repo/releases/tags/v$Label" | ConvertFrom-Json).assets | Where-Object { $_.name -eq $Exe }).digest
     if ($Remote -eq "sha256:$($Info.sha256)") { Write-Host "- Release v$Label already has this exe" }
     else {
         Write-Host "- Adding the exe to release v$Label"

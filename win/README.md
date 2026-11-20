@@ -21,6 +21,17 @@ Tests without the tray: `Hesper.exe --record SECONDS [NOTES_FOLDER] [MIC_NAME]` 
 notes; `Hesper.exe --devices` lists the default devices and how loud each one is (for support);
 `Hesper.exe --write-icon Hesper.ico` redraws the icon. `HESPER_HOME` moves the data folder (a test setup).
 
-Publishing: attach `Hesper.exe` to the GitHub release, then put `latest-windows.json` (version, build,
-url, sha256, notes) at the repository root; the site's Windows button turns on when it's there.
-The exe isn't code-signed yet: SmartScreen warns on the first download.
+Publishing, as `scripts/release.sh` for the Mac (the .NET 8 SDK and `gh auth login` once):
+
+```powershell
+.\scripts\release_windows.ps1 "What's new"     # prepare: build-cache\windows\Hesper-X.exe + latest-windows.json
+.\scripts\release_windows.ps1 -Publish         # push main, the exe on release vX, then the feed + models.json
+```
+
+`-Beta` (with either) makes a test version for `latest-windows-beta.json`. The version is pyproject's,
+the build number one more than the feeds'; it is the exe's 4th version number, which the updater
+compares. The site's Windows button turns on with `latest-windows.json`. The exe isn't code-signed
+yet: SmartScreen warns on the first download.
+
+Diagnostics: `Hesper.exe --calendar` (what Hesper reads from Outlook), `--devices`, `--capture DIR`
+(PNGs of every screen, light and dark), `--record SECONDS [FOLDER] [MIC] [process:NAME]`.

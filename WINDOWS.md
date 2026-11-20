@@ -149,3 +149,19 @@ clicked through by hand.
 - Checked: 45 s recorded while a bench meeting played → its to-do with the right time; a first launch
   into an empty folder from the published 78 MB exe, without the SDK; uv picks Python 3.15 unless told
   `--python 3.12` (onnxruntime has no 3.15 wheel).
+
+### Step C, the Mac's features (2026-11-20)
+
+The pages are HTML in WebView2 (win/Hesper/Ui), with the Mac's texts and translations (mac/Localization)
+plus Ui/i18n-windows.json for the Windows-only ones. Ported: every Settings pane (shortcut, start
+with Windows, e-mail, calls recorded automatically, Teams only, Outlook calendar, notes written
+later, export, AI models with the catalog's "windows" section and custom models, notifications,
+storage on this PC / OneDrive / a folder, audio retention, removal, updates), call detection,
+"Is the meeting over?" and the automatic stop, due-date reminders, briefs, note editing, the to-do
+views, importing audio files and transcripts. Not on Windows: Reminders, Apple Notes, Things.
+
+- Calendar: classic Outlook only (COM); the new Outlook has no API on the PC. Not tested with a
+  real calendar yet (the PC here has Outlook with no account).
+- Teams only: Windows 11's process loopback (ActivateAudioInterfaceAsync, VAD\Process_Loopback),
+  gaps filled with silence; tested on a process playing a file, not yet in a Teams call.
+- Releases: scripts/release_windows.ps1 (see win/README.md).

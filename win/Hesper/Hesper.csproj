@@ -17,7 +17,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
     <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
+  </ItemGroup>
+
+  <!-- The pages (HTML/CSS/JS, served to WebView2 from the exe) and the Mac app's translations -->
+  <ItemGroup>
+    <EmbeddedResource Include="Ui\**\*" LogicalName="ui/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\mac\Localization\*.json" LogicalName="i18n/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\catalog\models.json" LogicalName="models.json" />
   </ItemGroup>
 
   <!-- The Python engine travels inside the exe (engine.zip): src/hesper, pyproject.toml, uv.lock and

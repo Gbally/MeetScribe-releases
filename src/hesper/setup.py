@@ -136,8 +136,34 @@ def run_setup(cfg: Config):
     step("Ready")
 
 
+def _pc_repo(name: str) -> str:
+    """A faster-whisper model name ("large-v3-turbo") → its Hugging Face repo; repos stay as they are."""
+    from faster_whisper.utils import _MODELS
+
+    return _MODELS.get(name, name)
+
+
+def _gguf_folder(model: str) -> Path:
+    """Where llama-server keeps "repo:quant" (Hugging Face's cache layout, under models/gguf)."""
+    return MODELS_DIR / "gguf" / f"models--{model.split(':', 1)[0].replace('/', '--')}"
+
+
 def download_model(repo: str) -> None:
     """Download one model (when switching models in the app), with progress."""
+    from .hardware import IS_MAC
+
+    if not IS_MAC and ":" in repo:  # a llama.cpp model: llama-server fetches its one file itself
+        from dataclasses import replace
+
+        from .config import load_config
+
+        size = _gguf_size(repo)
+        step("Downloading %@ (%@ GB)", repo.split("/")[-1], f"{size / 1e9:.1f}")
+        _llama_download(replace(load_config(), llm_model=repo), 0, size)
+        step("Ready")
+        return
+    if not IS_MAC:
+        repo = _pc_repo(repo)
     size = _repo_size(repo)
     step("Downloading %@ (%@ GB)", repo.split("/")[-1], f"{size / 1e9:.1f}")
     for attempt in range(3):
@@ -170,6 +196,21 @@ def delete_model(repo: str) -> float:
     """Remove a downloaded model from the Hugging Face cache; returns GB freed."""
     from huggingface_hub import scan_cache_dir
 
+    from .hardware import IS_MAC
+
+    if not IS_MAC and ":" in repo:  # one quantization's file(s) of a GGUF repo
+        quant = repo.split(":", 1)[1].lower()
+        files = [f for f in _gguf_folder(repo).rglob("*.gguf") if f.name.lower().endswith(f"{quant}.gguf")]
+        freed = sum(f.stat().st_size for f in files if f.exists())
+        for f in files:
+            f.unlink(missing_ok=True)
+        if not any(_gguf_folder(repo).rglob("*.gguf")):
+            import shutil
+
+            shutil.rmtree(_gguf_folder(repo), ignore_errors=True)
+        return freed / 1e9
+    if not IS_MAC:
+        repo = _pc_repo(repo)
     cache = scan_cache_dir()
     for r in cache.repos:
         if r.repo_id == repo:
@@ -185,10 +226,31 @@ def delete_model(repo: str) -> float:
 
 
 def installed_models() -> dict[str, float]:
-    """repo id → size on disk (GB) of the models in the cache."""
+    """repo id → size on disk (GB) of the models in the cache. On a PC: faster-whisper's models by the
+    names the settings use ("large-v3-turbo"), and llama.cpp's GGUF files as "repo:quant"."""
     from huggingface_hub import scan_cache_dir
 
-    return {r.repo_id: round(r.size_on_disk / 1e9, 2) for r in scan_cache_dir().repos}
+    from .hardware import IS_MAC
+
+    found = {r.repo_id: round(r.size_on_disk / 1e9, 2) for r in scan_cache_dir().repos}
+    if IS_MAC:
+        return found
+    import re
+
+    from faster_whisper.utils import _MODELS
+
+    names: dict[str, str] = {}
+    for name, repo in _MODELS.items():  # "turbo" and "large-v3-turbo" are one repo: the settings say the long name
+        if len(name) > len(names.get(repo, "")):
+            names[repo] = name
+    found = {names.get(repo, repo): gb for repo, gb in found.items()}
+    for folder in (MODELS_DIR / "gguf").glob("models--*"):
+        repo = folder.name[len("models--"):].replace("--", "/")
+        for f in folder.rglob("*.gguf"):
+            m = re.search(r"-((?:UD-)?I?Q\d\w*|BF16|F16|F32)\.gguf$", f.name, re.I)
+            if m and "mmproj" not in f.name:
+                found[f"{repo}:{m.group(1)}"] = round(f.stat().st_size / 1e9, 2)
+    return found
 
 
 def check_model(repo: str, kind: str) -> dict:
@@ -199,6 +261,10 @@ def check_model(repo: str, kind: str) -> dict:
 
     from huggingface_hub import HfApi, hf_hub_download
 
+    from .hardware import IS_MAC
+
+    if not IS_MAC:
+        return _check_pc_model(repo, kind)
     try:
         files = {s.rfilename for s in HfApi().model_info(repo, files_metadata=False).siblings}
         cfg = _json.loads(Path(hf_hub_download(repo, "config.json")).read_text())
@@ -233,3 +299,33 @@ def check_model(repo: str, kind: str) -> dict:
         return {"compatible": False, "architecture": arch, "reason": "The model has no .safetensors weights.", "key": "The model has no .safetensors weights.", "args": []}
     return {"compatible": True, "architecture": arch, "reason": f"Supported architecture ({arch}).",
             "key": "Supported architecture (%@).", "args": [arch]}
+
+
+def _check_pc_model(repo: str, kind: str) -> dict:
+    """check_model on a PC: notes models are GGUF files for llama.cpp ("repo:quant"), speech models
+    CTranslate2 conversions of Whisper for faster-whisper."""
+    from huggingface_hub import HfApi
+
+    def result(ok: bool, arch: str, key: str, *args: str) -> dict:
+        reason = key
+        for a in args:
+            reason = reason.replace("%@", a, 1)
+        return {"compatible": ok, "architecture": arch, "reason": reason, "key": key, "args": list(args)}
+
+    name, _, quant = repo.partition(":")
+    try:
+        files = {s.rfilename for s in HfApi().model_info(_pc_repo(name) if kind == "speech" else name).siblings}
+    except Exception as e:
+        return result(False, "", "Couldn't read the model's configuration (%@).", e.__class__.__name__)
+    if kind == "speech":
+        if "model.bin" in files and "config.json" in files:
+            return result(True, "whisper (CTranslate2)", "A Whisper model for faster-whisper.")
+        return result(False, "", "Hesper's speech engine on Windows runs Whisper models converted for faster-whisper (CTranslate2).")
+    ggufs = sorted(f for f in files if f.endswith(".gguf") and "mmproj" not in f)
+    if not ggufs:
+        return result(False, "", "Hesper's notes engine on Windows runs GGUF models (llama.cpp): this repository has none.")
+    if not quant:
+        return result(False, "gguf", "Say which file to use: the link followed by :Q4_K_M, for example.")
+    if not any(f.lower().endswith(f"{quant.lower()}.gguf") for f in ggufs):
+        return result(False, "gguf", "No “%@” file in this repository.", quant)
+    return result(True, "gguf", "A GGUF model for llama.cpp (%@).", quant)

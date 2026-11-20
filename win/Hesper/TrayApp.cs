@@ -1,160 +1,94 @@
-using System.Diagnostics;
-
 namespace Hesper;
 
-/// The app: an icon in the notification area. Record → Stop and create notes → "Notes ready".
+/// The app: an icon in the notification area. A click opens the popover (as the Mac's menu bar
+/// icon does); a right click a short menu. Meetings and Settings open in their own windows.
 sealed class TrayApp : ApplicationContext
 {
+    readonly AppModel model = new();
     readonly NotifyIcon tray = new();
     readonly ContextMenuStrip menu = new();
-    readonly ToolStripMenuItem status = new() { Enabled = false, Visible = false };
-    readonly ToolStripMenuItem record = new("Record");
-    readonly ToolStripMenuItem stop = new("Stop and create notes") { Visible = false };
-    readonly System.Windows.Forms.Timer tick = new() { Interval = 1000 };
+    readonly ToolStripMenuItem record = new("Record"), stop = new("Stop and create notes") { Visible = false };
+    readonly System.Windows.Forms.Timer live = new() { Interval = 200 }, coalesce = new() { Interval = 150 };
     readonly Icon idleIcon = Brand.Icon(32), recordingIcon = Brand.Icon(32, recording: true);
-    AppSettings settings = AppSettings.Load();
-    Recorder? recorder;
-    int processing;          // meetings being turned into notes
-    string? lastNotes;       // what a click on the last notification opens
+    readonly Popover popover;
+    Action? onBalloonClick;  // what a click on the last notification does
+    readonly Hotkey hotkey = new();
 
     public TrayApp()
     {
-        menu.Items.Add(status);
+        popover = new Popover(model);
+        menu.Items.Add("Open Hesper", null, (_, _) => popover.Toggle());
         menu.Items.Add(record);
         menu.Items.Add(stop);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Open notes folder", null, (_, _) => Open(settings.NotesFolder));
-        menu.Items.Add("Settings…", null, (_, _) => ShowSettings());
-        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Settings…", null, (_, _) => ShowSettings(""));
         menu.Items.Add("Quit Hesper", null, (_, _) => Quit());
-        record.Click += (_, _) => StartRecording();
-        stop.Click += (_, _) => StopRecording();
-        tick.Tick += (_, _) => ShowElapsed();
+        record.Click += (_, _) => model.StartRecording("");
+        stop.Click += (_, _) => model.StopRecording();
 
         tray.Icon = idleIcon;
         tray.Text = "Hesper";
         tray.ContextMenuStrip = menu;
         tray.Visible = true;
-        tray.MouseClick += (_, e) =>
+        tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) popover.Toggle(); };
+        tray.BalloonTipClicked += (_, _) => onBalloonClick?.Invoke();
+        tray.BalloonTipClosed += (_, _) => onBalloonClick = null;
+
+        model.Changed += () => { if (!coalesce.Enabled) coalesce.Start(); };  // progress lines come fast: at most ~6 redraws a second
+        coalesce.Tick += (_, _) => { coalesce.Stop(); OnChanged(); };
+        model.Notify += (title, text, action) =>
         {
-            if (e.Button == MouseButtons.Left)  // a left click opens the menu too
-                typeof(NotifyIcon).GetMethod("ShowContextMenu", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-                    ?.Invoke(tray, null);
+            onBalloonClick = action;
+            tray.ShowBalloonTip(10_000, title, text, ToolTipIcon.None);
         };
-        tray.BalloonTipClicked += (_, _) => { if (lastNotes != null) Open(lastNotes); };
-        settings.WriteConfig();
+        hotkey.Pressed += model.ToggleRecording;
+        hotkey.Set(model.Settings.Hotkey);
+        model.HotkeyChanged += () => hotkey.Set(model.Settings.Hotkey);
+        model.OpenMeetingWindow += ShowMeeting;
+        model.OpenSettingsWindow += ShowSettings;
+        model.OpenWelcomeWindow += ShowWelcome;
+        model.QuitRequested += Quit;
+        model.BriefRequested += key => popover.ShowPage("brief/" + key);
+        live.Tick += (_, _) => WebWindow.Broadcast("live", model.Live);
+
+        model.Settings.WriteConfig();
+        if (!model.Ready || !model.Settings.Welcomed) ShowWelcome();
     }
 
-    void StartRecording()
+    void OnChanged()
     {
-        if (recorder != null) return;
-        var folder = Paths.NewSession(settings.NotesFolder, DateTime.Now);
-        var rec = new Recorder(folder, settings.Microphone, settings.Speakers);
-        try { rec.Start(); }
-        catch (Exception e)
+        var recording = model.Recorder != null;
+        tray.Icon = recording ? recordingIcon : idleIcon;
+        record.Visible = !recording;
+        stop.Visible = recording;
+        record.Enabled = model.Ready;
+        if (recording) live.Start(); else live.Stop();
+        WebWindow.Broadcast("state", model.State);
+    }
+
+    void Show(string page, Size size, string title)
+    {
+        if (WebWindow.Find(page) is { } w)
         {
-            rec.Dispose();
-            try { Directory.Delete(folder); } catch (IOException) { }
-            Notify("Recording failed", e.Message, ToolTipIcon.Error);
+            w.WindowState = FormWindowState.Normal;
+            w.Activate();
             return;
         }
-        recorder = rec;
-        foreach (var n in rec.Notices) Notify("Hesper", n, ToolTipIcon.Warning);
-        tray.Icon = recordingIcon;
-        record.Visible = false;
-        stop.Visible = true;
-        tick.Start();
-        ShowElapsed();
+        popover.Hide();
+        new WebWindow(model, page, size) { Text = title, MinimumSize = new Size(480, 420) }.Show();
     }
 
-    void ShowElapsed()
-    {
-        if (recorder == null) return;
-        var t = recorder.Elapsed;
-        var text = $"Recording — {(int)t.TotalHours:0}:{t.Minutes:00}:{t.Seconds:00}";
-        status.Text = text;
-        status.Visible = true;
-        tray.Text = "Hesper: " + text;
-    }
-
-    async void StopRecording()
-    {
-        var rec = recorder;
-        if (rec == null) return;
-        recorder = null;
-        tick.Stop();
-        rec.Stop();
-        rec.Dispose();
-        tray.Icon = idleIcon;
-        record.Visible = true;
-        stop.Visible = false;
-        await MakeNotes(rec.Folder);
-    }
-
-    /// python -m hesper process FOLDER, its progress in the menu and the icon's tooltip.
-    async Task MakeNotes(string folder)
-    {
-        processing++;
-        void Show(string text)
-        {
-            status.Text = text;
-            status.Visible = true;
-            tray.Text = ("Hesper: " + text)[..Math.Min(127, text.Length + 8)];
-        }
-        Show("Creating notes…");
-        string step = "Creating notes";
-        var ui = SynchronizationContext.Current;
-        var result = await EngineRunner.Hesper(["process", folder], line =>
-        {
-            var (s, p) = EngineRunner.Parse(line);
-            if (s != null) step = s;
-            if (s != null || p != null)
-                ui?.Post(_ => { if (recorder == null) Show(p is double f ? $"{step} — {f:P0}" : step); }, null);
-        });
-        processing--;
-        if (recorder == null)
-        {
-            status.Visible = false;
-            tray.Text = "Hesper";
-        }
-        var notes = Path.Combine(folder, "notes.md");
-        if (result.Ok && File.Exists(notes))
-        {
-            lastNotes = notes;
-            Notify("Notes ready", "Click to open them.", ToolTipIcon.Info);
-        }
-        else
-        {
-            lastNotes = Path.Combine(Paths.Home, "hesper.log");
-            Notify("Notes failed", result.ErrorTail.Length > 0 ? result.ErrorTail[^Math.Min(200, result.ErrorTail.Length)..] : "See hesper.log.",
-                   ToolTipIcon.Error);
-        }
-    }
-
-    void ShowSettings()
-    {
-        using var form = new SettingsForm(settings);
-        if (form.ShowDialog() == DialogResult.OK) settings = AppSettings.Load();
-    }
-
-    void Notify(string title, string text, ToolTipIcon icon) => tray.ShowBalloonTip(10_000, title, text, icon);
-
-    static void Open(string path)
-    {
-        if (!File.Exists(path)) Directory.CreateDirectory(path);
-        Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
-    }
+    void ShowMeeting(string id) => Show("meeting/" + Uri.EscapeDataString(id), new Size(760, 760), "Hesper");
+    void ShowSettings(string pane) => Show("settings" + (pane.Length > 0 ? "/" + pane : ""), new Size(780, 580), "Hesper settings");
+    void ShowWelcome() => Show("welcome", new Size(640, 600), "Welcome to Hesper");
 
     void Quit()
     {
-        if (recorder != null && MessageBox.Show("A meeting is being recorded. Stop it and quit? Its notes won't be created now.",
+        if (model.Recorder != null && MessageBox.Show("A meeting is being recorded. Stop it and quit? Its notes won't be created now.",
                 "Hesper", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
             return;
-        if (processing > 0 && MessageBox.Show("Notes are being created. Quit anyway? They'll be lost.",
-                "Hesper", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
-            return;
-        recorder?.Stop();
-        recorder?.Dispose();
+        model.Recorder?.Stop();
+        model.Recorder?.Dispose();
         tray.Visible = false;
         ExitThread();
     }
@@ -165,7 +99,9 @@ sealed class TrayApp : ApplicationContext
         {
             tray.Dispose();
             menu.Dispose();
-            tick.Dispose();
+            live.Dispose();
+            popover.Dispose();
+            hotkey.Dispose();
         }
         base.Dispose(disposing);
     }

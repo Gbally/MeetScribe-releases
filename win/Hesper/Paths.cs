@@ -27,9 +27,10 @@ static class Paths
     }
 
     /// A new meeting folder, named as the engine names them (hesper.cli.new_session_dir).
-    public static string NewSession(string notesFolder, DateTime when)
+    public static string NewSession(string notesFolder, DateTime when, string title = "")
     {
-        var name = when.ToString("yyyy-MM-dd_HHmm");
+        var slug = System.Text.RegularExpressions.Regex.Replace(title, @"[^\w-]+", "-").Trim('-');
+        var name = when.ToString("yyyy-MM-dd_HHmm") + (slug.Length > 0 ? "_" + slug[..Math.Min(50, slug.Length)] : "");
         var path = Path.Combine(notesFolder, name);
         for (var n = 2; Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any(); n++)
             path = Path.Combine(notesFolder, $"{name}-{n}");

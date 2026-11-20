@@ -135,7 +135,7 @@ def process_session(session: Path, cfg: Config, title: str, room: bool, speakers
         step("Loading %@", audio_file.name)
         file_audio = load_audio(audio_file)
     else:
-        sys_file, mic_file = session / "system.caf", session / "mic.caf"
+        sys_file, mic_file = track(session, "system"), track(session, "mic")
         if has_audio(sys_file):
             sys_audio = load_audio(sys_file)
             if is_silent(sys_audio):
@@ -250,6 +250,17 @@ def notes_work(cfg: Config, audio_seconds: float) -> float:
 
 def has_audio(path: Path) -> bool:
     return path.exists() and path.stat().st_size > 8192
+
+
+def track(session: Path, name: str) -> Path:
+    """A meeting's track ("mic" or "system"): .caf from the Mac's recorder, .wav from Windows'."""
+    caf = session / f"{name}.caf"
+    wav = session / f"{name}.wav"
+    return wav if not caf.exists() and wav.exists() else caf
+
+
+def has_tracks(session: Path) -> bool:
+    return any(track(session, n).exists() for n in ("mic", "system"))
 
 
 def meeting_info(session: Path) -> dict:
@@ -384,8 +395,8 @@ def calendar_context(session: Path) -> str:
 def cmd_process(args, cfg: Config):
     target = Path(args.path).expanduser().resolve()
     if target.is_dir():
-        if not any(target.glob("*.caf")):
-            sys.exit(f"No mic.caf / system.caf in {target}")
+        if not has_tracks(target):
+            sys.exit(f"No mic / system track (.caf or .wav) in {target}")
         process_session(target, cfg, args.title or "", args.room, args.speakers, summary=not args.no_summary)
     elif target.is_file() and target.suffix.lower() in TRANSCRIPT_SUFFIXES:
         import_transcript(target, cfg, args.title or "", summary=not args.no_summary)
@@ -497,10 +508,10 @@ def cmd_clips(args, cfg: Config):
     session = Path(args.folder).expanduser().resolve()
     utterances, meta = load_json(session / "transcript.json")
     audio = {}
-    if has_audio(session / "system.caf"):
-        audio["meeting"] = load_audio(session / "system.caf")
-    if has_audio(session / "mic.caf"):
-        audio["room" if "room" in meta.get("tracks", []) else "mic"] = load_audio(session / "mic.caf")
+    if has_audio(track(session, "system")):
+        audio["meeting"] = load_audio(track(session, "system"))
+    if has_audio(track(session, "mic")):
+        audio["room" if "room" in meta.get("tracks", []) else "mic"] = load_audio(track(session, "mic"))
     if not audio:
         sys.exit("This meeting's audio was not kept, so there are no voice samples.")
     for u in utterances:  # older transcripts don't say which track a line came from

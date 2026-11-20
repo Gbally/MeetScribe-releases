@@ -132,3 +132,20 @@ Suggested stack: C# / .NET 8 (WinForms or WPF, NotifyIcon, NAudio for WASAPI;
 inside the project folder. Code under `win/` in the repository. No telemetry. Order: (a) capture
 mic + loopback and run `hesper process` on the result, (b) tray icon and menu, (c) first-launch
 install, (d) the exe. Ask the owner before each install and each long GPU job; he commits.
+
+### Step C, done on the PC (2026-11-20)
+
+The app is in `win/` (see win/README.md); (a)–(d) built and tested on the PC, the tray menu not yet
+clicked through by hand.
+
+- Engine changes: `cli.track()` reads `mic.wav` / `system.wav` when there's no `.caf` (the Mac's come
+  first); `hesper setup` on a PC fetches faster-whisper's models (large-v3-turbo, base) and lets
+  llama-server download its one GGUF file (not the whole repo); llama-server gets a random API key
+  per start (LLAMA_API_KEY): a web page open in a browser can't use it; `pyproject` extra `cuda`
+  (cuBLAS 12.9.2.10 — 12.9.3 has no Windows wheel — and cuDNN 9) for `uv sync --extra cuda`.
+- Devices: on the PC here the "communications" defaults were the monitor's speakers and SteelSeries
+  Sonar's virtual mic, both silent; the app takes Windows' default devices, or the ones picked in
+  Settings, and `Hesper.exe --devices` shows which device hears what.
+- Checked: 45 s recorded while a bench meeting played → its to-do with the right time; a first launch
+  into an empty folder from the published 78 MB exe, without the SDK; uv picks Python 3.15 unless told
+  `--python 3.12` (onnxruntime has no 3.15 wheel).

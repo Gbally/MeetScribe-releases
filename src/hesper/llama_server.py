@@ -9,6 +9,7 @@ transcript only reads its own instructions, as the MLX path does with its prompt
 import atexit
 import json
 import os
+import secrets
 import shutil
 import socket
 import subprocess
@@ -46,6 +47,9 @@ class LlamaServer:
         self.cfg = cfg
         self.proc = None
         self.url = ""
+        # Its address is on this PC only, but any web page open in a browser could send it requests:
+        # it answers only to the engine, which made up this key (in the environment, not the command line)
+        self.key = secrets.token_hex(16)
 
     def start(self) -> str:
         if self.proc and self.proc.poll() is None:
@@ -57,7 +61,7 @@ class LlamaServer:
         cmd = [binary(self.cfg), *source, "--host", "127.0.0.1", "--port", str(port), "--ctx-size", str(CONTEXT),
                "--jinja", "--parallel", "1", "--n-gpu-layers", str(layers),
                "--no-mmproj"]  # -hf also fetches the vision part (~0.7 GB on the GPU): text only here
-        env = {**os.environ, "LLAMA_CACHE": str(MODELS_DIR / "gguf")}
+        env = {**os.environ, "LLAMA_CACHE": str(MODELS_DIR / "gguf"), "LLAMA_API_KEY": self.key}
         log = open(MODELS_DIR.parent / "llama-server.log", "ab")
         flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
         self.proc = subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT, creationflags=flags)
@@ -88,7 +92,7 @@ class LlamaServer:
 
     def post(self, path: str, body: dict, stream: bool = False):
         req = urllib.request.Request(self.start() + path, data=json.dumps(body).encode(),
-                                     headers={"Content-Type": "application/json"})
+                                     headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.key}"})
         try:
             return urllib.request.urlopen(req, timeout=3600) if stream else json.load(urllib.request.urlopen(req, timeout=3600))
         except urllib.error.HTTPError as e:

@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Hesper</RootNamespace>
+    <AssemblyName>Hesper</AssemblyName>
+    <Version>0.7.0</Version>
+    <Company>Nibjorg Studio</Company>
+    <Product>Hesper</Product>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <ApplicationIcon>Hesper.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
+  </ItemGroup>
+
+  <!-- The Python engine travels inside the exe (engine.zip): src/hesper, pyproject.toml, uv.lock and
+       the licences; Setup.cs unpacks it into %LOCALAPPDATA%\Hesper\engine. -->
+  <Target Name="EngineZip" BeforeTargets="PrepareForBuild">
+    <PropertyGroup><!-- here, not above: IntermediateOutputPath is only set once the SDK's targets are read -->
+      <RepoRoot>$(MSBuildThisFileDirectory)..\..\</RepoRoot>
+      <EngineStage>$(MSBuildThisFileDirectory)$(IntermediateOutputPath)engine\</EngineStage>
+      <EngineZip>$(MSBuildThisFileDirectory)$(IntermediateOutputPath)engine.zip</EngineZip>
+    </PropertyGroup>
+    <ItemGroup>
+      <EngineSource Include="$(RepoRoot)src\hesper\*.py" />
+      <EngineTop Include="$(RepoRoot)pyproject.toml;$(RepoRoot)uv.lock;$(RepoRoot)LICENSE;$(RepoRoot)THIRD_PARTY_NOTICES.md" />
+    </ItemGroup>
+    <RemoveDir Directories="$(EngineStage)" />
+    <Copy SourceFiles="@(EngineSource)" DestinationFolder="$(EngineStage)src\hesper" />
+    <Copy SourceFiles="@(EngineTop)" DestinationFolder="$(EngineStage)" />
+    <ZipDirectory SourceDirectory="$(EngineStage)" DestinationFile="$(EngineZip)" Overwrite="true" />
+    <ItemGroup>
+      <EmbeddedResource Include="$(EngineZip)" LogicalName="engine.zip" />
+    </ItemGroup>
+  </Target>
+
+</Project>

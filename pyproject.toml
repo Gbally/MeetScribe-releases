@@ -17,6 +17,14 @@ dependencies = [
     "truststore>=0.10.5",
 ]
 
+[project.optional-dependencies]
+# Windows with an NVIDIA GPU: the CUDA libraries faster-whisper (CTranslate2) needs; the app adds
+# them with `uv sync --extra cuda` only when it finds one.
+cuda = [
+    "nvidia-cublas-cu12==12.9.2.10; sys_platform == 'win32'",  # 12.9.3 has no Windows wheel
+    "nvidia-cudnn-cu12>=9.28,<10; sys_platform == 'win32'",
+]
+
 [project.scripts]
 hesper = "hesper.cli:main"
 

@@ -38,25 +38,49 @@ def _repo_size(repo: str) -> int:
     return sum(s.size or 0 for s in info.siblings)
 
 
-def _hf_download(repo: str, base: float, total: float):
-    from huggingface_hub import snapshot_download
-    from huggingface_hub.constants import HF_HUB_CACHE
+def _gguf_size(model: str) -> int:
+    """A llama.cpp model "repo:quant": the size of that one file (the repo holds every quantization)."""
+    from huggingface_hub import HfApi
 
-    blobs = Path(HF_HUB_CACHE) / f"models--{repo.replace('/', '--')}" / "blobs"
+    repo, quant = model.split(":", 1)
+    info = HfApi().model_info(repo, files_metadata=True)
+    return sum(s.size or 0 for s in info.siblings
+               if s.rfilename.lower().endswith(f"{quant.lower()}.gguf") and "mmproj" not in s.rfilename)
+
+
+def _watching(folder: Path, base: float, total: float, fetch):
+    """Runs fetch() while reporting the growth of folder as progress."""
     stop = threading.Event()
 
     def watch():
         while not stop.wait(1):
-            size = sum(p.stat().st_size for p in blobs.glob("*") if p.is_file()) if blobs.exists() else 0
+            size = sum(p.stat().st_size for p in folder.rglob("*") if p.is_file()) if folder.exists() else 0
             _progress(base + size, total)
 
     t = threading.Thread(target=watch, daemon=True)
     t.start()
     try:
-        snapshot_download(repo)
+        fetch()
     finally:
         stop.set()
         t.join()
+
+
+def _hf_download(repo: str, base: float, total: float):
+    from huggingface_hub import snapshot_download
+    from huggingface_hub.constants import HF_HUB_CACHE
+
+    _watching(Path(HF_HUB_CACHE) / f"models--{repo.replace('/', '--')}" / "blobs", base, total,
+              lambda: snapshot_download(repo))
+
+
+def _llama_download(cfg: Config, base: float, total: float):
+    """llama-server fetches its model itself the first time (-hf), into the cache it reads from."""
+    from .llama_server import server
+
+    srv = server(cfg)
+    _watching(MODELS_DIR / "gguf", base, total, srv.start)
+    srv.stop()
 
 
 def run_setup(cfg: Config):
@@ -65,9 +89,21 @@ def run_setup(cfg: Config):
     emb = MODELS_DIR / "nemo_en_titanet_small.onnx"
 
     step("Checking what needs downloading…")
+    from .hardware import IS_MAC
     from .transcribe import LANGUAGE_ID_MODEL
 
-    sizes = {repo: _repo_size(repo) for repo in (cfg.whisper_model, cfg.llm_model, LANGUAGE_ID_MODEL)}
+    labels = ("Downloading the speech recognition model (%@ GB)", "Downloading the summary model (%@ GB)",
+              "Downloading the language detection model (%@ GB)")
+    if IS_MAC:
+        models = [(repo, label, _hf_download) for repo, label in zip((cfg.whisper_model, cfg.llm_model, LANGUAGE_ID_MODEL), labels)]
+        sizes = {repo: _repo_size(repo) for repo, _, _ in models}
+    else:  # faster-whisper's names → their repos; the notes model is one file of a GGUF repo, for llama.cpp
+        from faster_whisper.utils import _MODELS
+
+        whisper, small_whisper = (_MODELS.get(m, m) for m in (cfg.whisper_model, "base"))
+        models = [(whisper, labels[0], _hf_download), (cfg.llm_model, labels[1], lambda _, b, t: _llama_download(cfg, b, t)),
+                  (small_whisper, labels[2], _hf_download)]
+        sizes = {whisper: _repo_size(whisper), cfg.llm_model: _gguf_size(cfg.llm_model), small_whisper: _repo_size(small_whisper)}
     small = 50e6
     total = small + sum(sizes.values())
 
@@ -83,13 +119,11 @@ def run_setup(cfg: Config):
     _progress(small, total)
 
     base = small
-    for repo, label in ((cfg.whisper_model, "Downloading the speech recognition model (%@ GB)"),
-                        (cfg.llm_model, "Downloading the summary model (%@ GB)"),
-                        (LANGUAGE_ID_MODEL, "Downloading the language detection model (%@ GB)")):
+    for repo, label, fetch in models:
         step(label, f"{sizes[repo] / 1e9:.1f}")
         for attempt in range(3):
             try:
-                _hf_download(repo, base, total)
+                fetch(repo, base, total)
                 break
             except Exception as e:  # flaky networks: resume a couple of times
                 if attempt == 2:

@@ -1,0 +1,7 @@
+{
+    "version":  "0.7.0",
+    "build":  1,
+    "url":  "https://github.com/Gbally/Hesper/releases/download/v0.7.0/Hesper-0.7.0.exe",
+    "sha256":  "3d0706d435600fc9d564542c9c78b890c6dbb9be854caea30355ccf653d51207",
+    "notes":  "First Windows version (preview): records your mic and your PC\u0027s sound, transcript, notes and to-dos, all on this PC."
+}

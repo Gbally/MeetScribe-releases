@@ -144,5 +144,96 @@
         "zh-Hans": "支持 99 种语言，在 Apple 芯片上速度快。"
       }
     }
-  ]
+  ],
+  "windows": {
+    "notes": [
+      {
+        "id": "qwen3.5-4b-gguf",
+        "repo": "unsloth/Qwen3.5-4B-GGUF:Q4_K_M",
+        "name": "Qwen3.5 4B",
+        "size_gb": 2.74,
+        "min_vram_gb": 4.5,
+        "min_ram_gb": 8,
+        "recommended_ram_gb": 8,
+        "quality": 3,
+        "speed": 3,
+        "license": "Apache-2.0",
+        "tested": "2026-11-19",
+        "description": "Best notes for most PCs: measured on the multilingual bench as on the Mac.",
+        "descriptions": {
+          "fr": "Les meilleures notes pour la plupart des PC : mesuré sur le banc multilingue comme sur le Mac."
+        }
+      },
+      {
+        "id": "qwen3-4b-gguf",
+        "repo": "unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_K_M",
+        "name": "Qwen3 4B",
+        "size_gb": 2.5,
+        "min_vram_gb": 4,
+        "min_ram_gb": 8,
+        "recommended_ram_gb": 8,
+        "quality": 2,
+        "speed": 4,
+        "license": "Apache-2.0",
+        "tested": null,
+        "description": "Lighter and a little faster, slightly less accurate.",
+        "descriptions": {
+          "fr": "Plus léger et un peu plus rapide, un peu moins précis."
+        }
+      },
+      {
+        "id": "qwen3.5-9b-gguf",
+        "repo": "unsloth/Qwen3.5-9B-GGUF:Q4_K_M",
+        "name": "Qwen3.5 9B",
+        "size_gb": 5.68,
+        "min_vram_gb": 7.5,
+        "min_ram_gb": 16,
+        "recommended_ram_gb": 16,
+        "quality": 4,
+        "speed": 2,
+        "license": "Apache-2.0",
+        "tested": null,
+        "description": "Bigger: for PCs with 8 GB or more of graphics memory, or for notes written while you're away.",
+        "descriptions": {
+          "fr": "Plus gros : pour les PC avec 8 Go de mémoire graphique ou plus, ou pour les notes écrites pendant votre absence."
+        }
+      }
+    ],
+    "speech": [
+      {
+        "id": "whisper-large-v3-turbo-ct2",
+        "repo": "large-v3-turbo",
+        "name": "Whisper large-v3 turbo",
+        "size_gb": 1.6,
+        "min_vram_gb": 2,
+        "min_ram_gb": 4,
+        "recommended_ram_gb": 4,
+        "quality": 3,
+        "speed": 4,
+        "license": "MIT",
+        "tested": "2026-11-19",
+        "description": "Accurate and fast: the usual choice.",
+        "descriptions": {
+          "fr": "Précis et rapide : le choix habituel."
+        }
+      },
+      {
+        "id": "whisper-large-v3-ct2",
+        "repo": "large-v3",
+        "name": "Whisper large-v3",
+        "size_gb": 3.09,
+        "min_vram_gb": 4,
+        "min_ram_gb": 8,
+        "recommended_ram_gb": 8,
+        "quality": 4,
+        "speed": 2,
+        "license": "MIT",
+        "tested": null,
+        "description": "A little more accurate on accents and noisy rooms, several times slower.",
+        "descriptions": {
+          "fr": "Un peu plus précis sur les accents et les salles bruyantes, plusieurs fois plus lent."
+        }
+      }
+    ]
+  }
 }

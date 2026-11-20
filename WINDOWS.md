@@ -97,3 +97,38 @@ then the installer and the updates. If not, find out why first.
 - Updates signed with our own Ed25519 key (public key in the app), since there's no Windows code
   certificate yet; SmartScreen will warn on the first download until there is one.
 - `catalog/models.json` gets per-platform entries (MLX for the Mac, GGUF / faster-whisper for Windows).
+
+## Step C: the Windows app (preview), asked 2026-11-20
+
+MeetScribe is now **Hesper** (0.7.0, by Nibjorg Studio). The repository moved to
+`https://github.com/Gbally/Hesper.git`: on the PC, `git remote set-url origin https://github.com/Gbally/Hesper.git`,
+then `git pull`. The Python package is `hesper` (`python -m hesper …`); environment variables
+`HESPER_HOME`, `HESPER_DEVICE`, `HESPER_AS_PC`.
+
+Brand (mac/App/Brand.swift): duskInk `#1B1F2E`, horizon `#2E3550`, eveningStar `#F2B544` (accent),
+recording `#D93A3A` (only while recording). Tray icon in colour (Windows can't tint): a rounded
+square `#2E3550` (rx 22 of 100) with the star `M50 14 Q50 40 74 40 Q50 40 50 66 Q50 40 26 40 Q50 40 50 14 Z`
+in `#F2B544`; while recording, add a red dot. App icon: scripts/make_icon.swift.
+
+Scope of the preview, minimal but clean:
+
+1. Tray icon. Menu: Record / Stop and create notes / Open notes folder / Settings / Quit. While
+   recording: the elapsed time and the red dot.
+2. Microphone + PC sound (WASAPI loopback) into two 16 kHz mono WAV tracks on one timeline
+   (`mic.wav`, `system.wav` in a session folder, like mic.caf / system.caf on the Mac).
+3. On stop: `python -m hesper process <folder>` (src/hesper/cli.py) with its progress shown, then a
+   Windows notification "Notes ready" that opens notes.md (or a simple window showing it).
+4. First launch installs everything in `%LOCALAPPDATA%\Hesper`: uv, Python 3.12, `uv sync` of the
+   bundled engine, the CUDA libraries only when an NVIDIA GPU is found, llama-server (CUDA or CPU),
+   models via `python -m hesper setup`. Nothing system-wide, no admin rights; a simple progress window.
+5. Minimal settings: your name, the notes folder, meeting languages, todo_filter (off / standard /
+   strict), written to `%LOCALAPPDATA%\Hesper\config.toml` as Engine.swift does on the Mac.
+6. Deliverable: one self-contained `Hesper.exe` for the GitHub releases, then `latest-windows.json`
+   at the repo root, same format as latest.json (version, build, url, sha256, notes). The site
+   (docs/index.html) already reads it: its Windows button turns on when the file exists.
+
+Suggested stack: C# / .NET 8 (WinForms or WPF, NotifyIcon, NAudio for WASAPI;
+`dotnet publish -r win-x64 --self-contained -p:PublishSingleFile=true`), with a portable .NET SDK
+inside the project folder. Code under `win/` in the repository. No telemetry. Order: (a) capture
+mic + loopback and run `hesper process` on the result, (b) tray icon and menu, (c) first-launch
+install, (d) the exe. Ask the owner before each install and each long GPU job; he commits.

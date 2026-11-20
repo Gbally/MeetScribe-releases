@@ -40,6 +40,11 @@
   .hero .actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
   .btn:hover { filter: brightness(1.08); }
   .btn.small { padding: 7px 14px; font-size: 14px; }
+  .btn.win { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  .btn.win.primary, .btn.mac.secondary { order: -1; }
+  .btn.mac.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  .btn.win.primary { background: var(--accent); color: var(--accent-text); border: 0; }
+  .btn.soon { opacity: .6; pointer-events: none; }
   header.hero { padding: 80px 0 40px; text-align: center; }
   .hero h1 { font-size: clamp(36px, 6vw, 60px); line-height: 1.07; letter-spacing: -0.02em; margin: 0 0 18px; }
   .hero h1 span { color: var(--link); }
@@ -98,24 +103,28 @@
       <a href="#privacy">Privacy</a>
       <a href="#install">Install</a>
       <a href="https://github.com/Gbally/Hesper"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z"/></svg> GitHub</a>
-      <a class="btn small dl" href="https://github.com/Gbally/Hesper/releases/latest">Download</a>
+      <a class="btn small dl mac" href="https://github.com/Gbally/Hesper/releases/latest">Download</a>
     </div>
   </div>
 </nav>
 
 <header class="hero">
   <div class="wrap">
-    <h1>Meeting notes that<br><span>stay on your Mac.</span></h1>
+    <h1>Meeting notes that<br><span>stay on your computer.</span></h1>
     <p class="lead">Hesper records your Teams, Zoom or Meet calls, works out who said what, and hands you a
-      summary, the decisions and a to-do list — all with AI that runs on your Mac. No account, nothing uploaded.</p>
+      summary, the decisions and a to-do list — all with AI that runs on your own computer. No account, nothing uploaded.</p>
     <div class="actions">
-    <a class="btn dl" href="https://github.com/Gbally/Hesper/releases/latest">
+    <a class="btn dl mac" href="https://github.com/Gbally/Hesper/releases/latest">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
-      <span id="dl-label">Download for Mac</span>
+      <span class="dl-text mac">Download for Mac</span>
+    </a>
+    <a class="btn dl win soon" href="https://github.com/Gbally/Hesper/releases" aria-disabled="true">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+      <span class="dl-text win">Windows · coming soon</span>
     </a>
     <a class="btn ghost" href="https://github.com/Gbally/Hesper"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z"/></svg> Star on GitHub</a>
     </div>
-    <div class="meta">Free and open source · macOS 13 or later · Apple silicon (M1 or newer) · 8 GB memory or more</div>
+    <div class="meta">Free and open source · Mac: macOS 13 or later, Apple silicon (M1 or newer), 8 GB memory or more · Windows: 10 or 11, 16 GB memory; an NVIDIA graphics card makes it about 5× faster</div>
     <div class="meta">English · Français · Español · Português · 日本語 · 中文</div>
     <div class="shots">
       <img class="a" src="img/home.png" alt="Hesper menu bar window: a record button and today's meetings">
@@ -177,7 +186,8 @@
       <div class="card"><h3>Allow access</h3><p>Microphone, and Screen &amp; System Audio Recording to hear the other participants. Restart Hesper once.</p></div>
     </div>
     <div class="cta" style="margin-top:44px">
-      <a class="btn dl" href="https://github.com/Gbally/Hesper/releases/latest"><span class="dl-text">Download for Mac</span></a>
+      <a class="btn dl mac" href="https://github.com/Gbally/Hesper/releases/latest"><span class="dl-text mac">Download for Mac</span></a>
+      <a class="btn dl win soon" href="https://github.com/Gbally/Hesper/releases" aria-disabled="true"><span class="dl-text win">Windows · coming soon</span></a>
       <p class="note">Always tell the other participants that you're recording, and follow your company's rules.</p>
     </div>
   </div>
@@ -202,17 +212,25 @@
 </footer>
 
 <script>
-  // The download buttons point straight at the newest installer (latest.json is in the repo root).
-  fetch("https://raw.githubusercontent.com/Gbally/Hesper/main/latest.json", { cache: "no-store" })
-    .then(r => r.ok ? r.json() : Promise.reject())
-    .then(info => {
-      document.querySelectorAll("a.dl").forEach(a => { a.href = info.url; });
-      const label = "Download Hesper " + info.version;
-      document.getElementById("dl-label").textContent = label;
-      document.querySelectorAll(".dl-text").forEach(s => { s.textContent = label; });
-      document.getElementById("version").textContent = info.version;
-    })
-    .catch(() => {});
+  // The download buttons point straight at the newest installers: latest.json (Mac) and
+  // latest-windows.json (Windows) in the repo root. No Windows installer yet: "coming soon".
+  const raw = "https://raw.githubusercontent.com/Gbally/Hesper/main/";
+  const onWindows = /Windows/i.test(navigator.userAgent);
+  const get = f => fetch(raw + f, { cache: "no-store" }).then(r => r.ok ? r.json() : Promise.reject());
+  get("latest.json").then(info => {
+    document.querySelectorAll("a.dl.mac").forEach(a => { a.href = info.url; });
+    document.querySelectorAll(".dl-text.mac").forEach(s => { s.textContent = "Download for Mac · " + info.version; });
+    document.getElementById("version").textContent = info.version;
+  }).catch(() => {});
+  get("latest-windows.json").then(info => {
+    document.querySelectorAll("a.dl.win").forEach(a => { a.href = info.url; a.classList.remove("soon"); a.removeAttribute("aria-disabled"); });
+    document.querySelectorAll(".dl-text.win").forEach(s => { s.textContent = "Download for Windows · " + info.version; });
+    if (onWindows) {  // the visitor's own system first
+      document.querySelectorAll("a.dl.win:not(.small)").forEach(a => a.classList.add("primary"));
+      document.querySelectorAll("a.dl.mac:not(.small)").forEach(a => a.classList.add("secondary"));
+      document.querySelectorAll("nav a.dl").forEach(a => { a.href = info.url; });
+    }
+  }).catch(() => {});
 </script>
 </body>
 </html>

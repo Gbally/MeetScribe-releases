@@ -8,7 +8,11 @@ namespace Hesper;
 /// lines: "@@step {"key": "Transcribing (%@ min)", "args": ["9"]}" and "@@progress 0.42".
 static class EngineRunner
 {
-    public record Result(bool Ok, string ErrorTail);
+    /// OutOfMemory: the errors show a model didn't fit (in the GPU's memory or the PC's).
+    public record Result(bool Ok, string ErrorTail, bool OutOfMemory = false);
+
+    /// What Python, CUDA and llama.cpp print when a model doesn't fit in memory.
+    static readonly string[] MemorySigns = ["out of memory", "OutOfMemory", "MemoryError", "cudaMalloc", "failed to allocate", "Insufficient Memory", "Not enough memory"];
 
     public static Dictionary<string, string?> Environment()
     {
@@ -69,7 +73,8 @@ static class EngineRunner
         Paths.WriteLog($"{Path.GetFileName(exe)} {string.Join(' ', info.ArgumentList.Take(3))} → exit {p.ExitCode}"
                        + (p.ExitCode == 0 ? "" : "\n" + string.Join("\n", tail.TakeLast(20))));
         var shown = tail.Where(l => !l.StartsWith("Fetching") && !l.Contains("Warning")).TakeLast(6);
-        return new(p.ExitCode == 0, string.Join("\n", shown));
+        var memory = p.ExitCode != 0 && tail.Any(l => MemorySigns.Any(s => l.Contains(s, StringComparison.OrdinalIgnoreCase)));
+        return new(p.ExitCode == 0, string.Join("\n", shown), memory);
     }
 
     public static Task<Result> Hesper(IEnumerable<string> args, Action<string>? onLine = null, CancellationToken cancel = default)

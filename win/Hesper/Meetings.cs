@@ -67,12 +67,29 @@ static class Meetings
         };
     }
 
+    /// The meeting folders: the notes folder's, and the recordings not processed yet (Paths.Recordings).
+    static IEnumerable<string> Folders(string root) =>
+        new[] { Paths.Recordings, root }.Where(Directory.Exists).SelectMany(Directory.EnumerateDirectories);
+
     public static JsonArray List(string root)
     {
-        if (!Directory.Exists(root)) return [];
-        var items = Directory.EnumerateDirectories(root).Select(Summary).OfType<JsonObject>()
+        var items = Folders(root).Select(Summary).OfType<JsonObject>()
             .OrderByDescending(m => m["date"]!.GetValue<string>(), StringComparer.Ordinal);
         return new JsonArray(items.ToArray<JsonNode>());
+    }
+
+    /// The name in meeting.json (the calendar's, or typed): the engine keeps it for the notes.
+    public static string InfoTitle(string folder) => Read(folder, "meeting.json")?["title"]?.GetValue<string>()?.Trim() ?? "";
+
+    /// The meeting's name as the list shows it.
+    public static string TitleOf(string folder) => Title(Read(folder, "meeting.json"), Read(folder, "notes.json"));
+
+    /// What was decided last time (else the summary), for the brief before the next one.
+    public static JsonArray Highlights(string folder, int count = 5)
+    {
+        var notes = Read(folder, "notes.json");
+        var items = notes?["decisions"] is JsonArray d && d.Count > 0 ? d : notes?["summary"] as JsonArray ?? [];
+        return new JsonArray(items.Take(count).Select(i => i?.DeepClone()).ToArray());
     }
 
     /// Everything a meeting window shows: the list entry, the notes and the transcript's lines.
@@ -95,20 +112,24 @@ static class Meetings
         return m;
     }
 
-    /// The meeting's folder, only if it really is one of the notes folder (ids come from the page).
+    /// The meeting's folder, only if it really is one of the notes folder or of the recordings not
+    /// processed yet (ids come from the page).
     public static string? FolderOf(string root, string id)
     {
         if (id.Length == 0 || id.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || id is "." or "..") return null;
-        var folder = Path.Combine(root, id);
-        return Directory.Exists(folder) ? folder : null;
+        return new[] { Path.Combine(Paths.Recordings, id), Path.Combine(root, id) }.FirstOrDefault(Directory.Exists);
     }
 
     public static void SetDone(string folder, int index, bool done)
     {
         var set = Done(folder).ToHashSet();
         if (done) set.Add(index); else set.Remove(index);
-        File.WriteAllText(Path.Combine(folder, "todo.json"), JsonSerializer.Serialize(set.Order().ToList()));
+        SetAllDone(folder, set);
     }
+
+    /// The to-dos ticked off, all at once (after editing the list, the ticks follow their to-dos).
+    public static void SetAllDone(string folder, IEnumerable<int> done) =>
+        File.WriteAllText(Path.Combine(folder, "todo.json"), JsonSerializer.Serialize(done.Distinct().Order().ToList()));
 
     /// Sets one field of meeting.json (the template, the duration…).
     public static void SetInfo(string folder, string key, JsonNode? value)
@@ -143,27 +164,35 @@ static class Meetings
         File.WriteAllText(Path.Combine(folder, "todo.json"), JsonSerializer.Serialize(done));
     }
 
-    /// "They're right": the names guessed from the calendar are kept, the banner goes.
-    public static void ConfirmGuessedNames(string folder)
-    {
-        if (Read(folder, "notes.json") is not JsonObject notes) return;
-        notes.Remove("guessed_names");
-        File.WriteAllText(Path.Combine(folder, "notes.json"), notes.ToJsonString(new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
-    }
+    /// The names guessed from the calendar, still to be confirmed.
+    public static List<string> GuessedNames(string folder) =>
+        (Read(folder, "notes.json")?["guessed_names"] as JsonArray ?? []).Select(n => n?.GetValue<string>() ?? "").Where(n => n.Length > 0).ToList();
 
     /// The meetings whose title, notes or transcript contain every word.
     public static JsonArray Search(string root, string query)
     {
         var words = query.ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var hits = new JsonArray();
-        if (words.Length == 0 || !Directory.Exists(root)) return hits;
-        foreach (var folder in Directory.EnumerateDirectories(root))
+        if (words.Length == 0) return hits;
+        foreach (var folder in Folders(root))
         {
             var text = string.Join("\n", new[] { "meeting.json", "notes.json", "transcript.md" }
                 .Select(f => Path.Combine(folder, f)).Where(File.Exists).Select(File.ReadAllText)).ToLowerInvariant();
             if (words.All(text.Contains)) hits.Add(Path.GetFileName(folder));
         }
         return hits;
+    }
+
+    /// Short voice samples per speaker (clips.json and clips\*.wav, made by the engine): {speaker:
+    /// [{file, start, text}]}, or null when the meeting has none (yet).
+    public static JsonObject? Clips(string folder) => Read(folder, "clips.json") as JsonObject;
+
+    /// One voice sample's file, only if it really is in that meeting's clips folder (names come from the page).
+    public static string? ClipFile(string root, string id, string name)
+    {
+        if (FolderOf(root, id) is not { } folder || name.Length == 0 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) return null;
+        var path = Path.Combine(folder, "clips", name);
+        return File.Exists(path) ? path : null;
     }
 
     /// The first things each speaker said (to tell who is who when naming them).

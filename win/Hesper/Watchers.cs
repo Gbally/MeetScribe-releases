@@ -10,13 +10,14 @@ namespace Hesper;
 /// recording doesn't count. Needs no permission and never touches the audio.
 sealed class CallMonitor : IDisposable
 {
-    /// Process names whose microphone use means "a call".
+    /// Process names whose microphone use means "a call": the Mac's list (meeting apps and browsers).
+    /// Not Discord: its voice chat is mostly games, and Hesper would offer to record them.
     static readonly string[] MeetingApps =
-        ["ms-teams", "teams", "zoom", "webex", "ciscocollabhost", "slack", "discord", "skype", "chrome", "msedge", "firefox", "brave", "opera", "arc", "vivaldi"];
+        ["ms-teams", "teams", "zoom", "webex", "ciscocollabhost", "slack", "chrome", "msedge", "firefox", "brave", "opera", "arc", "vivaldi"];
     static readonly Dictionary<string, string> Names = new()
     {
         ["ms-teams"] = "Microsoft Teams", ["teams"] = "Microsoft Teams", ["zoom"] = "Zoom", ["webex"] = "Webex", ["ciscocollabhost"] = "Webex",
-        ["slack"] = "Slack", ["discord"] = "Discord", ["skype"] = "Skype", ["chrome"] = "Google Chrome", ["msedge"] = "Microsoft Edge",
+        ["slack"] = "Slack", ["chrome"] = "Google Chrome", ["msedge"] = "Microsoft Edge",
         ["firefox"] = "Firefox", ["brave"] = "Brave", ["opera"] = "Opera", ["arc"] = "Arc", ["vivaldi"] = "Vivaldi",
     };
 
@@ -77,7 +78,7 @@ sealed class CallMonitor : IDisposable
                 string name;
                 try { name = System.Diagnostics.Process.GetProcessById(pid).ProcessName.ToLowerInvariant(); }
                 catch (ArgumentException) { continue; }
-                var app = MeetingApps.FirstOrDefault(a => name == a || name.StartsWith(a));
+                var app = MeetingApps.FirstOrDefault(a => name == a || (a.Length > 3 && name.StartsWith(a)));  // "arc", not "arcade…"
                 if (app != null) return Names[app];
             }
         }

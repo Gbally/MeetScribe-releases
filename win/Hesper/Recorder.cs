@@ -142,13 +142,17 @@ sealed class Recorder : IDisposable
         }
     }
 
-    public void Stop()
+    /// Stops both tracks together. Await it on the UI thread, never wait on it there: NAudio says a
+    /// capture has stopped through the UI thread, so blocking it held each track for its whole timeout.
+    public async Task StopAsync()
     {
-        mic?.Stop();
-        system?.Stop();
+        await Task.WhenAll(mic?.StopAsync() ?? Task.CompletedTask, system?.StopAsync() ?? Task.CompletedTask);
         keepAlive?.Stop();
         clock.Stop();
     }
+
+    /// For the console test (--record), which has no UI thread.
+    public void Stop() => StopAsync().GetAwaiter().GetResult();
 
     public void Dispose()
     {
@@ -232,10 +236,10 @@ sealed class Recorder : IDisposable
             }
         }
 
-        public void Stop()
+        public async Task StopAsync()
         {
             capture.StopRecording();
-            stopped.Task.Wait(TimeSpan.FromSeconds(3));
+            await Task.WhenAny(stopped.Task, Task.Delay(3000));
             writer.Flush();
         }
 

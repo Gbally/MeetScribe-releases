@@ -33,8 +33,14 @@ static class Program
             Application.Run(form);
             return 0;
         }
-        using var single = new Mutex(true, @"Local\Hesper", out var first);
+        if (args.Length >= 1 && args[0] == "--notify")  // a test notification, as Hesper's (support: "no notifications")
+            return NotifyTest();
+        // One Hesper per data folder: a test setup (HESPER_HOME) runs beside the real one
+        var instance = Environment.GetEnvironmentVariable("HESPER_HOME") == null ? "" : "-" + Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Paths.Home.ToLowerInvariant())))[..12];
+        using var single = new Mutex(true, @"Local\Hesper" + instance, out var first);
         if (!first) return 0;  // already running: its icon is in the notification area
+        Identity.Register();  // before the notification icon: Windows then knows whose notifications they are
         ApplicationConfiguration.Initialize();
         // Never vanish without a word: say what went wrong, and keep it in hesper.log
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
@@ -49,6 +55,22 @@ static class Program
         Paths.WriteLog("crash: " + e);
         MessageBox.Show($"Hesper stopped: {e.Message}\n\nDetails are in {Paths.Log}.", "Hesper",
                         MessageBoxButtons.OK, MessageBoxIcon.Error);
+    }
+
+    /// Shows one notification the way the app does (its app ID, its icon in the notification area),
+    /// then says under which name Windows lists it in Settings → Notifications.
+    static int NotifyTest()
+    {
+        Identity.Register();
+        ApplicationConfiguration.Initialize();
+        using var tray = new NotifyIcon { Icon = Brand.Icon(32), Text = "Hesper", Visible = true };
+        tray.ShowBalloonTip(5000, "Hesper", "Notifications work.", ToolTipIcon.None);
+        var until = DateTime.Now.AddSeconds(4);
+        while (DateTime.Now < until) { Application.DoEvents(); Thread.Sleep(50); }
+        using var settings = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\" + Identity.AppId);
+        Console.WriteLine(settings != null ? $"listed in Settings → Notifications as {Identity.AppId}" : $"not listed as {Identity.AppId}");
+        tray.Visible = false;
+        return 0;
     }
 
     static int Run()

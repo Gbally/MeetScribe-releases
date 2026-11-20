@@ -25,18 +25,38 @@ static class Setup
     static string LlamaDir => Path.Combine(Paths.Home, "models", "llama.cpp");
     public static string AppVersion => Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0";
 
+    /// The version and the engine inside this exe: a build with another engine (even at the same
+    /// version, as test builds are) sets up again, so the engine's files are never older than the app.
+    static string Stamp => $"{AppVersion} {EngineHash}";
+    static string? engineHash;
+    static string EngineHash
+    {
+        get
+        {
+            if (engineHash != null) return engineHash;
+            using var zip = Assembly.GetExecutingAssembly().GetManifestResourceStream("engine.zip");
+            return engineHash = zip == null ? "none" : Convert.ToHexString(SHA256.HashData(zip))[..16].ToLowerInvariant();
+        }
+    }
+
     public static bool IsInstalled =>
-        File.Exists(Paths.Python) && File.Exists(Marker) && File.ReadAllText(Marker).Trim() == AppVersion;
+        File.Exists(Paths.Python) && File.Exists(Marker) && File.ReadAllText(Marker).Trim() == Stamp;
+
+    /// Set up before, by this version or another one: an update (or a new engine) only needs the
+    /// setup again, quietly, not the welcome window.
+    public static bool WasInstalled => File.Exists(Paths.Python) && File.Exists(Marker);
 
     /// An NVIDIA GPU (its driver installs nvidia-smi): the CUDA builds then, else the CPU ones.
     public static bool HasNvidia => File.Exists(Path.Combine(Environment.SystemDirectory, "nvidia-smi.exe"));
 
     /// Runs every step; report(status, fraction 0..1 or null). Throws with a readable message.
-    public static async Task Run(Action<string, double?> report, CancellationToken cancel)
+    /// modelsThere: the models in use are already downloaded (an update): no need to ask Hugging Face
+    /// again, which also lets an update set up without the internet.
+    public static async Task Run(Action<string, double?> report, CancellationToken cancel, bool modelsThere = false)
     {
         Directory.CreateDirectory(Paths.Home);
         var gpu = HasNvidia;
-        Paths.WriteLog($"setup {AppVersion}, NVIDIA GPU: {gpu}");
+        Paths.WriteLog($"setup {Stamp}, NVIDIA GPU: {gpu}");
 
         report("Unpacking the engine…", null);
         UnpackEngine();
@@ -67,17 +87,20 @@ static class Setup
             File.WriteAllText(stamp, want);
         }
 
-        report("Downloading the models…", 0);
-        string step = "Downloading the models…";
-        var models = await EngineRunner.Hesper(["setup"], line =>
+        if (!modelsThere)
         {
-            var (s, p) = EngineRunner.Parse(line);
-            if (s != null) step = s;
-            if (s != null || p != null) report(step, p);
-        }, cancel);
-        if (!models.Ok) throw new InvalidOperationException("Downloading the models failed:\n" + models.ErrorTail);
+            report("Downloading the models…", 0);
+            string step = "Downloading the models…";
+            var models = await EngineRunner.Hesper(["setup"], line =>
+            {
+                var (s, p) = EngineRunner.Parse(line);
+                if (s != null) step = s;
+                if (s != null || p != null) report(step, p);
+            }, cancel);
+            if (!models.Ok) throw new InvalidOperationException("Downloading the models failed:\n" + models.ErrorTail);
+        }
 
-        File.WriteAllText(Marker, AppVersion);
+        File.WriteAllText(Marker, Stamp);
         report("Ready", 1);
     }
 

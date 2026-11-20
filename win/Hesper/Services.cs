@@ -60,26 +60,33 @@ static class Share
     }
 
     /// A draft in the chosen mail app: the default one (mailto), Outlook, Gmail or Outlook on the web.
-    public static void Email(string app, string gmailAccount, string subject, string body)
+    /// A draft to the meeting's attendees (from the calendar), as the Mac's.
+    public static void Email(string app, string gmailAccount, IReadOnlyList<string> to, string subject, string body)
     {
         string Q(string s) => Uri.EscapeDataString(s);
+        var list = string.Join(",", to);
         switch (app)
         {
             case "gmail":
                 var account = gmailAccount.Trim().Length > 0 ? $"authuser={Q(gmailAccount.Trim())}&" : "";
-                Open($"https://mail.google.com/mail/?{account}view=cm&fs=1&su={Q(subject)}&body={Q(body)}");
+                Open($"https://mail.google.com/mail/?{account}view=cm&fs=1&to={Q(list)}&su={Q(subject)}&body={Q(body)}");
                 break;
             case "outlookWeb":
-                Open($"https://outlook.office.com/mail/deeplink/compose?subject={Q(subject)}&body={Q(body)}");
+                Open($"https://outlook.office.com/mail/deeplink/compose?to={Q(list)}&subject={Q(subject)}&body={Q(body)}");
                 break;
             case "outlook" when OutlookPath() is { } outlook:
-                Process.Start(new ProcessStartInfo(outlook) { ArgumentList = { "/c", "ipm.note", "/m", $"?subject={Q(subject)}&body={Q(body)}" } });
+                Process.Start(new ProcessStartInfo(outlook) { ArgumentList = { "/c", "ipm.note", "/m", $"{string.Join(";", to)}?subject={Q(subject)}&body={Q(body)}" } });
                 break;
             default:
-                Open($"mailto:?subject={Q(subject)}&body={Q(body)}");
+                Open($"mailto:{list}?subject={Q(subject)}&body={Q(body)}");
                 break;
         }
     }
+
+    /// The attendees' addresses of a meeting from the calendar (meeting.json), for an e-mail.
+    public static List<string> Attendees(JsonObject m) =>
+        (m["calendar"]?["attendees"] as JsonArray ?? []).Select(a => a?["email"]?.GetValue<string>()?.Trim() ?? "")
+            .Where(e => e.Contains('@') && !e.Any(c => c is ',' or ';' or '?' or '&' or ' ')).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
     /// Classic Outlook's exe, from its App Paths entry.
     public static string? OutlookPath() =>
@@ -104,7 +111,7 @@ static class Export
     }
 
     /// "2026-10-23 Weekly sync.md", or "… 2.md" when that name is another meeting's copy.
-    static string FileFor(JsonObject m, string dir)
+    public static string FileFor(JsonObject m, string dir)
     {
         var day = DateTime.TryParse(m["date"]?.GetValue<string>(), out var d) ? d.ToString("yyyy-MM-dd") : "";
         var title = Regex.Replace(m["title"]?.GetValue<string>() ?? "", @"[/\\:*?""<>|]", "-").Trim();
@@ -175,12 +182,24 @@ static class Storage
             try
             {
                 if (Directory.Exists(dest)) { failed++; continue; }
-                if (Path.GetPathRoot(dir)!.Equals(Path.GetPathRoot(dest), StringComparison.OrdinalIgnoreCase)) Directory.Move(dir, dest);
-                else { Microsoft.VisualBasic.FileIO.FileSystem.CopyDirectory(dir, dest); Directory.Delete(dir, true); }
+                MoveFolder(dir, dest);
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { failed++; }
         }
         return failed;
+    }
+
+    /// One folder to another place, also on another drive (copied, then deleted).
+    public static void MoveFolder(string dir, string dest)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+        if (Path.GetPathRoot(Path.GetFullPath(dir))!.Equals(Path.GetPathRoot(Path.GetFullPath(dest)), StringComparison.OrdinalIgnoreCase))
+            Directory.Move(dir, dest);
+        else
+        {
+            Microsoft.VisualBasic.FileIO.FileSystem.CopyDirectory(dir, dest);
+            Directory.Delete(dir, true);
+        }
     }
 }
 
@@ -286,6 +305,7 @@ static class Uninstall
     public static void Run(string notesFolder, bool removeNotes)
     {
         Startup.Enabled = false;
+        Identity.Remove();
         if (removeNotes && Directory.Exists(notesFolder))
             Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(notesFolder, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
                                                                    Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);

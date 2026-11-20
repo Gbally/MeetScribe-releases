@@ -8,7 +8,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Hesper</RootNamespace>
     <AssemblyName>Hesper</AssemblyName>
-    <Version>0.7.0</Version>
+    <Version>0.7.1</Version>
     <Company>Gbally</Company>
     <Product>Hesper</Product>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>

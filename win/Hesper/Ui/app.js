@@ -31,7 +31,10 @@ const LANGS = { en: "English", fr: "Français", es: "Español", pt: "Português"
 let winWords = {};
 function tr(key, ...args) {
   let s = words[key] ?? winWords[key] ?? key;
-  for (const a of args) s = s.replace("%@", a);
+  // Numbered slots ("%2$@ … %1$@": a language that says them in another order), else in order;
+  // functions, not strings, so a "$" in a meeting's name stays as it is
+  if (/%\d\$@/.test(s)) return s.replace(/%(\d)\$@/g, (_, n) => String(args[n - 1] ?? ""));
+  for (const a of args) s = s.replace("%@", () => String(a));
   return s;
 }
 let lang = "en";
@@ -106,15 +109,15 @@ function openMenu(anchor, items, x = null, y = null) {
 }
 function closeMenu() { document.querySelectorAll(".menu").forEach(m => m.remove()); }
 
+/// "Overdue · 23 Oct", "Due today", "Due tomorrow", "Due Friday", "Due 30 Oct", or the due text when no date (DueBadge on the Mac).
 function dueBadge(a, done) {
-  if (!a.due_date && !a.due) return "";
-  let cls = "";
-  if (a.due_date && !done) {
-    const days = (new Date(a.due_date + "T00:00") - new Date(new Date().toDateString())) / 864e5;
-    cls = days < 0 ? "late" : days <= 1 ? "soon" : "";
-  }
-  const text = a.due_date ? new Date(a.due_date + "T00:00").toLocaleDateString(locale(), { weekday: "short", day: "numeric", month: "short" }) : a.due;
-  return `<span class="due ${cls}">${esc(text)}</span>`;
+  if (!a.due_date) return a.due && a.due !== "—" ? `<span class="caption">${esc(a.due)}</span>` : "";
+  const day = new Date(a.due_date + "T00:00");
+  const days = Math.round((day - new Date(new Date().toDateString())) / 864e5);
+  const date = day.toLocaleDateString(locale(), { day: "numeric", month: "short" });
+  const [text, cls] = days < 0 ? [tr("Overdue · %@", date), "late"] : days === 0 ? [tr("Due today"), "soon"] : days === 1 ? [tr("Due tomorrow"), "soon"]
+    : days < 7 ? [tr("Due %@", day.toLocaleDateString(locale(), { weekday: "long" })), "week"] : [tr("Due %@", date), ""];
+  return `<span class="due ${done ? "" : cls}">${esc(text)}</span>`;
 }
 const mine = a => {
   const me = (state?.settings?.MyName || "").trim().toLowerCase();
@@ -210,6 +213,7 @@ function drawContent() {
   else {
     if (!state.ready) parts.push(setupCard());
     else parts.push(hero());
+    if (state.memory) parts.push(memoryCard(state.memory));
     if (state.laterPending && !state.recording) parts.push(laterCard());
     if (state.job && !["ask", "model", "check"].includes(state.job.kind)) parts.push(jobCard(state.job));
     if (state.answer) parts.push(answerCard(state.answer));
@@ -239,8 +243,12 @@ const templateName = id => tr(TEMPLATES.find(([v]) => v === id)?.[1] ?? "General
 
 function hero() {
   const r = state.recording;
+  if (state.stopping || (r && stoppingId === r.id)) return stoppingCard();
   if (r) return `<div class="card">
       <div class="row"><div class="rec-dot"></div><div class="headline grow">${L("Recording now")}</div><div class="title2 mono" id="clock">${fmtDuration(r.elapsed)}</div></div>
+      ${r.event ? `<div class="caption ellipsis">${esc(tr("%@ · until %@", r.event.title, fmtClock(r.event.end)))}</div>` : ""}
+      ${r.asking ? `<div class="ask-over"><b>${esc(tr(r.asking.key, ...r.asking.args))}</b>
+        <button class="btn small" data-act="keep">${L("Keep recording")}</button></div>` : ""}
       <div class="meter">${icon("mic")}<span class="label">${L("Your mic")}</span><div class="bar"><div id="lv-mic"></div></div></div>
       <div class="meter">${icon("speaker")}<span class="label">${L("Meeting")}</span><div class="bar"><div id="lv-sys"></div></div></div>
       ${r.notices.map(n => `<div class="notice">${icon("warn")}<span>${esc(notice(n))}</span></div>`).join("")}
@@ -252,7 +260,7 @@ function hero() {
   const now = ev && new Date(ev.start) <= new Date(Date.now() + 10 * 60000);
   const open = brief?.open?.length ?? 0;
   return `<div class="hero">
-      <button class="record-btn" data-act="record" title="${L("Start recording")}" ${state.ready ? "" : "disabled"}>${glyph("#F2B544")}</button>
+      <button class="record-btn" data-act="record" title="${L("Start recording")}" ${state.ready && !state.starting ? "" : "disabled"}>${state.starting ? `<div class="spinner"></div>` : glyph("#F2B544")}</button>
       <div class="grow" style="min-width:0"><div class="headline ellipsis">${ev && now ? esc(tr("Record %@", ev.title)) : L("Record")}</div>
         <div class="caption row" style="gap:4px">${ev && now ? `<span>${esc(tr("Now · %@ ·", fmtClock(ev.start)))}</span>` : ""}<button class="plain" style="color:var(--secondary)" data-act="template" title="${L("Meeting type: shapes the notes")}">${esc(templateName(t))} ▾</button>
           ${state.settings.Hotkey ? `<span>· ${esc(state.settings.Hotkey)}</span>` : ""}</div>
@@ -260,6 +268,28 @@ function hero() {
           : state.settings.AutoRecord ? `<div class="caption">${L("Records calls automatically")}</div>` : ""}
       </div>
     </div>`;
+}
+
+/// A model that ran out of memory on this PC, with what to do, until dismissed or another is chosen (MemoryCard on the Mac).
+function memoryCard(w) {
+  return `<div class="card"><div class="row" style="color:var(--warn)">${icon("warn")}<b>${L("Not enough memory")}</b></div>
+    <div class="caption" style="color:var(--text)">${P(w.speech ? "Transcription ran out of memory on this Mac: a meeting couldn't be processed."
+      : w.failed ? tr("%@ needs more memory than this Mac had free, so it couldn't finish.", w.name)
+      : tr("%@ ran out of memory on a long meeting: its notes were written in parts, more slowly.", w.name))}</div>
+    <div class="caption">${L("Choose a smaller model, or close other apps before long meetings.")}</div>
+    <div class="row"><button class="btn small" data-act="models">${L("Choose a model…")}</button><span class="grow"></span>
+      <button class="plain" style="color:var(--secondary)" data-act="dismissMemory">${L("Dismiss")}</button></div></div>`;
+}
+
+/// Between the click on Stop (or Discard) and the recording's files being closed: shown at once.
+let stoppingId = null, discarding = false;
+const stoppingCard = () => `<div class="card"><div class="row"><div class="spinner"></div>
+  <div class="headline grow">${L(discarding ? "Discarding the recording…" : "Stopping the recording…")}</div></div></div>`;
+function stopFromPage(discard) {
+  stoppingId = state.recording?.id ?? null;
+  discarding = discard;
+  drawContent();
+  call("stop", { discard });
 }
 
 /// The recorder's notices (English, from the app) in the app's language, with the Mac's texts where they exist.
@@ -389,11 +419,14 @@ function briefView(key) {
   if (!b) return `<div class="empty">${L("No open to-dos from last time")}</div>`;
   const e = b.event, open = b.brief?.open ?? [];
   const last = state.meetings.find(m => m.id === b.brief?.last);
-  return `<div><div class="headline">${esc(e.title)}</div><div class="caption">${esc(fmtClock(e.start))}–${esc(fmtClock(e.end))}</div></div>
+  const people = e.attendees?.length ? " · " + tr("%@ people", e.attendees.length + 1) : "";
+  const highlights = b.brief?.highlights ?? [];
+  return `<div><div class="headline">${esc(e.title)}</div><div class="caption">${esc(fmtClock(e.start))}–${esc(fmtClock(e.end))}${esc(people)}</div></div>
     ${state.recording ? "" : `<button class="btn primary large" data-act="record">● ${L("Start recording")}</button>`}
     <div><div class="section-title">${L("Still open")}</div>${open.length ? todoRows(open.map(o => ({ a: o.action, i: o.index, m: state.meetings.find(m => m.id === o.id) ?? { id: o.id, title: o.title } })))
       : `<div class="empty">${L("No open to-dos from last time")}</div>`}</div>
     ${last ? `<div><div class="section-title">${esc(tr("Last time · %@", new Date(last.date).toLocaleDateString(locale(), { day: "numeric", month: "short" })))}</div>
+      ${highlights.length ? `<ul class="bullets">${highlights.map(h => `<li><span>${esc(h)}</span></li>`).join("")}</ul>` : ""}
       <button class="plain" data-open="${esc(last.id)}">${L("Open those notes")}</button></div>` : ""}`;
 }
 
@@ -418,11 +451,14 @@ async function onContentClick(e) {
   const brief = e.target.closest("[data-brief]")?.dataset.brief;
   if (brief) { homeView = "brief/" + brief; renderHome(); return; }
   if (act === "record") { call("record", { template: template ?? "" }); template = null; }
-  else if (act === "stop") call("stop");
-  else if (act === "discard") { if (await ask(tr("Discard this recording?"), "", tr("Discard"), true)) call("stop", { discard: true }); }
+  else if (act === "stop") stopFromPage(false);
+  else if (act === "discard") { if (await ask(tr("Discard this recording?"), "", tr("Discard"), true)) stopFromPage(true); }
   else if (act === "clearAnswer") call("clearAnswer");
   else if (act === "welcome") call("openWelcome");
   else if (act === "writeNow") call("writeLaterNow");
+  else if (act === "keep") call("keepRecording");
+  else if (act === "models") call("openSettings", { pane: "models" });
+  else if (act === "dismissMemory") call("dismissMemory");
   else if (act === "allTodos") { homeView = "todos"; renderHome(); }
   else if (act === "mine" || act === "everyone") { todoMine = act === "mine"; drawContent(); }
   else if (act === "showDone") { todoShowDone = e.target.checked; drawContent(); }
@@ -457,7 +493,7 @@ async function onContentMenu(e) {
 }
 
 // ============================================================ a meeting
-let meeting = null, view = "notes", speakers = null, editing = null;
+let meeting = null, view = "notes", speakers = null, editing = null, drawnAt = "", meetingSeen = "";
 
 async function loadMeeting(id) {
   meeting = await call("meeting", { id });
@@ -471,6 +507,9 @@ function renderMeeting() {
   const n = m.notes;
   const busy = state?.busy?.includes(m.id);
   const sub = [fmtDate(m.date), m.duration ? fmtDuration(m.duration) : "", (n?.participants ?? []).join(", ")].filter(Boolean).join(" · ");
+  // Drawn again as a job goes on: the reader stays where they were
+  const where = `${m.id}/${view}/${!!editing}`, scrolled = where === drawnAt ? $(".scroll")?.scrollTop ?? 0 : 0;
+  drawnAt = where;
   $("#app").innerHTML = `
   <div class="window">
     <div class="meeting-head">
@@ -485,8 +524,12 @@ function renderMeeting() {
     </div>
     <div class="scroll grow"><div class="meeting-body selectable" id="body"></div></div>
   </div>`;
-  document.querySelectorAll("[data-view]").forEach(b => b.onclick = () => { view = b.dataset.view; speakers = null; renderMeeting(); });
-  $("#edit") && ($("#edit").onclick = () => { editing = JSON.parse(JSON.stringify(n)); renderMeeting(); });
+  document.querySelectorAll("[data-view]").forEach(b => b.onclick = () => { stopClip(); view = b.dataset.view; speakers = null; renderMeeting(); });
+  $("#edit") && ($("#edit").onclick = () => {
+    editing = JSON.parse(JSON.stringify(n));
+    editing.actions = (editing.actions ?? []).map((a, i) => ({ ...a, was: i }));  // so the ticks follow their to-dos
+    renderMeeting();
+  });
   $("#more") && ($("#more").onclick = e => { e.stopPropagation(); openMenu($("#more"), [
     { label: tr("Open notes"), action: () => call("openFile", { id: m.id, name: "notes.md" }), disabled: !n },
     { label: tr("Open transcript"), action: () => call("openFile", { id: m.id, name: "transcript.md" }), disabled: !m.hasTranscript },
@@ -500,6 +543,10 @@ function renderMeeting() {
     { label: tr("Regenerate notes"), action: () => call("regenerate", { id: m.id }), disabled: !m.hasTranscript || busy },
     { label: tr("Regenerate as…"), disabled: !m.hasTranscript || busy, action: () => setTimeout(() => openMenu($("#more"),
         TEMPLATES.map(([v, l]) => ({ label: ((m.template ?? "general") === v ? "✓ " : "") + tr(l), action: () => call("regenerate", { id: m.id, template: v }) }))), 0) },
+    { label: tr("Regenerate in a copy with…"), disabled: !m.hasTranscript || busy, action: async () => {
+        const list = await call("notesModels") ?? [];
+        openMenu($("#more"), list.map(x => ({ label: (x.current ? "✓ " : "") + x.name, action: () => call("regenerateInCopy", { id: m.id, repo: x.repo }) })));
+      } },
     { label: tr("Transcribe again"), action: () => call("process", { id: m.id }), disabled: !m.hasAudio || busy },
     "-",
     { label: tr("Move to Trash…"), danger: true, disabled: busy, action: async () => {
@@ -513,6 +560,7 @@ function renderMeeting() {
     `<div class="line"><span class="t caption mono">${fmtTime(l.start)}</span><span><span class="who">${esc(l.speaker)}</span>${esc(l.text)}</span></div>`).join("");
   else if (view === "speakers") drawSpeakers(body);
   else body.innerHTML = notesHtml(m, busy);
+  if (scrolled) $(".scroll").scrollTop = scrolled;
   if (editing) return;
   body.onclick = async e => {
     const act = e.target.closest("[data-act]")?.dataset.act;
@@ -603,33 +651,83 @@ function drawEditor(body) {
   $("#ed-save").onclick = async () => {
     collect();
     e.actions = (e.actions ?? []).filter(a => a.task);
-    await call("saveNotes", { id: meeting.id, notes: { title: e.title, summary: e.summary, decisions: e.decisions, actions: e.actions } });
+    // The ticks follow their to-dos (removed or added ones shift the others)
+    const done = e.actions.map((a, k) => a.was != null && meeting.done.includes(a.was) ? k : -1).filter(k => k >= 0);
+    const actions = e.actions.map(({ was, ...a }) => a);
+    await call("saveNotes", { id: meeting.id, notes: { title: e.title, summary: e.summary, decisions: e.decisions, actions }, done });
     editing = null;
     loadMeeting(meeting.id);
   };
 }
 
+// Naming the speakers: listen to each one's voice samples (▶), as on the Mac. One sample plays at a time.
+let player = null;
+function stopClip() {
+  if (player) { player.audio.pause(); player.button?.classList.remove("playing"); player = null; }
+}
+function playClip(button) {
+  const same = player?.button === button;
+  stopClip();
+  if (same) return;
+  const audio = new Audio(button.dataset.clip);
+  player = { audio, button };
+  button.classList.add("playing");
+  audio.onended = audio.onerror = () => { if (player?.audio === audio) stopClip(); };
+  audio.play().catch(stopClip);
+}
+const clipUrl = (id, file) => `clip/${encodeURIComponent(id)}/${encodeURIComponent(file.split("/").pop())}`;
+
+/// One speaker's samples: ▶ buttons when there are voice clips, else the first things they said.
+function speakerSamples(m, s) {
+  const clips = speakers.clips?.[s] ?? [];
+  if (clips.length) return clips.map(c => `<button class="clip" data-clip="${esc(clipUrl(m.id, c.file))}" title="${L("Listen")}">
+      <span class="play"></span><span class="caption">“${esc(c.text)}”</span></button>`).join("");
+  const lines = speakers.samples?.[s] ?? [];
+  return lines.map(t => `<div class="caption">“${esc(t)}”</div>`).join("") || `<div class="caption">${L("Only said a few words.")}</div>`;
+}
+
 async function drawSpeakers(body) {
   const m = meeting;
-  speakers ??= await call("samples", { id: m.id }) ?? {};
-  const names = Object.keys(speakers);
-  body.innerHTML = `<div class="caption">${L("Type each speaker's name. Hesper remembers their voice for next time, and the notes are rewritten with the names. Same person split in two? Give both the same name.")}</div>
+  speakers ??= await call("samples", { id: m.id }) ?? { samples: {}, clips: null };
+  const names = m.notes?.participants?.length ? m.notes.participants : Object.keys(speakers.samples ?? {});
+  const guessed = new Set(m.guessed ?? []);
+  // Meetings processed before voice samples existed: make them now (a few seconds)
+  const make = !speakers.clips && m.hasAudio && m.hasTranscript && state.ready && !speakers.making;
+  body.innerHTML = `<div class="caption">${speakers.clips || make || speakers.making
+      ? L("Listen to each speaker (▶︎), then type their name. Hesper remembers their voice for next time, and the notes are rewritten with the names. Same person split in two? Give both the same name.")
+      : L("Type each speaker's name. Hesper remembers their voice for next time, and the notes are rewritten with the names. Same person split in two? Give both the same name.")}</div>
+    <div class="row caption" id="preparing" ${make || speakers.making ? "" : "hidden"}><div class="spinner"></div>${L("Preparing voice samples…")}</div>
     ${names.map(s => `<div class="card"><div class="row"><b class="grow">${esc(s)}</b>
         <input class="field" style="width:220px" data-spk="${esc(s)}" placeholder="${L("Name")}" value="${/^Speaker \d+$/.test(s) ? "" : esc(s)}">
-        <button class="btn small" data-me="${esc(s)}">${L("Me")}</button></div>
-        ${speakers[s].map(t => `<div class="caption">“${esc(t)}”</div>`).join("") || `<div class="caption">${L("Only said a few words.")}</div>`}</div>`).join("")}
+        ${state.settings.MyName && s !== state.settings.MyName ? `<button class="btn small" data-me="${esc(s)}" title="${L("This speaker is you")}">${L("Me")}</button>` : ""}</div>
+        <div class="samples" data-samples="${esc(s)}">${speakerSamples(m, s)}</div></div>`).join("")}
+    <button class="btn small" id="transcript" style="align-self:flex-start" ${m.hasTranscript ? "" : "disabled"}>${L("Open the full transcript")}</button>
     <div class="row"><button class="btn" id="cancel">${L("Cancel")}</button><span class="grow"></span>
       <button class="btn primary" id="save">${L("Save & regenerate notes")}</button></div>`;
+  body.addEventListener("click", e => { const b = e.target.closest("[data-clip]"); if (b) playClip(b); });
   body.querySelectorAll("[data-me]").forEach(b => b.onclick = () => {
     body.querySelector(`[data-spk="${CSS.escape(b.dataset.me)}"]`).value = state.settings.MyName || "Me";
   });
-  $("#cancel").onclick = () => { view = "notes"; renderMeeting(); };
+  $("#transcript").onclick = () => call("openFile", { id: m.id, name: "transcript.md" });
+  $("#cancel").onclick = () => { stopClip(); view = "notes"; renderMeeting(); };
   $("#save").onclick = async () => {
+    stopClip();
     const mapping = {};
-    body.querySelectorAll("[data-spk]").forEach(i => { const v = i.value.trim(); if (v && v !== i.dataset.spk) mapping[i.dataset.spk] = v; });
+    // A name kept as it is: changed, or a guessed one now confirmed
+    body.querySelectorAll("[data-spk]").forEach(i => { const v = i.value.trim(); if (v && (v !== i.dataset.spk || guessed.has(i.dataset.spk))) mapping[i.dataset.spk] = v; });
     if (Object.keys(mapping).length) await call("rename", { id: m.id, mapping });
     view = "notes"; speakers = null; renderMeeting();
   };
+  if (make) {
+    speakers.making = true;
+    const clips = await call("makeClips", { id: m.id });
+    speakers.making = false;
+    if (meeting?.id !== m.id || view !== "speakers") return;
+    speakers.clips = clips;
+    $("#preparing")?.setAttribute("hidden", "");
+    // Only the samples change: what's being typed stays
+    body.querySelectorAll("[data-samples]").forEach(el => el.innerHTML = speakerSamples(m, el.dataset.samples));
+  }
 }
 
 // ============================================================ Settings
@@ -822,13 +920,17 @@ async function drawPane() {
         item(L("Reinstall"), `<button class="btn small" data-do="reinstall" ${state.setup || state.job ? "disabled" : ""}>${L("Reinstall engine…")}</button>`),
       ]);
   }
-  else if (pane === "notifications") el.innerHTML = group(tr("Notify me"), [
+  else if (pane === "notifications") el.innerHTML =
+    (state.notificationProblem ? `<div class="card"><div class="row" style="color:var(--warn)">${icon("warn")}<span>${L(state.notificationProblem)}</span></div>
+      <button class="btn small" style="align-self:flex-start" data-do="notificationSettings">${L("Turn them on…")}</button></div>` : "") +
+    group(tr("Notify me"), [
     item(L("When notes are ready"), toggle("NotifyWhenReady", s.NotifyWhenReady)),
     item(L("When a call starts (“Record this call?”)"), toggle("CallReminders", s.CallReminders)),
     item(L("Stop by itself when the meeting is over (long quiet, call ended)"), toggle("StopWhenOver", s.StopWhenOver)),
     item(L("When the calendar meeting is over (“Stop recording?”)"), toggle("EndReminders", s.EndReminders)),
     item(L("5 min before a meeting: what's still open from last time"), toggle("Briefs", s.Briefs && state.calendar?.available && s.UseCalendar, !(state.calendar?.available && s.UseCalendar))),
     item(L("The day before my to-dos are due"), toggle("DueReminders", s.DueReminders)),
+    item(L("Try"), `<button class="btn small" data-do="testNotification">${L("Send a test notification")}</button>`),
   ], tr("Windows shows them in the notification area; to change how, see Windows Settings → System → Notifications."));
   else if (pane === "privacy") {
     engineBytes ??= await call("engineSize");
@@ -946,6 +1048,8 @@ function bindPane(el) {
     if (d === "log") call("openLog");
     if (d === "showHome") call("showHome");
     if (d === "checkUpdate") call("checkUpdate");
+    if (d === "notificationSettings") call("openNotificationSettings");
+    if (d === "testNotification") { await call("testNotification"); setTimeout(() => refresh().then(drawPane), 2000); }  // Windows lists Hesper once it has shown one
     if (d === "installUpdate") call("installUpdate");
     if (d === "reinstall" && confirm(tr("Reinstall the engine? Downloaded models are kept."))) call("startSetup");
     if (d === "exportFolder") { const f = await call("chooseFolder", { title: tr("Copy notes to a folder") }); if (f) { await save({ ExportFolder: f }); drawPane(); } }
@@ -1016,42 +1120,80 @@ async function changeStorage(storage, path = "") {
 }
 
 // ============================================================ first launch
-let step = 0;
+let step = 0, welcomeModels = null;
 function renderWelcome() {
   document.title = tr("Welcome to Hesper");
   const s = state.settings;
   const steps = 4;
+  // The models picked for this PC, said before they're downloaded (as the Mac's welcome)
+  if (!welcomeModels && !state.ready) call("catalog", { lang }).then(c => { welcomeModels = c; if (step === 0 && c) renderWelcome(); });
+  const modelName = (list, repo) => list?.find(m => m.repo === repo)?.name ?? repo;
+  const c = welcomeModels?.catalog;
+  const summary = c && !state.ready ? pc(tr("Next, Hesper downloads its AI models, picked for this Mac (%@): %@. It takes 10–20 minutes — you can finish the setup meanwhile.",
+    c.hardware, `${modelName(c.notes, state.notesModel || c.recommendedNotes)} + Whisper ${modelName(c.speech, state.speechModel || c.recommendedSpeech)}`)) : "";
+  const point = (ic, t) => `<div class="row" style="align-items:flex-start;gap:10px"><span style="color:var(--accent);padding-top:1px">${icon(ic)}</span><span>${P(t)}</span></div>`;
   const pages = [
-    () => `<div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding-top:30px">${appIcon(96)}
+    () => `<div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding-top:6px">${appIcon(72)}
       <div class="title2" style="font-size:26px">${esc(tr("Welcome to Hesper"))}</div>
-      <div class="secondary" style="font-size:15px">${esc(tr("Meeting notes that never leave your PC."))}</div>
-      <div class="caption" style="max-width:420px;margin-top:10px">${esc(tr("Everything stays on this PC: recordings, transcripts, notes and the AI that writes them."))}</div></div>`,
+      <div class="secondary" style="font-size:15px">${esc(tr("Meeting notes that never leave your PC."))}</div></div>
+      <div style="display:flex;flex-direction:column;gap:10px;padding:0 12px">
+        ${point("wave", "Records Teams, Zoom and Meet calls — your voice and the other participants'.")}
+        ${point("person", "Writes a transcript with who said what, then a summary, decisions and to-dos.")}
+        ${point("lock", "Everything runs on this Mac: no account, no cloud, no subscription.")}</div>
+      ${group("", [item(L("App language"), select("AppLanguage", [["", tr("Same as Windows")], ...Object.entries(LANGS)], s.AppLanguage))])}
+      ${summary ? `<div class="caption">${esc(summary)}</div>` : ""}`,
     () => group(tr("You"), [item(L("Your name"), text("MyName", s.MyName))], tr("Used for your voice in transcripts and to find the to-dos that are yours.")) +
       `<div><div class="group-title">${esc(tr("Languages spoken in your meetings"))}</div><div class="group"><div class="langs">${
-        Object.entries(SPOKEN).slice(0, 9).map(([c, l]) => `<label class="check"><input type="checkbox" data-lang="${c}" ${s.Languages.split(",").includes(c) ? "checked" : ""}>${esc(languageName(c))}</label>`).join("")}</div></div></div>`,
+        Object.entries(SPOKEN).slice(0, 9).map(([c, l]) => `<label class="check"><input type="checkbox" data-lang="${c}" ${s.Languages.split(",").includes(c) ? "checked" : ""}>${esc(languageName(c))}</label>`).join("")}</div></div></div>` +
+      group("", [item(L("Write the notes in"), select("NotesLanguage", [["auto", tr("Same as the meeting")], ...Object.entries(SPOKEN).map(([c, l]) => [l, languageName(c)])], s.NotesLanguage))]),
     () => group(tr("Audio"), [
         item(L("Microphone"), select("Microphone", [["", tr("Windows default")], ...(devices?.mics ?? []).map(d => [d, d])], s.Microphone)),
         item(L("PC sound from"), select("Speakers", [["", tr("Windows default")], ...(devices?.speakers ?? []).map(d => [d, d])], s.Speakers)),
       ]) + `<div class="caption">${esc(tr("Hesper records your microphone and what your PC plays (the other people in a call)."))}</div>`,
-    () => `<div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px;padding-top:30px">
-      <div style="width:64px;height:64px;color:var(--accent)">${glyph("currentColor")}</div>
+    () => `<div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px;padding-top:6px">
+      <div style="width:56px;height:56px;color:var(--accent)">${glyph("currentColor")}</div>
       <div class="title2">${esc(tr("You're all set"))}</div>
-      <div class="secondary" style="max-width:440px">${esc(tr("Click Hesper's icon in the notification area (bottom right, maybe under ^), then the record button when a meeting starts. Your notes appear there when it ends."))}</div></div>`,
+      <div class="secondary" style="max-width:440px">${esc(tr("Click Hesper's icon in the notification area (bottom right, maybe under ^), then the record button when a meeting starts. Your notes appear there when it ends."))}</div></div>` +
+      group("", [
+        item(L("Start / stop recording"), `<span class="mono">${esc(s.Hotkey || tr("None"))}</span>`),
+        item(L("Record calls automatically"), toggle("AutoRecord", s.AutoRecord)),
+        item(P("Open Hesper at login"), toggle("@login", state.launchAtLogin)),
+      ], tr("Everything else — where notes are saved, meeting types, AI models — is in Settings (gear icon).")),
   ];
-  const setup = state.setup, ready = state.ready;
   $("#app").innerHTML = `<div class="window">
     <div class="pane welcome grow"><div class="steps">${Array.from({ length: steps }, (_, i) => `<div class="${i <= step ? "on" : ""}"></div>`).join("")}</div>
       <div id="page">${pages[step]()}</div></div>
-    ${step > 0 ? `<div style="padding:0 32px">${ready ? "" : setup ? `<div class="caption" style="margin-bottom:6px">${esc(tr(setup.text))}</div>${progressBar(setup.progress)}`
-      : state.setupError ? `<div class="error-text">${esc(tr("Setup stopped"))}: ${esc(state.setupError)}</div>` : ""}</div>` : ""}
-    <div class="welcome-foot">
-      ${step > 0 ? `<button class="btn" id="back">${esc(tr("Back"))}</button>` : ""}
-      <span class="grow"></span>
-      ${!ready && !setup && state.setupError ? `<button class="btn" id="retry">${esc(tr("Try again"))}</button>` : ""}
-      ${step === 0 ? `<button class="btn primary" id="next">${esc(tr("Get started"))}</button>`
-        : step < steps - 1 ? `<button class="btn primary" id="next">${esc(tr("Continue"))}</button>`
-        : `<button class="btn primary" id="done" ${ready ? "" : "disabled"}>${esc(ready ? tr("Done") : tr("Hesper is setting up…"))}</button>`}
-    </div></div>`;
+    <div id="welcome-status" style="padding:0 32px"></div>
+    <div class="welcome-foot" id="welcome-foot"></div></div>`;
+  drawWelcomeStatus();
+  $("#page").onchange = async e => {
+    const t = e.target, s2 = { ...state.settings };
+    if (t.dataset.key === "@login") return call("setLaunchAtLogin", { on: t.checked });
+    if (t.dataset.lang) {
+      const set = new Set(s2.Languages.split(",").filter(Boolean));
+      t.checked ? set.add(t.dataset.lang) : set.delete(t.dataset.lang);
+      s2.Languages = [...set].join(",");
+    } else if (t.dataset.key) s2[t.dataset.key] = t.type === "checkbox" ? t.checked : t.value;
+    state.settings = s2;
+    await call("saveSettings", { settings: s2 });
+    if (t.dataset.key === "AppLanguage") { await loadLanguage(state.settings); renderWelcome(); }
+  };
+}
+
+/// The setup's progress and the buttons: redrawn as the setup goes, without touching the page
+/// above (a list open in it would close).
+function drawWelcomeStatus() {
+  const steps = 4, setup = state.setup, ready = state.ready;
+  const status = $("#welcome-status"), foot = $("#welcome-foot");
+  if (!status || !foot) return;
+  status.innerHTML = step === 0 || ready ? "" : setup ? `<div class="caption" style="margin-bottom:6px">${esc(tr(setup.text))}</div>${progressBar(setup.progress)}`
+    : state.setupError ? `<div class="error-text">${esc(tr("Setup stopped"))}: ${esc(state.setupError)}</div>` : "";
+  foot.innerHTML = `${step > 0 ? `<button class="btn" id="back">${esc(tr("Back"))}</button>` : ""}
+    <span class="grow"></span>
+    ${!ready && !setup && state.setupError ? `<button class="btn" id="retry">${esc(tr("Try again"))}</button>` : ""}
+    ${step === 0 ? `<button class="btn primary" id="next">${esc(tr("Get started"))}</button>`
+      : step < steps - 1 ? `<button class="btn primary" id="next">${esc(tr("Continue"))}</button>`
+      : `<button class="btn primary" id="done" ${ready ? "" : "disabled"}>${esc(ready ? tr("Done") : tr("Hesper is setting up…"))}</button>`}`;
   $("#back") && ($("#back").onclick = () => { step--; renderWelcome(); });
   $("#retry") && ($("#retry").onclick = () => call("startSetup"));
   $("#next") && ($("#next").onclick = async () => {
@@ -1060,16 +1202,6 @@ function renderWelcome() {
     step++; renderWelcome();
   });
   $("#done") && ($("#done").onclick = async () => { await call("welcomed"); call("close"); });
-  $("#page").onchange = async e => {
-    const t = e.target, s2 = { ...state.settings };
-    if (t.dataset.lang) {
-      const set = new Set(s2.Languages.split(",").filter(Boolean));
-      t.checked ? set.add(t.dataset.lang) : set.delete(t.dataset.lang);
-      s2.Languages = [...set].join(",");
-    } else if (t.dataset.key) s2[t.dataset.key] = t.value;
-    state.settings = s2;
-    await call("saveSettings", { settings: s2 });
-  };
 }
 
 // ============================================================ routing
@@ -1089,11 +1221,17 @@ function render() {
 handlers.state = async data => {
   const before = JSON.stringify(state?.settings);
   if (data) state = data; else await refresh();
+  if (!state.stopping && state.recording?.id !== stoppingId) { stoppingId = null; discarding = false; }  // stopped
   if (JSON.stringify(state.settings) !== before) await loadLanguage(state.settings);
   const { page, arg } = route();
   if (page === "home") { drawContent(); drawTabs(); }
-  else if (page === "meeting") { if (view !== "speakers") loadMeeting(arg); }
-  else if (page === "welcome") { if (!document.activeElement?.matches("input")) renderWelcome(); }
+  else if (page === "meeting" && view !== "speakers") {
+    // Read the meeting again only when it changed; a job's progress on it only redraws it
+    const seen = JSON.stringify([state.meetings.find(m => m.id === arg) ?? null, state.busy.includes(arg)]);
+    if (seen !== meetingSeen) { meetingSeen = seen; loadMeeting(arg); }
+    else if (state.job?.id === arg && meeting && !editing && view === "notes") renderMeeting();
+  }
+  else if (page === "welcome") drawWelcomeStatus();
   else if (page === "settings" && ["models", "about", "privacy", "general"].includes(pane) && !document.activeElement?.matches("input:not([type=checkbox]):not([type=radio]), select")) drawPane();
 };
 handlers.live = data => drawLive(data);

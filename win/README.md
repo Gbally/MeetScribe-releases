@@ -34,4 +34,12 @@ compares. The site's Windows button turns on with `latest-windows.json`. The exe
 yet: SmartScreen warns on the first download.
 
 Diagnostics: `Hesper.exe --calendar` (what Hesper reads from Outlook), `--devices`, `--capture DIR`
-(PNGs of every screen, light and dark), `--record SECONDS [FOLDER] [MIC] [process:NAME]`.
+(PNGs of every screen, light and dark), `--record SECONDS [FOLDER] [MIC] [process:NAME]`, `--notify`
+(a test notification, and whether Windows lists Hesper in Settings → Notifications).
+
+Recordings are written in `%LOCALAPPDATA%\Hesper\recordings` and move to the notes folder once
+processed (a OneDrive folder never gets audio being written); one not processed (Hesper quit,
+crashed, updated) is processed at the next launch. Hesper's app ID (`Gbally.Hesper`, with a
+Start menu shortcut) is what Windows lists its notifications under. A test setup (`HESPER_HOME`) runs
+beside the real Hesper; `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333` lets a
+script drive its pages.

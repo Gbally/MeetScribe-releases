@@ -52,7 +52,17 @@ sealed class TrayApp : ApplicationContext
         live.Tick += (_, _) => WebWindow.Broadcast("live", model.Live);
 
         model.Settings.WriteConfig();
-        if (!model.Ready || !model.Settings.Welcomed) ShowWelcome();
+        // A tray app that isn't there after a restart notices no call and reminds of nothing: on by
+        // default from the first launch, and on the welcome window's last page to turn off
+        if (model.Settings.IsNew && Environment.GetEnvironmentVariable("HESPER_HOME") == null) Startup.Enabled = true;
+        if (!model.Ready && model.Settings.Welcomed && Setup.WasInstalled)
+        {
+            // An update (or a new engine): set up again in the background; the popover shows it
+            var later = new System.Windows.Forms.Timer { Interval = 300 };
+            later.Tick += (_, _) => { later.Dispose(); _ = model.RunSetup(); };
+            later.Start();
+        }
+        else if (!model.Ready || !model.Settings.Welcomed) ShowWelcome();
     }
 
     void OnChanged()
@@ -82,13 +92,16 @@ sealed class TrayApp : ApplicationContext
     void ShowSettings(string pane) => Show("settings" + (pane.Length > 0 ? "/" + pane : ""), new Size(780, 580), "Hesper settings");
     void ShowWelcome() => Show("welcome", new Size(640, 600), "Welcome to Hesper");
 
-    void Quit()
+    async void Quit()
     {
         if (model.Recorder != null && MessageBox.Show("A meeting is being recorded. Stop it and quit? Its notes won't be created now.",
                 "Hesper", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
             return;
-        model.Recorder?.Stop();
-        model.Recorder?.Dispose();
+        if (model.Recorder is { } rec)
+        {
+            await rec.StopAsync();
+            rec.Dispose();
+        }
         tray.Visible = false;
         ExitThread();
     }

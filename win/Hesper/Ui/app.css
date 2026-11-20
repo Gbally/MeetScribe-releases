@@ -122,7 +122,12 @@ select.field option { background: var(--surface); color: var(--text); }
 .todo-row:hover .box { border-color: var(--accent); }
 .due { font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: 4px; background: var(--field); color: var(--secondary); white-space: nowrap; }
 .due.late { color: var(--danger); }
-.due.soon { color: var(--accent); }
+.due.soon { color: var(--warn); }
+.due.week { color: var(--accent); }
+/* "Is the meeting over?" while recording, with "Keep recording" (Windows' notifications have no buttons) */
+.ask-over { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: var(--badge-bg); color: var(--badge-text); font-size: 12px; }
+.ask-over b { flex: 1; font-weight: 600; }
+.record-btn .spinner { width: 22px; height: 22px; border-top-color: var(--star); }
 .pop-footer { padding-top: 8px; }
 .search { display: flex; align-items: center; gap: 6px; margin: 0 14px 8px; padding: 6px 8px; border-radius: 8px; background: var(--field); }
 .search input { flex: 1; border: 0; background: none; outline: none; }
@@ -193,3 +198,13 @@ button.badge { cursor: pointer; }
 .tl-body { flex: 1; min-width: 0; text-align: left; padding: 6px 4px; border-radius: 6px; }
 .tl-body[data-open]:hover, .tl-body[data-brief]:hover { background: var(--hover); }
 .section-title.plain { color: var(--secondary); text-align: left; }
+/* Voice samples (naming the speakers): ▶ / ■ in the accent colour, as the Mac's play.circle.fill */
+.samples { display: flex; flex-direction: column; gap: 4px; }
+.clip { display: flex; gap: 8px; align-items: flex-start; text-align: left; padding: 3px 4px; border-radius: 6px; width: 100%; }
+.clip:hover { background: var(--hover); }
+.clip .play { width: 20px; height: 20px; flex: none; border-radius: 50%; background: var(--accent); position: relative; }
+.clip .play::after { content: ""; position: absolute; left: 7.5px; top: 5.5px; border-style: solid; border-width: 4.5px 0 4.5px 7px;
+                     border-color: transparent transparent transparent var(--bg); }
+.clip.playing .play::after { left: 6.5px; top: 6.5px; width: 7px; height: 7px; border: 0; background: var(--bg); border-radius: 1px; }
+.card .caption .spinner, #preparing .spinner { width: 12px; height: 12px; }
+[hidden] { display: none !important; }

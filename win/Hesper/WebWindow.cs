@@ -44,7 +44,7 @@ class WebWindow : Form
         core.Settings.AreDefaultContextMenusEnabled = false;
         core.Settings.IsZoomControlEnabled = false;
         core.AddWebResourceRequestedFilter(Origin + "*", CoreWebView2WebResourceContext.All);
-        core.WebResourceRequested += (_, e) => e.Response = Serve(core.Environment, new Uri(e.Request.Uri).AbsolutePath.TrimStart('/'));
+        core.WebResourceRequested += (_, e) => e.Response = Serve(core.Environment, new Uri(e.Request.Uri).AbsolutePath.TrimStart('/'), model);
         core.NavigationStarting += (_, e) => { if (!e.Uri.StartsWith(Origin)) e.Cancel = true; };  // links open nowhere inside
         core.NewWindowRequested += (_, e) => e.Handled = true;
         core.WebMessageReceived += (_, e) => OnMessage(e.WebMessageAsJson);
@@ -53,8 +53,16 @@ class WebWindow : Form
         core.Navigate(Origin + "index.html#" + page);
     }
 
-    static CoreWebView2WebResourceResponse Serve(CoreWebView2Environment env, string path)
+    static CoreWebView2WebResourceResponse Serve(CoreWebView2Environment env, string path, AppModel model)
     {
+        // A meeting's voice sample (naming the speakers): clip/MEETING/FILE.wav
+        if (path.StartsWith("clip/"))
+        {
+            var parts = path.Split('/');
+            var file = parts.Length == 3 ? Meetings.ClipFile(model.Settings.NotesFolder, Uri.UnescapeDataString(parts[1]), Uri.UnescapeDataString(parts[2])) : null;
+            return file == null ? env.CreateWebResourceResponse(null, 404, "Not found", "")
+                                : env.CreateWebResourceResponse(File.OpenRead(file), 200, "OK", "Content-Type: audio/wav");
+        }
         var stream = typeof(WebWindow).Assembly.GetManifestResourceStream("ui/" + (path.Length > 0 ? path : "index.html"));
         if (stream == null) return env.CreateWebResourceResponse(null, 404, "Not found", "");
         var type = Path.GetExtension(path) switch
@@ -65,7 +73,7 @@ class WebWindow : Form
         return env.CreateWebResourceResponse(stream, 200, "OK", $"Content-Type: {type}; charset=utf-8");
     }
 
-    void OnMessage(string json)
+    async void OnMessage(string json)
     {
         var msg = JsonNode.Parse(json)!.AsObject();
         var id = msg["id"]?.GetValue<int>();
@@ -78,7 +86,7 @@ class WebWindow : Form
             {
                 "close" => Do(Close),
                 "hide" => Do(Hide),
-                _ => model.Handle(cmd, msg["args"] as JsonObject ?? []),
+                _ => await model.HandleAsync(cmd, msg["args"] as JsonObject ?? []),
             };
         }
         catch (Exception e)

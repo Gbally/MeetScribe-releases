@@ -3,6 +3,15 @@ using System.Text.Json;
 
 namespace Hesper;
 
+/// A model that ran out of memory (as the Mac's MemoryWarning): the speech model, else the notes
+/// model; failed: a meeting couldn't be processed, else its notes were written in parts, more slowly.
+sealed class MemoryWarning
+{
+    public string Model { get; set; } = "";
+    public bool Speech { get; set; }
+    public bool Failed { get; set; }
+}
+
 /// The user's settings (settings.json, as the Mac's AppSettings), and the part the engine reads
 /// (config.toml, as Engine.swift writes it).
 sealed class AppSettings
@@ -16,8 +25,8 @@ sealed class AppSettings
     // Recording
     public string Microphone { get; set; } = "";       // a device's name; "" = Windows' default
     public string Speakers { get; set; } = "";
-    public bool AutoRecord { get; set; }
-    public string AppOnly { get; set; } = "";          // "teams": only Microsoft Teams' sound, not all the PC plays               // start when a call starts, stop when it ends
+    public bool AutoRecord { get; set; }               // start when a call starts, stop when it ends
+    public string AppOnly { get; set; } = "";          // "teams": only Microsoft Teams' sound, not all the PC plays
     public string Languages { get; set; } = "";        // "" = detected; "en,fr" = the meeting may switch between these
     public string Vocabulary { get; set; } = "";
     // Notes
@@ -53,6 +62,11 @@ sealed class AppSettings
     // About
     public bool TestVersions { get; set; }
     public bool Welcomed { get; set; }
+    /// A model that ran out of memory on this PC, said in the popover until dismissed or replaced.
+    public MemoryWarning? Memory { get; set; }
+
+    /// No settings.json yet: the very first launch.
+    [System.Text.Json.Serialization.JsonIgnore] public bool IsNew { get; private set; }
 
     /// Where the meetings are (from Storage); kept in the file for older versions.
     public string NotesFolder { get; set; } = Paths.DefaultNotesFolder();
@@ -64,7 +78,7 @@ sealed class AppSettings
     {
         AppSettings s;
         try { s = JsonSerializer.Deserialize<AppSettings>(System.IO.File.ReadAllText(File)) ?? new(); }
-        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { s = new(); }
+        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { s = new() { IsNew = !System.IO.File.Exists(File) }; }
         // Settings from before Storage existed: a folder other than the default one is a custom one
         if (s.Storage == "local" && !s.NotesFolder.Equals(Paths.DefaultNotesFolder(), StringComparison.OrdinalIgnoreCase)
             && s.CustomFolderPath.Length == 0)

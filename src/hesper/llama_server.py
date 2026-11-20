@@ -36,6 +36,20 @@ def binary(cfg: Config) -> str:
     raise SystemExit(f"{exe} not found: put llama.cpp's release in {MODELS_DIR / 'llama.cpp'} or set llama_server")
 
 
+def model_gb(model: str) -> float:
+    """The notes model's size (GB), for how many of its layers fit on the GPU: its .gguf file once
+    downloaded (a 9B is twice a 4B), else Qwen3.5 4B's."""
+    files: list[Path] = []
+    if model.lower().endswith(".gguf"):
+        files = [Path(model)]
+    elif ":" in model:
+        repo, quant = model.split(":", 1)
+        folder = MODELS_DIR / "gguf" / f"models--{repo.replace('/', '--')}"
+        files = [f for f in folder.rglob("*.gguf") if f.name.lower().endswith(f"{quant.lower()}.gguf") and "mmproj" not in f.name.lower()]
+    sizes = [f.stat().st_size for f in files if f.exists()]
+    return max(sizes) / 1e9 if sizes else MODEL_GB
+
+
 def _free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -57,7 +71,7 @@ class LlamaServer:
         port = _free_port()
         model = self.cfg.llm_model
         source = ["-m", model] if model.lower().endswith(".gguf") else ["-hf", model]
-        layers = device().gpu_layers(MODEL_GB)
+        layers = device().gpu_layers(model_gb(model))
         cmd = [binary(self.cfg), *source, "--host", "127.0.0.1", "--port", str(port), "--ctx-size", str(CONTEXT),
                "--jinja", "--parallel", "1", "--n-gpu-layers", str(layers),
                "--no-mmproj"]  # -hf also fetches the vision part (~0.7 GB on the GPU): text only here

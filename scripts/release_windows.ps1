@@ -29,15 +29,21 @@ function Find-Tool($name, $fallbacks) {
 }
 $Tools = Join-Path (Split-Path $Root) "tools"
 $Gh = Find-Tool "gh" @("$Tools\gh\bin\gh.exe", "$env:ProgramFiles\GitHub CLI\gh.exe")
-$Dotnet = Find-Tool "dotnet" @("$Tools\dotnet\dotnet.exe")
+# The portable .NET SDK first: the dotnet on PATH is often the runtime alone (no SDK, "publish" doesn't exist)
+$Dotnet = if (Test-Path "$Tools\dotnet\dotnet.exe") { "$Tools\dotnet\dotnet.exe" } else { Find-Tool "dotnet" @() }
 # The portable gh keeps its login next to it (gh auth login with the same GH_CONFIG_DIR), not in %APPDATA%
 if ($Gh -and $Gh.StartsWith($Tools)) { $env:GH_CONFIG_DIR = "$Tools\gh\config" }
+# The portable SDK's caches and NuGet packages stay next to it too, as win\env.sh sets them
+if ($Dotnet -and $Dotnet.StartsWith($Tools)) {
+    $env:DOTNET_ROOT = "$Tools\dotnet"; $env:DOTNET_CLI_HOME = "$Tools\dotnet-home"; $env:NUGET_PACKAGES = "$Tools\nuget"
+    $env:DOTNET_NOLOGO = "1"; $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = "1"
+}
 
 function Read-Feed($path) { if (Test-Path $path) { Get-Content $path -Raw | ConvertFrom-Json } else { $null } }
 
 if (-not $Publish) {
     if (git status --porcelain) { throw "Commit your changes first." }
-    if (-not $Dotnet) { throw "The .NET 8 SDK isn't installed (dotnet)." }
+    if (-not $Dotnet -or -not (& $Dotnet --list-sdks)) { throw "The .NET 8 SDK isn't installed (dotnet, or MeetScribe\tools\dotnet)." }
     $Version = (Select-String -Path pyproject.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
     # The next build number: one more than the release and test feeds published so far
     $Builds = @("latest-windows.json", "latest-windows-beta.json") | ForEach-Object { (Read-Feed $_).build } | Where-Object { $_ }
@@ -58,6 +64,7 @@ if (-not $Publish) {
     if (-not $Notes) { $Notes = "Hesper $Label" }
     $Info = [ordered]@{ version = $Label; build = $Build; url = "https://github.com/$Repo/releases/download/v$Label/$Exe"; sha256 = $Sha; notes = $Notes }
     [IO.File]::WriteAllText("$Out\$Feed", ($Info | ConvertTo-Json))  # UTF-8 without BOM, as the Mac's feeds
+    [IO.File]::WriteAllText("$Out\commit.txt", (git rev-parse HEAD))   # what PUBLISH checks it pushes
     Write-Host ""
     Write-Host "OK: Prepared Hesper $Label (build $Build) in $Out - nothing published."
     Write-Host ("   Publish with:  .\scripts\release_windows.ps1 -Publish" + $(if ($Beta) { " -Beta" } else { "" }))
@@ -71,10 +78,19 @@ if (-not $Gh) { throw "The GitHub CLI isn't installed (gh), or isn't on PATH." }
 if ((git rev-parse --abbrev-ref HEAD) -ne "main") { throw "Publish from the main branch." }
 $Label = $Info.version
 $Exe = "Hesper-$Label.exe"
+# git and gh write to stderr even when all is well: with "Stop", Windows PowerShell 5 would end the
+# script on the first line (gh's "release not found"). Their exit codes are checked instead.
+$ErrorActionPreference = "Continue"
+
+# The exe must be built from the code that's pushed: no change to it since PREPARE.
+$Built = Get-Content "$Out\commit.txt" -ErrorAction SilentlyContinue
+git diff --quiet $Built HEAD -- src win pyproject.toml uv.lock catalog 2>$null
+if (-not $Built -or $LASTEXITCODE -ne 0) { throw "The code changed since the exe was built: prepare again (.\scripts\release_windows.ps1 `"What's new`")." }
 
 # 1. The code the release is built from.
 Write-Host "- Pushing main"
 git push -q origin main
+if ($LASTEXITCODE -ne 0) { throw "main couldn't be pushed (GitHub has newer commits?): git pull, prepare again, then publish. Nothing was published." }
 
 # 2. The exe on the release vX (the Mac's DMG may already be there).
 & $Gh release view "v$Label" --repo $Repo *> $null
@@ -103,5 +119,6 @@ if ($Beta) { git add $Feed } else { Copy-Item catalog\models.json models.json; g
 git diff --cached --quiet
 if ($LASTEXITCODE -ne 0) { git commit -qm "Hesper $Label for Windows" }
 git push -q origin main
+if ($LASTEXITCODE -ne 0) { throw "The exe is on the release, but the update file couldn't be pushed: git pull, then git push." }
 if ($Beta) { Write-Host "OK: Published test version Hesper $Label for Windows - apps receiving test versions offer it within a day." }
 else { Write-Host "OK: Released Hesper $Label for Windows - installed apps offer the update within a day." }

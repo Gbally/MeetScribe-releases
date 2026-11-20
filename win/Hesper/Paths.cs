@@ -15,6 +15,9 @@ static class Paths
     public static string Uv => Path.Combine(Home, "uv", "uv.exe");
     public static string ConfigFile => Path.Combine(Home, "config.toml");
     public static string Log => Path.Combine(Home, "hesper.log");
+    /// Recordings until they're processed, then they move to the notes folder: a synced one
+    /// (OneDrive…) only ever gets finished meetings, never audio being written (as on the Mac).
+    public static string Recordings => Path.Combine(Home, "recordings");
 
     /// Documents\MeetingNotes; %USERPROFILE%\MeetingNotes when Documents is synced by OneDrive
     /// (meetings stay on this PC unless the user picks a synced folder).

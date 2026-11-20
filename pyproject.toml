@@ -1,6 +1,6 @@
 [project]
 name = "hesper"
-version = "0.7.0"
+version = "0.7.1"
 description = "Local meeting recorder, transcriber and note-taker for macOS and Windows"
 requires-python = ">=3.12"
 dependencies = [

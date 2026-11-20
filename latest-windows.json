@@ -1,7 +1,7 @@
 {
-    "version":  "0.7.0",
-    "build":  1,
-    "url":  "https://github.com/Gbally/Hesper/releases/download/v0.7.0/Hesper-0.7.0.exe",
-    "sha256":  "3d0706d435600fc9d564542c9c78b890c6dbb9be854caea30355ccf653d51207",
-    "notes":  "First Windows version (preview): records your mic and your PC\u0027s sound, transcript, notes and to-dos, all on this PC."
+    "version":  "0.7.1",
+    "build":  2,
+    "url":  "https://github.com/Gbally/Hesper/releases/download/v0.7.1/Hesper-0.7.1.exe",
+    "sha256":  "ab38bf65b934261f6c02ff41180538004e26135e653a197470fc978517a286e0",
+    "notes":  "Notes keep the Outlook meeting\u0027s name. Stop and Discard respond at once. Listen to each speaker\u0027s voice when naming them. Recordings not processed are finished at the next launch, and the PC stays awake while recording or writing notes. Notifications show from the first launch, in your language. Also: Keep recording, Regenerate in a copy with another model, e-mails to the attendees, memory warnings."
 }

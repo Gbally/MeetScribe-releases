@@ -1,7 +1,7 @@
 {
- "version": "0.6.6",
- "build": 126,
- "url": "https://github.com/Gbally/MeetScribe-releases/releases/download/v0.6.6/MeetScribe-0.6.6.dmg",
- "sha256": "8764ca9d828ebe7622792ee1e3bede2729bc17f1bcc57a6a65b38700725a17b9",
- "notes": "Overlapping voices no longer become extra speakers to name; reopening the menu while recording shows the Stop button."
+ "version": "0.7.0",
+ "build": 138,
+ "url": "https://github.com/Gbally/Hesper/releases/download/v0.7.0/Hesper-0.7.0.dmg",
+ "sha256": "3bbb6b1164cccc92bfbd0687df7763bea7245d04d3ce3a6bf3a66074b18244f7",
+ "notes": "Hesper: MeetScribe's new name and look. Each to-do is checked once more before it's listed. Overlapping voices no longer become extra speakers."
 }

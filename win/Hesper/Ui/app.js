@@ -896,7 +896,7 @@ async function drawPane() {
         item(L("License"), `<a data-url="${REPO}/blob/main/LICENSE">MIT</a> · <a data-url="${REPO}/blob/main/PRIVACY.md">${L("Privacy")}</a> · <a data-url="${REPO}/blob/main/THIRD_PARTY_NOTICES.md">${L("Third-party licenses")}</a>`),
       ]) +
       group(tr("Credits"), [caption(tr("Speech: OpenAI Whisper (MIT), via faster-whisper. Notes: Qwen (Apache 2.0), via llama.cpp. Speaker separation: pyannote segmentation (MIT) and NVIDIA TitaNet (CC BY 4.0), via sherpa-onnx."))]) +
-      `<div class="caption" style="text-align:center">${L("by Nibjorg Studio")} · <a data-do="log">${L("Open the log")}</a></div>`;
+      `<div class="caption" style="text-align:center">${L("by Gbally")} · <a data-do="log">${L("Open the log")}</a></div>`;
   }
   bindPane(el);
 }

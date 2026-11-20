@@ -185,7 +185,7 @@ final class AppModel: ObservableObject {
     }
 
     init() {
-        Self.takeOverFromMeetScribe()
+        if Self.demo == nil { Self.takeOverFromMeetScribe() }
         phase = Engine.isInstalled ? .ready : .needsSetup  // (moves MeetScribe's data folder, the first time)
         catalog = ModelCatalog.load()
         if let data = UserDefaults.standard.data(forKey: "settings"),
@@ -193,6 +193,13 @@ final class AppModel: ObservableObject {
             settings = s
         } else {
             settings = AppSettings()
+        }
+        if let (folder, name) = Self.demo {  // screenshots: invented meetings, nothing saved
+            settings.storage = .custom
+            settings.customFolderPath = folder
+            settings.myName = name
+            settings.llmModel = "mlx-community/Qwen3.5-4B-4bit"  // the recommended models, as a new user sees them
+            settings.whisperModel = "mlx-community/whisper-large-v3-turbo"
         }
         // Open at login is on by default — applied once, so turning it off in Settings sticks.
         if !UserDefaults.standard.bool(forKey: "loginItemDefaultApplied") {
@@ -264,7 +271,16 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Testing (screenshots for the site): `--demo FOLDER NAME` shows the meetings of FOLDER as
+    /// NAME's, without saving any setting or taking over anything.
+    static let demo: (String, String)? = {
+        let a = CommandLine.arguments
+        guard let i = a.firstIndex(of: "--demo"), i + 2 < a.count else { return nil }
+        return (a[i + 1], a[i + 2])
+    }()
+
     private func saveSettings() {
+        guard Self.demo == nil else { reload(); return }
         if let data = try? JSONEncoder().encode(settings) { UserDefaults.standard.set(data, forKey: "settings") }
         reload()
     }

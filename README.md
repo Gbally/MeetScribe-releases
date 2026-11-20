@@ -2,14 +2,15 @@
 
 <h1 align="center">Hesper</h1>
 
-<p align="center"><i>Private meeting notes, fully offline</i> · by Nibjorg Studio · formerly MeetScribe</p>
+<p align="center"><i>Private meeting notes, fully offline</i> · by Gbally · formerly MeetScribe</p>
 
-<p align="center"><b>Meeting notes that stay on your Mac.</b><br>
+<p align="center"><b>Meeting notes that stay on your computer.</b><br>
 Records your Teams, Zoom or Meet calls, works out who said what, and writes a summary, the decisions
-and a to-do list — with AI that runs entirely on your Mac. Free, open source, no account.</p>
+and a to-do list — with AI that runs entirely on your Mac or PC. Free, open source, no account.</p>
 
 <p align="center">
   <a href="https://github.com/Gbally/Hesper/releases/latest"><b>Download for Mac</b></a> ·
+  <a href="https://github.com/Gbally/Hesper/releases/latest"><b>Download for Windows</b></a> (preview) ·
   <a href="https://gbally.github.io/Hesper/">Website</a> ·
   <a href="PRIVACY.md">Privacy</a> ·
   <a href="mac/INSTALL.txt">Install guide</a>
@@ -20,7 +21,8 @@ and a to-do list — with AI that runs entirely on your Mac. Free, open source, 
 ## Why
 
 Meeting assistants usually send your calls to a cloud service. Hesper doesn't: speech
-recognition (Whisper), speaker separation and the notes (Qwen) all run on your Mac's Apple silicon.
+recognition (Whisper), speaker separation and the notes (Qwen) all run on your Mac's Apple silicon, or on
+your PC (on its NVIDIA graphics card if it has one).
 Your recordings, transcripts and notes are plain files in a folder you choose.
 
 ## Features
@@ -77,6 +79,8 @@ Your recordings, transcripts and notes are plain files in a folder you choose.
 
 ## Install
 
+### Mac
+
 Requirements: a Mac with Apple silicon (M1 or newer), macOS 13 or later, 8 GB memory or more
 (16 GB recommended), ~8 GB free disk space.
 
@@ -87,7 +91,20 @@ Requirements: a Mac with Apple silicon (M1 or newer), macOS 13 or later, 8 GB me
 3. A welcome window takes you through your name, languages, permissions and the AI models
    download (4–6 GB, once).
 
-Details in [INSTALL.txt](mac/INSTALL.txt). Always tell the other participants that you're
+Details in [INSTALL.txt](mac/INSTALL.txt).
+
+### Windows (preview)
+
+Requirements: Windows 10 or 11, 16 GB memory, ~8 GB free disk space. An NVIDIA graphics card makes
+it about 5× faster; without one everything runs on the processor.
+
+1. Download `Hesper-<version>.exe` from the [latest release](https://github.com/Gbally/Hesper/releases/latest)
+   and run it. Windows SmartScreen may warn about an unknown publisher (the app isn't signed yet):
+   **More info → Run anyway**.
+2. The welcome takes you through the same steps as on the Mac. Hesper lives in the notification
+   area and updates itself.
+
+ Always tell the other participants that you're
 recording, and follow your company's rules.
 
 ## Privacy
@@ -203,29 +220,6 @@ Each meeting gets a folder in `~/Documents/MeetingNotes/` with `notes.md`,
 
 ## Translations
 
-The app is in English, French, Spanish, Portuguese, Japanese and Chinese (Simplified). It follows the
-Mac's language (anything else → English); Settings → General → Language forces one.
-
-- Texts live in `mac/Localization/<lang>.json` (English text → translation). Placeholders are
-  `%@` (or `%1$@`, `%2$@` to reorder them).
-- After changing UI texts: `python3 scripts/i18n.py extract` adds new texts to every language file
-  (empty = not translated yet, English is shown) and lists anything left to translate.
-- **Add a language:** copy `en.json` to `<code>.json`, translate the values, add the code to
-  `AppLanguage.supported` (`mac/Shared/Localization.swift`) and to `LANGS` in `scripts/i18n.py`,
-  and to `CFBundleLocalizations` in `scripts/build_app.sh`.
-- Model descriptions are translated in `catalog/models.json` (`"descriptions": {"fr": …}`).
-- Engine progress messages are translatable too (`progress.step("…%@…", value)`).
-
-## Layout
-
-- `mac/Shared/AudioCapture.swift` — mic + system audio capture (shared)
-- `mac/App/` — the menu bar app (SwiftUI); `mac/CLI/` — `bin/meeting-recorder`
-- `scripts/` — `build_app.sh` (app + DMG), `build_recorder.sh`, `make_icon.swift`
-- `src/hesper/` — `audio` (decode), `transcribe` (Whisper), `diarize` (speakers),
-  `transcript` (merge, echo removal, output), `summarize` (LLM notes), `cli`
-
-## Translations
-
 The app follows the Mac's language (anything not translated → English); Settings → General →
 Language forces one.
 
@@ -240,11 +234,12 @@ Language forces one.
 ## Repository layout
 
 - `mac/App/` — the menu bar app (SwiftUI); `mac/Shared/` — audio capture; `mac/CLI/` — command-line recorder
+- `win/Hesper/` — the Windows app (C# .NET 8, WebView2); see [WINDOWS.md](WINDOWS.md)
 - `src/hesper/` — the engine: `transcribe` (Whisper), `diarize` (speakers), `transcript` (merge,
   echo removal), `summarize` (notes), `ask`, `dates`, `cli`
 - `scripts/` — build, release, translations; `catalog/models.json` — tested models
 - `docs/` — the website; `eval/` — model comparison on sample transcripts
-- `latest.json`, `models.json` — read by installed apps for updates
+- `latest.json`, `latest-windows.json`, `models.json` — read by installed apps for updates
 
 ## Contributing
 

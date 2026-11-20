@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     /// `open -a Hesper --args --settings models` opens Settings on that tab (for testing).
     func applicationDidFinishLaunching(_ notification: Notification) {
         let args = CommandLine.arguments
+        if args.contains("--light") { NSApp.appearance = NSAppearance(named: .aqua) }  // screenshots
         if let i = args.firstIndex(of: "--settings") {
             let tab = i + 1 < args.count ? SettingsTab(rawValue: args[i + 1]) : nil
             Windows.showSettings(model, tab: tab)

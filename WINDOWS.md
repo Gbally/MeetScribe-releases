@@ -100,7 +100,7 @@ then the installer and the updates. If not, find out why first.
 
 ## Step C: the Windows app (preview), asked 2026-11-20
 
-MeetScribe is now **Hesper** (0.7.0, by Nibjorg Studio). The repository moved to
+MeetScribe is now **Hesper** (0.7.0, by Gbally). The repository moved to
 `https://github.com/Gbally/Hesper.git`: on the PC, `git remote set-url origin https://github.com/Gbally/Hesper.git`,
 then `git pull`. The Python package is `hesper` (`python -m hesper …`); environment variables
 `HESPER_HOME`, `HESPER_DEVICE`, `HESPER_AS_PC`.

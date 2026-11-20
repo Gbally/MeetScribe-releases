@@ -21,7 +21,7 @@ enum Brand {
     static let badgeText = Color(nsColor: dynamic(light: 0x5E3D08, dark: 0xF7D58F))
 
     static let tagline = "Private meeting notes, fully offline"
-    static let publisher = "by Nibjorg Studio"
+    static let publisher = "by Gbally"
 
     static func dynamic(light: UInt32, dark: UInt32) -> NSColor {
         NSColor(name: nil) { appearance in
